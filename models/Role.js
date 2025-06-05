@@ -18,16 +18,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
     },
     {
       tableName: 'roles',
