@@ -1,8 +1,8 @@
-const bcrypt = require('bcryptjs');
+const bcrypt = require("bcryptjs");
 
 module.exports = (db, DataTypes) => {
   const User = db.define(
-    'User',
+    "User",
     {
       id: {
         type: DataTypes.INTEGER,
@@ -10,7 +10,7 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-    password: {
+      password: {
         type: DataTypes.STRING,
         allowNull: false,
       },
@@ -22,34 +22,33 @@ module.exports = (db, DataTypes) => {
           isEmail: true,
         },
       },
-      first_name: {
+      full_name: {
         type: DataTypes.STRING,
         allowNull: false,
-
       },
-      last_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
 
-      },
       phone_number: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
+        unique: true,
+        validate: {
+          is: /^\+?[1-9]\d{1,14}$/, 
+        },
       },
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'roles',
-          key: 'id',
+          model: "roles",
+          key: "id",
         },
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'administrative_units',
-          key: 'id',
+          model: "administrative_units",
+          key: "id",
         },
       },
       is_active: {
@@ -57,19 +56,9 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
     },
     {
-      tableName: 'users',
+      tableName: "users",
       timestamps: true,
       hooks: {
         beforeCreate: async (user) => {
@@ -78,7 +67,7 @@ module.exports = (db, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed('password_hash')) {
+          if (user.changed("password_hash")) {
             user.password_hash = await bcrypt.hash(user.password_hash, 10);
           }
         },
