@@ -25,7 +25,7 @@ const protect = async (req, res, next) => {
 
     // Attach user to request object
     const user = await User.findByPk(decoded.userId, {
-      attributes: ['id', 'email', 'first_name', 'last_name', 'role_id', 'is_active'],
+      attributes: ['id', 'email', 'full_name', 'role_id', 'is_active'],
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
@@ -38,8 +38,7 @@ const protect = async (req, res, next) => {
     req.user = {
       id: user.id,
       email: user.email,
-      first_name: user.first_name,
-      last_name: user.last_name,
+      full_name: user.full_name,
       roleId: user.role_id,
       roleName: user.role.name,
     };
@@ -53,7 +52,7 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Middleware for role-based access control
+// Middleware for role-based access control for different user roles
 const restrictTo = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.roleName)) {
