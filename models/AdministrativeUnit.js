@@ -13,8 +13,9 @@ module.exports= (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      description: {
+      code: {
         type: DataTypes.STRING,
+        unique: true,
         allowNull: true,
       },
       parent_id: {
