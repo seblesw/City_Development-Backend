@@ -1,7 +1,6 @@
-
-module.exports= (db, DataTypes) => {
+module.exports = (db, DataTypes) => {
   const AdministrativeUnit = db.define(
-    "AdministrativeUnit",
+    'AdministrativeUnit',
     {
       id: {
         type: DataTypes.INTEGER,
@@ -12,26 +11,22 @@ module.exports= (db, DataTypes) => {
       name: {
         type: DataTypes.STRING,
         allowNull: false,
+        validate: {
+          notEmpty: true,
+          len: [2, 100],
+        },
       },
       code: {
         type: DataTypes.STRING,
         unique: true,
         allowNull: true,
       },
-      parent_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-          model: "administrative_units",
-          key: "id",
-        },
-      },
     },
     {
-      tableName: "administrative_units",
+      tableName: 'administrative_units',
       timestamps: true,
     }
   );
 
   return AdministrativeUnit;
-}
+};
