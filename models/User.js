@@ -116,7 +116,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'Roles',
+          model: 'roles',
           key: 'id',
         },
       },
@@ -124,7 +124,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'AdministrativeUnits',
+          model: 'administrative_units',
           key: 'id',
         },
       },
@@ -140,9 +140,6 @@ module.exports = (db, DataTypes) => {
       language_preference: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isIn: [['Amharic', 'English']],
-        },
       },
       created_at: {
         type: DataTypes.DATE,

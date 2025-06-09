@@ -19,14 +19,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Regiopolitan', 'Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
+          isIn: [['Region', 'Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
         },
       },
       parent_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: {
-          model: 'AdministrativeUnits',
+          model: 'administrative_units',
           key: 'id',
         },
       },
