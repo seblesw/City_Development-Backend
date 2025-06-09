@@ -5,11 +5,13 @@ const User = require("./User")(db, DataTypes);
 const Role = require("./Role")(db, DataTypes);
 const RefreshToken = require("./RefreshToken")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
+const Region = require("./Region")(db, DataTypes);
 const models = {
   User,
   Role,
   RefreshToken,
-  AdministrativeUnit
+  AdministrativeUnit,
+  Region
 };
 
 User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });

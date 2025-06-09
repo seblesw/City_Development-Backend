@@ -5,6 +5,8 @@ const cors = require('cors');
 const db = require('./config/database'); 
 const app = express();
 const port = process.env.PORT
+//import routes
+const regionRoutes = require('./routes/regiooutes');
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
@@ -17,6 +19,9 @@ app.get('/', (req, res) => {
         endpoints: '/api/v1 => the first version ',
     });
 });
+//routes
+app.use('/api/v1/regions', regionRoutes);
+
 
 // Start server
 const startServer = async () => {
