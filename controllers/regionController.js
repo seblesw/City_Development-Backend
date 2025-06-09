@@ -6,7 +6,7 @@ const {
   deleteRegionService,
 } = require('../services/regionService');
 
-const createRegion = async (req, res) => {
+exports.createRegion = async (req, res) => {
   try {
     const region = await createRegionService(req.body);
     res.status(201).json({
@@ -21,10 +21,12 @@ const createRegion = async (req, res) => {
   }
 };
 
-const getAllRegions = async (req, res) => {
+exports.getAllRegions = async (req, res) => {
   try {
     const regions = await getAllRegionsService();
+    const numberOfRegions = regions.length;
     res.status(200).json({
+      numberOfRegions,
       status: 'success',
       data: regions,
     });
@@ -36,7 +38,7 @@ const getAllRegions = async (req, res) => {
   }
 };
 
-const getRegionById = async (req, res) => {
+exports.getRegionById = async (req, res) => {
   try {
     const region = await getRegionByIdService(req.params.id);
     res.status(200).json({
@@ -51,7 +53,7 @@ const getRegionById = async (req, res) => {
   }
 };
 
-const updateRegion = async (req, res) => {
+exports.updateRegion = async (req, res) => {
   try {
     const region = await updateRegionService(req.params.id, req.body);
     res.status(200).json({
@@ -66,7 +68,7 @@ const updateRegion = async (req, res) => {
   }
 };
 
-const deleteRegion = async (req, res) => {
+exports.deleteRegion = async (req, res) => {
   try {
     const result = await deleteRegionService(req.params.id);
     res.status(200).json({
@@ -79,12 +81,4 @@ const deleteRegion = async (req, res) => {
       message: error.message,
     });
   }
-};
-
-module.exports = {
-  createRegion,
-  getAllRegions,
-  getRegionById,
-  updateRegion,
-  deleteRegion,
 };

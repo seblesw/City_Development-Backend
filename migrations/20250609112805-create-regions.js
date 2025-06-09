@@ -16,14 +16,6 @@ module.exports = {
         unique: true,
         allowNull: true,
       },
-      created_at: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
-      updated_at: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
     });
   },
   down: async (queryInterface) => {

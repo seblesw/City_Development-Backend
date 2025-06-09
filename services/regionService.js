@@ -1,6 +1,6 @@
-const { Region } = require('../models'); // Import Region directly
+const {Region}  = require('../models');
 
-const createRegionService = async (data) => {
+exports.createRegionService = async (data) => {
   const { name, code } = data;
   if (!Region) {
     throw new Error('Region model is not defined');
@@ -23,7 +23,7 @@ const createRegionService = async (data) => {
   }
 };
 
-const getAllRegionsService = async () => {
+exports.getAllRegionsService = async () => {
   if (!Region) {
     throw new Error('Region model is not defined');
   }
@@ -35,7 +35,7 @@ const getAllRegionsService = async () => {
   }
 };
 
-const getRegionByIdService = async (id) => {
+exports.getRegionByIdService = async (id) => {
   if (!Region) {
     throw new Error('Region model is not defined');
   }
@@ -50,7 +50,7 @@ const getRegionByIdService = async (id) => {
   }
 };
 
-const updateRegionService = async (id, data) => {
+exports.updateRegionService = async (id, data) => {
   const { name, code } = data;
   if (!Region) {
     throw new Error('Region model is not defined');
@@ -79,7 +79,7 @@ const updateRegionService = async (id, data) => {
   }
 };
 
-const deleteRegionService = async (id) => {
+exports.deleteRegionService = async (id) => {
   if (!Region) {
     throw new Error('Region model is not defined');
   }
@@ -95,10 +95,3 @@ const deleteRegionService = async (id) => {
   }
 };
 
-module.exports = {
-  createRegionService,
-  getAllRegionsService,
-  getRegionByIdService,
-  updateRegionService,
-  deleteRegionService,
-};
