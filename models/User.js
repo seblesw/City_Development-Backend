@@ -1,8 +1,8 @@
-const bcrypt = require("bcryptjs");
+const bcrypt = require('bcryptjs');
 
 module.exports = (db, DataTypes) => {
   const User = db.define(
-    "User",
+    'User',
     {
       id: {
         type: DataTypes.INTEGER,
@@ -10,9 +10,20 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      password: {
-        type: DataTypes.STRING,
+      username: {
+        type: DataTypes.STRING(100),
+        unique: true,
         allowNull: false,
+        validate: {
+          len: [2, 100],
+        },
+      },
+      password_hash: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        validate: {
+          len: [8, 255],
+        },
       },
       email: {
         type: DataTypes.STRING,
@@ -22,33 +33,99 @@ module.exports = (db, DataTypes) => {
           isEmail: true,
         },
       },
-      full_name: {
-        type: DataTypes.STRING,
+      first_name: {
+        type: DataTypes.STRING(100),
         allowNull: false,
-      },
-
-      phone_number: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
         validate: {
-          is: /^\+?[1-9]\d{1,14}$/, 
+          len: [2, 100],
+        },
+      },
+      last_name: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+        validate: {
+          len: [2, 100],
+        },
+      },
+      phone_number: {
+        type: DataTypes.STRING(15),
+        allowNull: true,
+        validate: {
+          len: [10, 15],
+        },
+      },
+      alternative_phone_number: {
+        type: DataTypes.STRING(15),
+        allowNull: true,
+        validate: {
+          len: [10, 15],
+        },
+      },
+      national_id: {
+        type: DataTypes.STRING(20),
+        unique: true,
+        allowNull: true,
+        validate: {
+          len: [1, 20],
+        },
+      },
+      marital_status: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isIn: [['Single', 'Married']],
+        },
+      },
+      spouse_name: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        validate: {
+          len: [2, 100],
+        },
+      },
+      spouse_phone_number: {
+        type: DataTypes.STRING(15),
+        allowNull: true,
+        validate: {
+          len: [10, 15],
+        },
+      },
+      profile_picture: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      spouse_profile_picture: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      address_kebele: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        validate: {
+          len: [1, 50],
+        },
+      },
+      address_block_number: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        validate: {
+          len: [1, 50],
         },
       },
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "roles",
-          key: "id",
+          model: 'Roles',
+          key: 'id',
         },
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "administrative_units",
-          key: "id",
+          model: 'AdministrativeUnits',
+          key: 'id',
         },
       },
       is_active: {
@@ -56,9 +133,30 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
+      last_login: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      language_preference: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: [['Amharic', 'English']],
+        },
+      },
+      created_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
+      updated_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
     },
     {
-      tableName: "users",
+      tableName: 'users',
       timestamps: true,
       hooks: {
         beforeCreate: async (user) => {
@@ -67,7 +165,7 @@ module.exports = (db, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed("password_hash")) {
+          if (user.changed('password_hash')) {
             user.password_hash = await bcrypt.hash(user.password_hash, 10);
           }
         },
