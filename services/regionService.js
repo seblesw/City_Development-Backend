@@ -1,7 +1,10 @@
-const  Region  = require('../models');
+const { Region } = require('../models'); // Import Region directly
 
 const createRegionService = async (data) => {
   const { name, code } = data;
+  if (!Region) {
+    throw new Error('Region model is not defined');
+  }
   try {
     const existingRegion = await Region.findOne({ where: { name } });
     if (existingRegion) {
@@ -21,6 +24,9 @@ const createRegionService = async (data) => {
 };
 
 const getAllRegionsService = async () => {
+  if (!Region) {
+    throw new Error('Region model is not defined');
+  }
   try {
     const regions = await Region.findAll();
     return regions;
@@ -30,6 +36,9 @@ const getAllRegionsService = async () => {
 };
 
 const getRegionByIdService = async (id) => {
+  if (!Region) {
+    throw new Error('Region model is not defined');
+  }
   try {
     const region = await Region.findByPk(id);
     if (!region) {
@@ -43,6 +52,9 @@ const getRegionByIdService = async (id) => {
 
 const updateRegionService = async (id, data) => {
   const { name, code } = data;
+  if (!Region) {
+    throw new Error('Region model is not defined');
+  }
   try {
     const region = await Region.findByPk(id);
     if (!region) {
@@ -68,6 +80,9 @@ const updateRegionService = async (id, data) => {
 };
 
 const deleteRegionService = async (id) => {
+  if (!Region) {
+    throw new Error('Region model is not defined');
+  }
   try {
     const region = await Region.findByPk(id);
     if (!region) {

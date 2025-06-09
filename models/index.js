@@ -1,31 +1,33 @@
-const { Sequelize, DataTypes } = require("sequelize");
-const db = require("../config/database");
+const { Sequelize, DataTypes } = require('sequelize');
+const db = require('../config/database');
 
-const User = require("./User")(db, DataTypes);
-const Role = require("./Role")(db, DataTypes);
-const RefreshToken = require("./RefreshToken")(db, DataTypes);
-const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
-const Region = require("./Region")(db, DataTypes);
+// Define models
 const models = {
-  User,
-  Role,
-  RefreshToken,
-  AdministrativeUnit,
-  Region
+  User: require('./User')(db, DataTypes),
+  Role: require('./Role')(db, DataTypes),
+  RefreshToken: require('./RefreshToken')(db, DataTypes),
+  AdministrativeUnit: require('./AdministrativeUnit')(db, DataTypes),
+  Region: require('./Region')(db, DataTypes),
 };
 
-User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
-Role.hasMany(models.User, { foreignKey: 'role_id', as: 'users' });
+// Define associations
+models.User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
+models.Role.hasMany(models.User, { foreignKey: 'role_id', as: 'users' });
 
-User.hasMany(models.RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
-RefreshToken.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
+models.User.hasMany(models.RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
+models.RefreshToken.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
 
-AdministrativeUnit.hasMany(models.User, { foreignKey: 'administrative_unit_id', as: 'users' });
-User.belongsTo(models.AdministrativeUnit, { foreignKey: 'administrative_unit_id', as: 'administrativeUnit' });
+models.AdministrativeUnit.hasMany(models.User, { foreignKey: 'administrative_unit_id', as: 'users' });
+models.User.belongsTo(models.AdministrativeUnit, { foreignKey: 'administrative_unit_id', as: 'administrativeUnit' });
 
+// Debug model initialization
+Object.keys(models).forEach(modelName => {
+  console.log(`${modelName} model initialized:`, !!models[modelName].findOne);
+});
 
+// Export Sequelize instance and models
 module.exports = {
-  db,
+  sequelize: db, // Export the Sequelize instance as 'sequelize'
   Sequelize,
   ...models,
 };
