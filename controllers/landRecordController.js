@@ -1,18 +1,18 @@
 const {
-  createAdministrativeUnitService,
-  getAllAdministrativeUnitsService,
-  getAdministrativeUnitByIdService,
-  updateAdministrativeUnitService,
-  deleteAdministrativeUnitService,
-} = require('../services/administrativeUnitService');
+  createLandRecordService,
+  getAllLandRecordsService,
+  getLandRecordByIdService,
+  updateLandRecordService,
+  deleteLandRecordService,
+} = require('../services/landRecordService');
 
-exports.createAdministrativeUnit = async (req, res) => {
+exports.createLandRecord = async (req, res) => {
   try {
-    const unit = await createAdministrativeUnitService(req.body);
+    const landRecord = await createLandRecordService(req.body);
     return res.status(201).json({
       status: 'success',
-      message: 'Administrative unit created successfully',
-      data: unit,
+      message: 'Land record created successfully',
+      data: landRecord,
     });
   } catch (error) {
     return res.status(400).json({
@@ -22,12 +22,13 @@ exports.createAdministrativeUnit = async (req, res) => {
   }
 };
 
-exports.getAllAdministrativeUnits = async (req, res) => {
+exports.getAllLandRecords = async (req, res) => {
   try {
-    const units = await getAllAdministrativeUnitsService();
+    const landRecords = await getAllLandRecordsService();
     return res.status(200).json({
       status: 'success',
-      data: units,
+      message: 'Land records retrieved successfully',
+      data: landRecords,
     });
   } catch (error) {
     return res.status(500).json({
@@ -37,13 +38,13 @@ exports.getAllAdministrativeUnits = async (req, res) => {
   }
 };
 
-exports.getAdministrativeUnitById = async (req, res) => {
+exports.getLandRecordById = async (req, res) => {
   try {
-    const unit = await getAdministrativeUnitByIdService(req.params.id);
+    const landRecord = await getLandRecordByIdService(req.params.id);
     return res.status(200).json({
       status: 'success',
-      message: 'Administrative unit retrieved successfully',
-      data: unit,
+      message: 'Land record retrieved successfully',
+      data: landRecord,
     });
   } catch (error) {
     return res.status(error.message.includes('not found') ? 404 : 500).json({
@@ -53,13 +54,13 @@ exports.getAdministrativeUnitById = async (req, res) => {
   }
 };
 
-exports.updateAdministrativeUnit = async (req, res) => {
+exports.updateLandRecord = async (req, res) => {
   try {
-    const unit = await updateAdministrativeUnitService(req.params.id, req.body);
+    const landRecord = await updateLandRecordService(req.params.id, req.body);
     return res.status(200).json({
       status: 'success',
-      message: 'Administrative unit updated successfully',
-      data: unit,
+      message: 'Land record updated successfully',
+      data: landRecord,
     });
   } catch (error) {
     return res.status(error.message.includes('not found') ? 404 : 400).json({
@@ -69,9 +70,9 @@ exports.updateAdministrativeUnit = async (req, res) => {
   }
 };
 
-exports.deleteAdministrativeUnit = async (req, res) => {
+exports.deleteLandRecord = async (req, res) => {
   try {
-    const result = await deleteAdministrativeUnitService(req.params.id);
+    const result = await deleteLandRecordService(req.params.id);
     return res.status(200).json({
       status: 'success',
       message: result.message,

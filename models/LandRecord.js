@@ -55,7 +55,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Lease', 'Transfer', 'Sale', 'Inheritance', 'Gift']],
+          isIn: [['Lease', 'Transfer', 'Sale', 'Inheritance', 'Displaced', 'Placemet', ]],
         },
       },
       north_neighbor: {
@@ -114,18 +114,9 @@ module.exports = (db, DataTypes) => {
           key: 'id',
         },
       },
-      notes: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
-      land_value: {
-        type: DataTypes.FLOAT,
-        allowNull: true,
-      },
       zoning_code: {
         type: DataTypes.STRING,
         allowNull: true,
-
       },
     },
     {

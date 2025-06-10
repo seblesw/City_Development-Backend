@@ -6,6 +6,7 @@ const { sequelize } = require('./models');
 const regionRoutes = require('./routes/regiooutes'); 
 const roleRoutes = require('./routes/roleRoutes'); 
 const AdministrativeUnitRoutes = require('./routes/admiistrativeUnitRoutes');
+const landRecordRoutes = require('./routes/landRecordRoutes');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -26,6 +27,7 @@ app.get('/', (req, res) => {
 app.use('/api/v1/regions', regionRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/administrative-units', AdministrativeUnitRoutes);
+app.use('/api/v1/land-records', landRecordRoutes);
 
 // Start server
 const startServer = async () => {
