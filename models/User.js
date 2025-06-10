@@ -30,15 +30,15 @@ module.exports = (db, DataTypes) => {
         allowNull:false,
       },
       last_name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: false,
       },
       phone_number: {
-        type: DataTypes.STRING(15),
+        type: DataTypes.STRING,
         allowNull: true,
       },
       alternative_phone_number: {
-        type: DataTypes.STRING(15),
+        type: DataTypes.STRING,
         allowNull: true,
       
       },
