@@ -11,9 +11,6 @@ module.exports = (db, DataTypes) => {
       name: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        validate: {
-          len: [2, 100],
-        },
       },
       type: {
         type: DataTypes.STRING,
@@ -34,9 +31,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING(20),
         unique: true,
         allowNull: true,
-        validate: {
-          len: [1, 20],
-        },
       },
       description: {
         type: DataTypes.TEXT,

@@ -31,17 +31,13 @@ module.exports = (db, DataTypes) => {
       file_reference: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        validate: {
-          len: [1, 255],
-        },
+
       },
       document_number: {
         type: DataTypes.STRING(50),
         allowNull: true,
         unique: true,
-        validate: {
-          len: [1, 50],
-        },
+
       },
       issue_date: {
         type: DataTypes.DATEONLY,

@@ -140,16 +140,11 @@ module.exports = (db, DataTypes) => {
       land_value: {
         type: DataTypes.FLOAT,
         allowNull: true,
-        validate: {
-          min: 0,
-        },
       },
       zoning_code: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        validate: {
-          len: [1, 50],
-        },
+
       },
     },
     {
