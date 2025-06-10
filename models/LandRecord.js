@@ -9,12 +9,9 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       land_id: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: false,
-        validate: {
-          len: [1, 50],
-        },
       },
       owner_id: {
         type: DataTypes.INTEGER,
@@ -35,23 +32,17 @@ module.exports = (db, DataTypes) => {
       area: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        validate: {
-          min: 0,
-        },
+
       },
       height: {
         type: DataTypes.FLOAT,
         allowNull: true,
-        validate: {
-          min: 0,
-        },
+
       },
       width: {
         type: DataTypes.FLOAT,
         allowNull: true,
-        validate: {
-          min: 0,
-        },
+
       },
       land_use: {
         type: DataTypes.STRING,
@@ -68,39 +59,29 @@ module.exports = (db, DataTypes) => {
         },
       },
       north_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
+
       },
       south_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
+
       },
       east_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
+
       },
       west_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
+
       },
       address: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 255],
-        },
+
       },
       coordinates: {
         type: DataTypes.STRING,
@@ -142,7 +123,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
       },
       zoning_code: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         allowNull: true,
 
       },

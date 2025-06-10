@@ -1,7 +1,7 @@
 const { AdministrativeUnit } = require('../models');
 
 exports.createAdministrativeUnitService = async (data) => {
-  const { name, type, parent_id, code, description } = data;
+  const { name, type, parent_id, code } = data;
 
   if (!name || typeof name !== 'string' || name.length < 2 || name.length > 100) {
     throw new Error('Name is required and must be 2–100 characters');
@@ -53,7 +53,7 @@ exports.createAdministrativeUnitService = async (data) => {
       }
     }
 
-    const unit = await AdministrativeUnit.create({ name, type, parent_id, code, description });
+    const unit = await AdministrativeUnit.create({ name, type, parent_id, code, });
     return unit;
   } catch (error) {
     throw new Error(`Failed to create administrative unit: ${error.message}`);
@@ -98,7 +98,7 @@ exports.getAdministrativeUnitByIdService = async (id) => {
 };
 
 exports.updateAdministrativeUnitService = async (id, data) => {
-  const { name, type, parent_id, code, description } = data;
+  const { name, type, parent_id, code, } = data;
   if (!id || isNaN(parseInt(id))) {
     throw new Error('Invalid ID');
   }
@@ -160,7 +160,7 @@ exports.updateAdministrativeUnitService = async (id, data) => {
       }
     }
 
-    await unit.update({ name, type, parent_id, code, description });
+    await unit.update({ name, type, parent_id, code, });
     return unit;
   } catch (error) {
     throw new Error(`Failed to update administrative unit: ${error.message}`);

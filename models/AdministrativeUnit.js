@@ -9,14 +9,14 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: false,
       },
       type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Region', 'Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
+          isIn: [['Region', 'Regiopolitan', 'Kifle Ketema','Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
         },
       },
       parent_id: {
@@ -28,7 +28,7 @@ module.exports = (db, DataTypes) => {
         },
       },
       code: {
-        type: DataTypes.STRING(20),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: true,
       },
