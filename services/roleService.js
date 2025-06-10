@@ -3,11 +3,8 @@ const { Role } = require('../models');
 exports.createRoleService = async (data) => {
     try {
         const { name, permisions } = data;
-        if (!name || !permisions) {
-        throw new Error('All fields are required');
-        }
-        if (!Role) {
-        throw new Error('Role model is not defined');
+        if (!name) {
+        throw new Error('Name is required');
         }
         const existingRole = await Role.findOne({ where: { name } });
         if (existingRole) {
@@ -25,9 +22,6 @@ exports.createRoleService = async (data) => {
 
 exports.getAllRolesService = async () => {
     try {
-        if (!Role) {
-            throw new Error('Role model is not defined');
-        }
         const roles = await Role.findAll();
         return roles;
     } catch (error) {

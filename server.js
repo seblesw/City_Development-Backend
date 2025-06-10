@@ -2,9 +2,9 @@ const express = require('express');
 const dotenv = require('dotenv').config();
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { sequelize } = require('./models'); // Use sequelize from models
-const regionRoutes = require('./routes/regiooutes'); // Fix typo
-
+const { sequelize } = require('./models'); 
+const regionRoutes = require('./routes/regiooutes'); 
+const roleRoutes = require('./routes/roleRoutes'); 
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -21,7 +21,9 @@ app.get('/', (req, res) => {
   });
 });
 
+//the endpoints
 app.use('/api/v1/regions', regionRoutes);
+app.use('/api/v1/roles', roleRoutes);
 
 // Start server
 const startServer = async () => {
