@@ -9,20 +9,9 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      username: {
-        type: DataTypes.STRING(100),
-        unique: true,
-        allowNull: false,
-        validate: {
-          len: [2, 100],
-        },
-      },
-      password_hash: {
+      password: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        validate: {
-          len: [8, 255],
-        },
       },
       email: {
         type: DataTypes.STRING,
@@ -34,39 +23,29 @@ module.exports = (db, DataTypes) => {
       },
       first_name: {
         type: DataTypes.STRING(100),
-        allowNull: false,
-        validate: {
-          len: [2, 100],
-        },
+        allowNull: false,    
+      },
+      middle_name:{
+        type:DataTypes.STRING,
+        allowNull:false,
       },
       last_name: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        validate: {
-          len: [2, 100],
-        },
       },
       phone_number: {
         type: DataTypes.STRING(15),
         allowNull: true,
-        validate: {
-          len: [10, 15],
-        },
       },
       alternative_phone_number: {
         type: DataTypes.STRING(15),
         allowNull: true,
-        validate: {
-          len: [10, 15],
-        },
+      
       },
       national_id: {
-        type: DataTypes.STRING(20),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: true,
-        validate: {
-          len: [1, 20],
-        },
       },
       marital_status: {
         type: DataTypes.STRING,
@@ -78,16 +57,10 @@ module.exports = (db, DataTypes) => {
       spouse_name: {
         type: DataTypes.STRING(100),
         allowNull: true,
-        validate: {
-          len: [2, 100],
-        },
       },
       spouse_phone_number: {
         type: DataTypes.STRING(15),
         allowNull: true,
-        validate: {
-          len: [10, 15],
-        },
       },
       profile_picture: {
         type: DataTypes.STRING,
@@ -100,16 +73,11 @@ module.exports = (db, DataTypes) => {
       address_kebele: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        validate: {
-          len: [1, 50],
-        },
       },
       address_block_number: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        validate: {
-          len: [1, 50],
-        },
+      
       },
       role_id: {
         type: DataTypes.INTEGER,
@@ -134,10 +102,6 @@ module.exports = (db, DataTypes) => {
       },
       last_login: {
         type: DataTypes.DATE,
-        allowNull: true,
-      },
-      language_preference: {
-        type: DataTypes.STRING,
         allowNull: true,
       },
 

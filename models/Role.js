@@ -9,16 +9,9 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       name: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: false,
-        validate: {
-          len: [2, 50],
-        },
-      },
-      description: {
-        type: DataTypes.TEXT,
-        allowNull: true,
       },
       permissions: {
         type: DataTypes.JSON,
