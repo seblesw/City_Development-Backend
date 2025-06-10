@@ -16,7 +16,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Region', 'Regiopolitan', 'Kifle Ketema','Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
+          isIn: [['Region', 'Zone','woreda', 'Regiopolitan', 'Kifle Ketema','Zone City', 'Woreda city', 'Meri','Newus','Tadagi']],
         },
       },
       parent_id: {

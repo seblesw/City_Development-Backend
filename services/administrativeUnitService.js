@@ -3,17 +3,11 @@ const { AdministrativeUnit } = require('../models');
 exports.createAdministrativeUnitService = async (data) => {
   const { name, type, parent_id, code } = data;
 
-  if (!name || typeof name !== 'string' || name.length < 2 || name.length > 100) {
-    throw new Error('Name is required and must be 2–100 characters');
-  }
-  if (!type || !['Region', 'Zone City', 'Woreda city', 'Meri', 'Newus', 'Tadagi'].includes(type)) {
+  if (!type || !['Region', 'Zone','woreda', 'Regiopolitan', 'Kifle Ketema','Zone City', 'Woreda city', 'Meri','Newus','Tadagi'].includes(type)) {
     throw new Error('Invalid type; must be one of: Region, Zone City, Woreda city, Meri, Newus, Tadagi');
   }
   if (code && (code.length < 1 || code.length > 20)) {
     throw new Error('Code must be 1–20 characters if provided');
-  }
-  if (!AdministrativeUnit) {
-    throw new Error('AdministrativeUnit model is not defined');
   }
 
   try {
@@ -22,7 +16,7 @@ exports.createAdministrativeUnitService = async (data) => {
       where: { name, parent_id: parent_id || null },
     });
     if (existingUnit) {
-      throw new Error('Unit with this name already exists under the same parent');
+      throw new Error('this name already exists under the same parent');
     }
 
     // Check for duplicate code
@@ -36,16 +30,17 @@ exports.createAdministrativeUnitService = async (data) => {
     // Validate parent_id if provided
     if (parent_id) {
       const parent = await AdministrativeUnit.findByPk(parent_id);
-      if (!parent) {
-        throw new Error('Parent unit not found');
+      if (!parent) {unit
+        throw new Error('Parent  not found');
       }
       // Ensure type hierarchy (e.g., Meri can't be parent of Region)
       const validHierarchy = {
-        Region: ['Zone City', 'Woreda city'],
-        'Zone City': ['Woreda city', 'Meri'],
-        'Woreda city': ['Meri', 'Newus'],
-        Meri: ['Newus', 'Tadagi'],
-        Newus: ['Tadagi'],
+        Region: ['Zone City', 'Regiopolitan', 'Woreda City'],
+        'Zone City': ['Woreda city', 'Zone City'],
+        'Regiopolitan': ['kifle ketema'],
+        'Woreda city': ['Meri', 'Newus', 'Tadagi'],
+        Meri: [],
+        Newus: [],
         Tadagi: [],
       };
       if (!validHierarchy[parent.type].includes(type)) {
