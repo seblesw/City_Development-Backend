@@ -18,6 +18,9 @@ const models = {
 models.User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
 models.Role.hasMany(models.User, { foreignKey: 'role_id', as: 'users' });
 
+AdministrativeUnit.belongsTo(AdministrativeUnit, { foreignKey: 'parent_id', as: 'parent' });
+AdministrativeUnit.hasMany(AdministrativeUnit, { foreignKey: 'parent_id', as: 'children' });
+
 models.User.hasMany(models.RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
 models.RefreshToken.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
 

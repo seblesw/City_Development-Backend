@@ -5,6 +5,7 @@ const cors = require('cors');
 const { sequelize } = require('./models'); 
 const regionRoutes = require('./routes/regiooutes'); 
 const roleRoutes = require('./routes/roleRoutes'); 
+const AdministrativeUnitRoutes = require('./routes/admiistrativeUnitRoutes');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -24,6 +25,7 @@ app.get('/', (req, res) => {
 //the endpoints
 app.use('/api/v1/regions', regionRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/administrative-units', AdministrativeUnitRoutes);
 
 // Start server
 const startServer = async () => {

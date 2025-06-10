@@ -32,10 +32,6 @@ module.exports = (db, DataTypes) => {
         unique: true,
         allowNull: true,
       },
-      description: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
     },
     {
       tableName: 'administrative_units',
