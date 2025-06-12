@@ -16,6 +16,10 @@ module.exports = (db, DataTypes) => {
           key: 'id',
         },
       },
+      document_name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       document_type: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -23,18 +27,13 @@ module.exports = (db, DataTypes) => {
           isIn: [['Ownership Certificate', 'Title Deed', 'Survey Plan', 'Tax Receipt', 'Permit', 'Lease Agreement', 'Other']],
         },
       },
-      is_main_document: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
       file_reference: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.STRING,
         allowNull: false,
 
       },
-      document_number: {
-        type: DataTypes.STRING(50),
+      map_number: {
+        type: DataTypes.STRING,
         allowNull: true,
         unique: true,
 
@@ -50,6 +49,14 @@ module.exports = (db, DataTypes) => {
       uploaded_by: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        references: {
+          model: 'users',
+          key: 'id',
+        },
+      },
+      prepared_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
         references: {
           model: 'users',
           key: 'id',
@@ -83,10 +90,6 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: [['PDF', 'JPEG', 'PNG', 'Other']],
         },
-      },
-      metadata: {
-        type: DataTypes.JSON,
-        allowNull: true,
       },
     },
     {

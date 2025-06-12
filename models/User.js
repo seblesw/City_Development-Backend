@@ -10,7 +10,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       password: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.STRING,
         allowNull: false,
       },
       email: {
@@ -22,7 +22,7 @@ module.exports = (db, DataTypes) => {
         },
       },
       first_name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: false,    
       },
       middle_name:{
@@ -47,19 +47,21 @@ module.exports = (db, DataTypes) => {
         unique: true,
         allowNull: true,
       },
+
       marital_status: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Single', 'Married']],
+          isIn: [['Single', 'Married', 'family']],
         },
       },
+      
       spouse_name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
       },
       spouse_phone_number: {
-        type: DataTypes.STRING(15),
+        type: DataTypes.STRING,
         allowNull: true,
       },
       profile_picture: {
@@ -71,11 +73,11 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
       },
       address_kebele: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         allowNull: true,
       },
       address_block_number: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         allowNull: true,
       
       },
