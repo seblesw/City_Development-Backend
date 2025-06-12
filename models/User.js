@@ -35,7 +35,8 @@ module.exports = (db, DataTypes) => {
       },
       phone_number: {
         type: DataTypes.STRING,
-        allowNull: true,
+        unique: true,
+        allowNull: false,
       },
       alternative_phone_number: {
         type: DataTypes.STRING,
