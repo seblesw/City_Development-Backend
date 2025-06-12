@@ -1,7 +1,7 @@
-const bcrypt = require('bcryptjs');
+const bcrypt = require("bcryptjs");
 module.exports = (db, DataTypes) => {
   const User = db.define(
-    'User',
+    "User",
     {
       id: {
         type: DataTypes.INTEGER,
@@ -23,11 +23,11 @@ module.exports = (db, DataTypes) => {
       },
       first_name: {
         type: DataTypes.STRING,
-        allowNull: false,    
+        allowNull: false,
       },
-      middle_name:{
-        type:DataTypes.STRING,
-        allowNull:false,
+      middle_name: {
+        type: DataTypes.STRING,
+        allowNull: false,
       },
       last_name: {
         type: DataTypes.STRING,
@@ -40,7 +40,6 @@ module.exports = (db, DataTypes) => {
       alternative_phone_number: {
         type: DataTypes.STRING,
         allowNull: true,
-      
       },
       national_id: {
         type: DataTypes.STRING,
@@ -52,10 +51,10 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Single', 'Married', 'family']],
+          isIn: [["Single", "Married", "family"]],
         },
       },
-      
+
       spouse_name: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -79,22 +78,26 @@ module.exports = (db, DataTypes) => {
       address_block_number: {
         type: DataTypes.STRING,
         allowNull: true,
-      
       },
+      address_special_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'roles',
-          key: 'id',
+          model: "roles",
+          key: "id",
         },
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'administrative_units',
-          key: 'id',
+          model: "administrative_units",
+          key: "id",
         },
       },
       is_active: {
@@ -106,10 +109,9 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-
     },
     {
-      tableName: 'users',
+      tableName: "users",
       timestamps: true,
       hooks: {
         beforeCreate: async (user) => {
@@ -118,7 +120,7 @@ module.exports = (db, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed('password_hash')) {
+          if (user.changed("password_hash")) {
             user.password_hash = await bcrypt.hash(user.password_hash, 10);
           }
         },
