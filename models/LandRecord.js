@@ -206,7 +206,6 @@ module.exports = (db, DataTypes) => {
       tableName: 'land_records',
       timestamps: true,
       indexes: [
-        { unique: true, fields: ['plot_number'] },
         { fields: ['owner_id'] },
         { fields: ['administrative_unit_id'] },
       ],

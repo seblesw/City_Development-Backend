@@ -1,16 +1,13 @@
 // config/database.js
 const { Sequelize } = require('sequelize');
-const config = require('./config.json')[process.env.NODE_ENV || 'development'];
-
 const db = new Sequelize({
-  database: config.database,
-  username: config.username,
-  password: String(config.password), 
-  host: config.host,
-  port: config.port,
-  dialect: config.dialect,
-  // dialectOptions: config.dialectOptions,
-  logging: config.logging ? console.log : false,
+  database: process.env.DB_NAME ,
+  username: process.env.DB_USER,
+  password: process.env.DB_PASSWORD, 
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  dialect: process.env.DB_DIALECT || "postgres",
+  logging: process.env.logging ? console.log : false,
 });
 
 module.exports = db;
