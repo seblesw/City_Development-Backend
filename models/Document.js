@@ -27,6 +27,13 @@ module.exports = (db, DataTypes) => {
           isIn: [['Ownership Certificate', 'Title Deed', 'Survey Plan', 'Tax Receipt', 'Permit', 'Lease Agreement', 'Other']],
         },
       },
+      number_of_documnets: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 1,
+        },
+      },
       file_reference: {
         type: DataTypes.STRING,
         allowNull: false,
