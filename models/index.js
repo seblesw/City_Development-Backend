@@ -7,6 +7,7 @@ const AdministrativeUnit=require('./AdministrativeUnit')(db, DataTypes);
 const Region=require('./Region')(db, DataTypes);
 const LandRecord = require('./LandRecord')(db, DataTypes);
 const Document = require('./Document')(db, DataTypes);
+const LandPayment = require('./LandPayment')(db, DataTypes);
 // Define models
 const models = {
   User,
@@ -15,7 +16,8 @@ const models = {
   AdministrativeUnit,
   Region,
   LandRecord,
-  Document
+  Document,
+  LandPayment
 };
 
 // Define associations
@@ -37,6 +39,10 @@ LandRecord.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 LandRecord.belongsTo(AdministrativeUnit, { foreignKey: 'administrative_unit_id', as: 'administrativeUnit' });
 
 LandRecord.hasMany(Document, { foreignKey: 'land_record_id', as: 'documents' });
+
+LandPayment.belongsTo(models.LandRecord, { foreignKey: 'land_record_id', as: 'landRecord' });
+LandRecord.hasMany(models.LandPayment, { foreignKey: 'land_record_id', as: 'payments' });
+LandPayment.belongsTo(models.User, { foreignKey: 'recorded_by', as: 'recorder' });
 // Export Sequelize instance and models
 module.exports = {
   sequelize: db,
