@@ -1,7 +1,7 @@
 const {Document} = require('../models');
 
 exports.createDocumentService = async (documentData) => {
-    return await db.Document.create(documentData);
+    return await Document.create(documentData);
 };
 
 exports.getAllDocumentsService = async () => {
