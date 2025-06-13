@@ -1,87 +1,63 @@
-const {
-  createLandRecordService,
-  getAllLandRecordsService,
-  getLandRecordByIdService,
-  updateLandRecordService,
-  deleteLandRecordService,
-} = require('../services/landRecordService');
+const landService = require('../services/landRecordService');
+const { validationResult } = require('express-validator');
 
-exports.createLandRecord = async (req, res) => {
-  try {
-    const landRecord = await createLandRecordService(req.body);
-    return res.status(201).json({
-      status: 'success',
-      message: 'Land record created successfully',
-      data: landRecord,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      status: 'error',
-      message: error.message,
-    });
-  }
+exports.createLand = async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const newLand = await landService.createLandService(req.body);
+        res.status(201).json({ message: 'Land record created successfully', data: newLand });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.getAllLandRecords = async (req, res) => {
-  try {
-    const landRecords = await getAllLandRecordsService();
-    return res.status(200).json({
-      status: 'success',
-      message: 'Land records retrieved successfully',
-      data: landRecords,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      status: 'error',
-      message: error.message,
-    });
-  }
+exports.getAllLand = async (req, res) => {
+    try {
+        const lands = await landService.getAllLandService();
+        res.status(200).json({ data: lands });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.getLandRecordById = async (req, res) => {
-  try {
-    const landRecord = await getLandRecordByIdService(req.params.id);
-    return res.status(200).json({
-      status: 'success',
-      message: 'Land record retrieved successfully',
-      data: landRecord,
-    });
-  } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 500).json({
-      status: 'error',
-      message: error.message,
-    });
-  }
+exports.getLandById = async (req, res) => {
+    try {
+        const land = await landService.getLandByIdService(req.params.id);
+        if (!land) return res.status(404).json({ message: 'Land record not found.' });
+        res.status(200).json({ data: land });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.updateLandRecord = async (req, res) => {
-  try {
-    const landRecord = await updateLandRecordService(req.params.id, req.body);
-    return res.status(200).json({
-      status: 'success',
-      message: 'Land record updated successfully',
-      data: landRecord,
-    });
-  } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 400).json({
-      status: 'error',
-      message: error.message,
-    });
-  }
+exports.updateLand = async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const updatedLand = await landService.updateLandService(req.params.id, req.body);
+        res.status(200).json({ message: 'Land record updated successfully', data: updatedLand });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-exports.deleteLandRecord = async (req, res) => {
-  try {
-    const result = await deleteLandRecordService(req.params.id);
-    return res.status(200).json({
-      status: 'success',
-      message: result.message,
-      data: null,
-    });
-  } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 400).json({
-      status: 'error',
-      message: error.message,
-    });
-  }
+exports.deleteLand = async (req, res) => {
+    try {
+        await landService.deleteLandService(req.params.id);
+        res.status(200).json({ message: 'Land record deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
+// exports.getLandByOwner = async (req, res) => {
+//     try {
+//         const lands = await landService.getLandByOwnerService(req.params.ownerId);
+//         if (!lands || lands.length === 0) return res.status(404).json({ message: 'No land records found for this owner.' });
+//         res.status(200).json({ data: lands });
+//     } catch (error) {
+//         res.status(500).json({ message: error.message });
+//     }
+// };

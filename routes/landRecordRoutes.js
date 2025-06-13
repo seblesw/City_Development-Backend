@@ -1,17 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const {
-  createLandRecord,
-  getAllLandRecords,
-  getLandRecordById,
-  updateLandRecord,
-  deleteLandRecord,
-} = require('../controllers/landRecordController');
+const landController = require('../controllers/landRecordController');
+const landValidation = require('../validations/landValidation');
 
-router.post('/', createLandRecord);
-router.get('/', getAllLandRecords);
-router.get('/:id', getLandRecordById);
-router.put('/:id', updateLandRecord);
-router.delete('/:id', deleteLandRecord);
+// CRUD Routes
+router.post('/', landValidation.createLandValidation, landController.createLand);
+router.get('/', landController.getAllLand);
+router.get('/:id', landController.getLandById);
+router.put('/:id', landValidation.updateLandValidation, landController.updateLand);
+router.delete('/:id', landController.deleteLand);
 
 module.exports = router;
