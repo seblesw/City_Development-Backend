@@ -1,7 +1,6 @@
 const { body } = require('express-validator');
 
 exports.createLandValidation = [
-    body('plot_number').notEmpty().withMessage('Plot number is required.'),
     body('land_level').isIn([1, 2, 3, 4, 5]).withMessage('Invalid land level.'),
     body('owner_id').isInt().withMessage('Owner ID must be an integer.'),
     body('administrative_unit_id').isInt().withMessage('Administrative unit ID must be an integer.'),

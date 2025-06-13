@@ -1,4 +1,4 @@
-const LandRecord = require('../models');
+const {LandRecord }= require('../models');
 const generatePlotNumber= require('../utils/generatePlotNumber');
 exports.createLandService = async (data) => {
   try {
