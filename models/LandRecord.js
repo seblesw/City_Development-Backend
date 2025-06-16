@@ -137,25 +137,6 @@ module.exports = (db, DataTypes) => {
           key: 'id',
         },
       },
-      zoning_code: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 50],
-        },
-      },
-      land_value: {
-        type: DataTypes.FLOAT,
-        allowNull: true,
-        validate: {
-          isFloat: true,
-          min: 0,
-        },
-      },
-      valuation_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-      },
       building_permit_status: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -166,9 +147,6 @@ module.exports = (db, DataTypes) => {
       environmental_zone: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          len: [1, 50],
-        },
       },
       dispute_status: {
         type: DataTypes.STRING,
