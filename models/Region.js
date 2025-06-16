@@ -10,14 +10,14 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: false,
         validate: {
           len: [2, 100],
         },
       },
       code: {
-        type: DataTypes.STRING(20),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: true,
         validate: {

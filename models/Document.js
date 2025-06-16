@@ -34,7 +34,6 @@ module.exports = (db, DataTypes) => {
           min: 1,
         },
       },
-
       file_reference: {
         type: DataTypes.STRING,
         allowNull: false,

@@ -12,7 +12,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
       },
       plot_number: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         unique: true,
         allowNull: false,
         validate: {
@@ -23,7 +23,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         validate: {
-          isIn: [[1, 2, 3, 4, 5]],
+          min: 1,
         },
       },
       owner_id: {
@@ -50,22 +50,6 @@ module.exports = (db, DataTypes) => {
           min: 0,
         },
       },
-      height: {
-        type: DataTypes.FLOAT,
-        allowNull: true,
-        validate: {
-          isFloat: true,
-          min: 0,
-        },
-      },
-      width: {
-        type: DataTypes.FLOAT,
-        allowNull: true,
-        validate: {
-          isFloat: true,
-          min: 0,
-        },
-      },
       land_use: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -81,35 +65,35 @@ module.exports = (db, DataTypes) => {
         },
       },
       north_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 100],
         },
       },
       south_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 100],
         },
       },
       east_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 100],
         },
       },
       west_neighbor: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 100],
         },
       },
       address: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 255],
@@ -154,7 +138,7 @@ module.exports = (db, DataTypes) => {
         },
       },
       zoning_code: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 50],
@@ -180,15 +164,11 @@ module.exports = (db, DataTypes) => {
         },
       },
       environmental_zone: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: [1, 50],
         },
-      },
-      last_inspection_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
       },
       dispute_status: {
         type: DataTypes.STRING,
