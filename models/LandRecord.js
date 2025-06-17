@@ -1,6 +1,3 @@
-// models/LandRecord.js
-const { validate } = require("uuid");
-
 module.exports = (db, DataTypes) => {
   const LandRecord = db.define(
     'LandRecord',
@@ -9,93 +6,45 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       parcel_number: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: false,
-
+        allowNull: false
       },
       land_level: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        validate: {
-          min: 1,
-        },
-      },
-      owner_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
+        validate: { min: 1 }
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: {
-          model: 'administrative_units',
-          key: 'id',
-        },
+        references: { model: 'administrative_units', key: 'id' }
       },
       area: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        validate: {
-          isFloat: true,
-          min: 0,
-        },
+        validate: { min: 0 }
       },
       land_use: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Residential', 'Mixed', 'Commercial', 'Administrative', 'Services', 'Manufacturing and Storage', 'Roads and Transportation', 'Urban Agriculture', 'Forestry', 'Entertainment and Playground', 'Other']],
-        },
+          isIn: [['መኖሪያ', 'ድብልቅ', 'ንግድ', 'አስተዳደራዊ', 'አገልግሎት', 'ማምረቻ እና ማከማቻ', 'መንገዶች እና ትራንስፖርት', 'ከተማ ግብርና', 'ደን', 'መዝናኛ እና መጫወቶ ሜዳ', 'ሌላ']]
+        }
       },
       ownership_type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Court Order', 'Transfer of Title', 'Leasehold', 'Leasehold-Assignment', 'Pre-Existing-Undocumented', 'Displacement']],
-        },
-      },
-      north_neighbor: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
-      },
-      south_neighbor: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
-      },
-      east_neighbor: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
-      },
-      west_neighbor: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 100],
-        },
+          isIn: [['የፍርድ ቤት ትእዛዝ', 'የባለቤትነት ማስተላለፍ', 'የኪራይ ይዞታ', 'የኪራይ ይዞታ-ምደባ', 'ቅድመ ሰነድ የሌለው', 'መፈናቀል']]
+        }
       },
       address: {
         type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: [1, 255],
-        },
+        allowNull: true
       },
       coordinates: {
         type: DataTypes.JSONB,
@@ -103,68 +52,31 @@ module.exports = (db, DataTypes) => {
         validate: {
           isValidCoordinates(value) {
             if (value && !(Array.isArray(value.coordinates) && value.type === 'Point')) {
-              throw new Error('Coordinates must be a GeoJSON Point');
+              throw new Error('መጋጠሚያዎች የGeoJSON Point መሆን አለባቸው።');
             }
-          },
-        },
+          }
+        }
       },
       registration_date: {
         type: DataTypes.DATEONLY,
-        allowNull: false,
-      },
-      status: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          isIn: [['Draft', 'Pending', 'Under Review', 'Approved', 'Rejected', 'Disputed']],
-        },
-      },
-      registered_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
-      },
-      approved_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
-      },
-      building_permit_status: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: [['Not Applied', 'Applied', 'Approved', 'Rejected']],
-        },
-      },
-      environmental_zone: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      dispute_status: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: [['None', 'Pending', 'In Court', 'Resolved']],
-        },
-      },
-      dispute_details: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
+        allowNull: false
+      }
     },
     {
       tableName: 'land_records',
       timestamps: true,
       indexes: [
-        { fields: ['owner_id'] },
-        { fields: ['administrative_unit_id'] },
+        { unique: true, fields: ['parcel_number'] },
+        { fields: ['administrative_unit_id'] }
       ],
+      validate: {
+        async validLandLevel() {
+          const unit = await db.models.AdministrativeUnit.findByPk(this.administrative_unit_id);
+          if (unit && this.land_level > unit.max_land_levels) {
+            throw new Error('የመሬት ደረጃ ከአስተዳደር ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።');
+          }
+        }
+      }
     }
   );
 
