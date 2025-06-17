@@ -1,3 +1,13 @@
+const LAND_LEVELS = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
+const UNIT_TYPE_MAPPING = {
+  1: ['Regiopolitan'],
+  2: ['Zone City'],
+  3: ['Woreda city'],
+  4: ['Meri'],
+  5: ['Newus'],
+  6: ['Tadagi']
+};
+
 module.exports = (db, DataTypes) => {
   const AdministrativeUnit = db.define(
     'AdministrativeUnit',
@@ -6,123 +16,80 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       name: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: false
       },
       type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [
-            ['Region', 'Zone', 'woreda', 'Regiopolitan', 'Kifle Ketema', 'Zone City', 'Woreda city', 'Meri', 'Newus', 'Tadagi']
-          ],
-        },
+          validType() {
+            if (!UNIT_TYPE_MAPPING[this.unit_level].includes(this.type)) {
+              throw new Error(`Invalid type ${this.type} for unit_level ${this.unit_level}.`);
+            }
+          }
+        }
       },
       unit_level: {
         type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 0,
-          max: 6,
-        },
-        // Set the unit level based on the type if it's not a city administration
-        set(value) {
-          if (!value && this.type) {
-            switch (this.type) {
-              case 'Regiopolitan':
-              case 'Zone City':
-              case 'Woreda city':
-                this.setDataValue('unit_level', 1);
-                break;
-              case 'Meri':
-                this.setDataValue('unit_level', 4);
-                break;
-              case 'Newus':
-                this.setDataValue('unit_level', 5);
-                break;
-              case 'Tadagi':
-                this.setDataValue('unit_level', 6);
-                break;
-              // For city administrations or other units without a unit level, keep it null
-              default:
-                this.setDataValue('unit_level', null);
-            }
-          } else {
-            this.setDataValue('unit_level', value);
-          }
-        },
+        allowNull: false,
+        validate: { min: 1, max: 6 }
       },
       parent_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        references: {
-          model: 'administrative_units',
-          key: 'id',
-        },
+        references: { model: 'administrative_units', key: 'id' },
         validate: {
-          // that Ensure the parent unit is of a higher level unless it's a top-level unit
-          notEmpty: (value, attr, next) => {
-            if (value && this.unit_level !== null) {
-              next();
-            } else if (!value && this.unit_level === null) {
-              next();
-            } else {
-              next(new Error('Parent ID is required for non-top-level units or must be null for top-level units.'));
+          async validParentId(value) {
+            if (value && this.unit_level !== 1) {
+              const parent = await db.models.AdministrativeUnit.findByPk(value);
+              if (!parent) {
+                throw new Error('Invalid parent_id: Parent unit does not exist.');
+              }
+              if (parent.unit_level >= this.unit_level) {
+                throw new Error('Parent unit must have a higher level.');
+              }
+            } else if (!value && this.unit_level !== 1) {
+              throw new Error('Parent ID is required for non-top-level units.');
             }
-          },
-        },
+          }
+        }
       },
       code: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: true,
+        allowNull: true
       },
       description: {
         type: DataTypes.TEXT,
-        allowNull: true,
+        allowNull: true
       },
-      // Attribute to store the number of land levels based on the administrative unit level
-      land_level_capacity: {
+      max_land_levels: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
+        defaultValue: function() {
+          return LAND_LEVELS[this.unit_level] || 1;
+        },
         validate: {
-          min: 0,
-        },
-        // Set the default land levels based on the unit level if it's not a city administration
-        set(value) {
-          if (!value && this.unit_level !== null) {
-            switch (this.unit_level) {
-              case 1:
-                this.setDataValue('land_level_capacity', 5);
-                break;
-              case 4:
-                this.setDataValue('land_level_capacity', 4);
-                break;
-              case 5:
-                this.setDataValue('land_level_capacity', 3);
-                break;
-              case 6:
-                this.setDataValue('land_level_capacity', 2);
-                break;
-              // For city administrations or other units without land levels, keep it null
-              default:
-                this.setDataValue('land_level_capacity', null);
+          isValidLevel(value) {
+            if (value !== LAND_LEVELS[this.unit_level]) {
+              throw new Error(`Invalid max_land_levels for unit_level ${this.unit_level}. Expected ${LAND_LEVELS[this.unit_level]}.`);
             }
-          } else {
-            this.setDataValue('land_level_capacity', value);
           }
-        },
-      },
+        }
+      }
     },
     {
       tableName: 'administrative_units',
       timestamps: true,
       indexes: [
+        { unique: true, fields: ['code'] },
         { fields: ['parent_id'] },
-      ],
+        { fields: ['unit_level'] }
+      ]
     }
   );
 
