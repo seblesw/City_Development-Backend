@@ -12,14 +12,15 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false
       },
+      name_translations: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: {}
+      },
       is_jurisdiction: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false
-      },
-      jurisdiction_type: {
-        type: DataTypes.STRING,
-        allowNull: true
       },
       type: {
         type: DataTypes.STRING,
@@ -65,26 +66,47 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' }
+      },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
       }
     },
     {
       tableName: 'administrative_units',
       timestamps: true,
+      paranoid: true,
       indexes: [
         { unique: true, fields: ['code'] },
+        { unique: true, fields: ['name', 'parent_id'] },
         { fields: ['parent_id'] },
         { fields: ['unit_level'] },
         { fields: ['is_jurisdiction'] },
         { fields: ['type'] }
       ],
+      hooks: {
+        beforeCreate: async (unit) => {
+          if (!unit.code) {
+            const parentCode = unit.parent_id ? (await AdministrativeUnit.findByPk(unit.parent_id))?.code : '';
+            unit.code = `${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
+          }
+        },
+        beforeSave: async (unit) => {
+          let currentId = unit.parent_id;
+          const visited = new Set();
+          while (currentId) {
+            if (visited.has(currentId)) throw new Error('Circular parent reference detected');
+            visited.add(currentId);
+            const parent = await AdministrativeUnit.findByPk(currentId);
+            currentId = parent?.parent_id;
+          }
+        }
+      },
       validate: {
         validAttributes() {
           if (this.is_jurisdiction) {
             if (this.type || this.unit_level || this.max_land_levels) {
               throw new Error('ዳይሬክቶሬቶች አይነት፣ ደረጃ ወይም ከፍተኛ የመሬት ደረጃ ሊኖራቸው አይችልም።');
-            }
-            if (!this.jurisdiction_type) {
-              throw new Error('ዳይሬክቶሬቶች የዳይሬክቶሬት አይነት መግለፅ አለባቸው።');
             }
           } else {
             if (!this.type || !this.unit_level || !this.max_land_levels) {

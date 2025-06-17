@@ -42,7 +42,6 @@ module.exports = (db, DataTypes) => {
           isIn: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "ጋራ ባለቤትነት"]],
         },
       },
-
       spouse_name: {
         type: DataTypes.STRING,
         allowNull: true,
