@@ -1,13 +1,3 @@
-const LAND_LEVELS = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
-const UNIT_TYPE_MAPPING = {
-  1: ['Regiopolitan'],
-  2: ['Zone City'],
-  3: ['Woreda city'],
-  4: ['Meri'],
-  5: ['Newus'],
-  6: ['Tadagi']
-};
-
 module.exports = (db, DataTypes) => {
   const AdministrativeUnit = db.define(
     'AdministrativeUnit',
@@ -22,41 +12,31 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false
       },
+      is_jurisdiction: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+      },
+      jurisdiction_type: {
+        type: DataTypes.STRING,
+        allowNull: true
+      },
       type: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
-          validType() {
-            if (!UNIT_TYPE_MAPPING[this.unit_level].includes(this.type)) {
-              throw new Error(`Invalid type ${this.type} for unit_level ${this.unit_level}.`);
-            }
-          }
+          isIn: [['ሪጂኦፖሊታን', 'መካከለኛ ከተማ', 'አነስተኛ ከተማ', 'መሪ ማዘጋጃ ከተማ', 'ንዑስ ማዘጋጃ ከተማ', 'ታዳጊ ከተማ', 'ሪጂዮን', 'ዞን', 'ወረዳ']]
         }
       },
       unit_level: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         validate: { min: 1, max: 6 }
       },
       parent_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        references: { model: 'administrative_units', key: 'id' },
-        validate: {
-          async validParentId(value) {
-            if (value && this.unit_level !== 1) {
-              const parent = await db.models.AdministrativeUnit.findByPk(value);
-              if (!parent) {
-                throw new Error('Invalid parent_id: Parent unit does not exist.');
-              }
-              if (parent.unit_level >= this.unit_level) {
-                throw new Error('Parent unit must have a higher level.');
-              }
-            } else if (!value && this.unit_level !== 1) {
-              throw new Error('Parent ID is required for non-top-level units.');
-            }
-          }
-        }
+        references: { model: 'administrative_units', key: 'id' }
       },
       code: {
         type: DataTypes.STRING,
@@ -69,15 +49,21 @@ module.exports = (db, DataTypes) => {
       },
       max_land_levels: {
         type: DataTypes.INTEGER,
-        allowNull: false,
-        defaultValue: function() {
-          return LAND_LEVELS[this.unit_level] || 1;
-        },
-        validate: {
-          isValidLevel(value) {
-            if (value !== LAND_LEVELS[this.unit_level]) {
-              throw new Error(`Invalid max_land_levels for unit_level ${this.unit_level}. Expected ${LAND_LEVELS[this.unit_level]}.`);
-            }
+        allowNull: true,
+        validate: { min: 1 },
+        set(value) {
+          if (!this.is_jurisdiction && !value && this.unit_level) {
+            const levels = {
+              1: 5, // ሪጂኦፖሊታን
+              2: 5, // መካከለኛ ከተማ
+              3: 5, // አነስተኛ ከተማ
+              4: 4, // መሪ ማዘጋጃ ከተማ
+              5: 3, // ንዑስ ማዘጋጃ ከተማ
+              6: 2  // ታዳጊ ከተማ
+            };
+            this.setDataValue('max_land_levels', levels[this.unit_level] || null);
+          } else {
+            this.setDataValue('max_land_levels', value);
           }
         }
       }
@@ -88,8 +74,26 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { unique: true, fields: ['code'] },
         { fields: ['parent_id'] },
-        { fields: ['unit_level'] }
-      ]
+        { fields: ['unit_level'] },
+        { fields: ['is_jurisdiction'] },
+        { fields: ['type'] }
+      ],
+      validate: {
+        validAttributes() {
+          if (this.is_jurisdiction) {
+            if (this.type || this.unit_level || this.max_land_levels) {
+              throw new Error('ዳይሬክቶሬቶች አይነት፣ ደረጃ ወይም ከፍተኛ የመሬት ደረጃ ሊኖራቸው አይችልም።');
+            }
+            if (!this.jurisdiction_type) {
+              throw new Error('ዳይሬክቶሬቶች የዳይሬክቶሬት አይነት መግለፅ አለባቸው።');
+            }
+          } else {
+            if (!this.type || !this.unit_level || !this.max_land_levels) {
+              throw new Error('ማዘጋጃ ቤቶች አይነት፣ ደረጃ እና ከፍተኛ የመሬት ደረጃ መግለፅ አለባቸው።');
+            }
+          }
+        }
+      }
     }
   );
 
