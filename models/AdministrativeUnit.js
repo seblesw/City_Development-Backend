@@ -43,29 +43,28 @@ module.exports = (db, DataTypes) => {
         unique: true,
         allowNull: true
       },
-      description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-      },
       max_land_levels: {
         type: DataTypes.INTEGER,
         allowNull: true,
         validate: { min: 1 },
         set(value) {
           if (!this.is_jurisdiction && !value && this.unit_level) {
-            const levels = {
-              1: 5, // ሪጂኦፖሊታን
-              2: 5, // መካከለኛ ከተማ
-              3: 5, // አነስተኛ ከተማ
-              4: 4, // መሪ ማዘጋጃ ከተማ
-              5: 3, // ንዑስ ማዘጋጃ ከተማ
-              6: 2  // ታዳጊ ከተማ
-            };
+            const levels = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
             this.setDataValue('max_land_levels', levels[this.unit_level] || null);
           } else {
             this.setDataValue('max_land_levels', value);
           }
         }
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' }
+      },
+      updated_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' }
       }
     },
     {

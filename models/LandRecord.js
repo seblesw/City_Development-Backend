@@ -11,13 +11,11 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      plot_number: {
+      parcel_number: {
         type: DataTypes.STRING,
         unique: true,
         allowNull: false,
-        validate: {
-          len: [1, 50],
-        },
+
       },
       land_level: {
         type: DataTypes.INTEGER,

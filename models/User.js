@@ -11,7 +11,7 @@ module.exports = (db, DataTypes) => {
       },
       password: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       email: {
         type: DataTypes.STRING,
@@ -21,15 +21,7 @@ module.exports = (db, DataTypes) => {
           isEmail: true,
         },
       },
-      first_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      middle_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      last_name: {
+      full_name: {
         type: DataTypes.STRING,
         allowNull: false,
       },
@@ -38,21 +30,16 @@ module.exports = (db, DataTypes) => {
         unique: true,
         allowNull: false,
       },
-      alternative_phone_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       national_id: {
         type: DataTypes.STRING,
         unique: true,
         allowNull: true,
       },
-
       marital_status: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
-          isIn: [["Single", "Married", "family"]],
+          isIn: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "ጋራ ባለቤትነት"]],
         },
       },
 
@@ -76,15 +63,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      address_block_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      address_special_name: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -121,7 +99,7 @@ module.exports = (db, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed("password_hash")) {
+          if (user.changed("password")) {
             user.password_hash = await bcrypt.hash(user.password_hash, 10);
           }
         },
