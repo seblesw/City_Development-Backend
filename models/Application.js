@@ -1,3 +1,18 @@
+const STATUS_TYPES = {
+  PENDING: 'በመጠባበቅ ላይ',
+  DRAFT: 'ተጻፎ ተቀምጧል',
+  IN_REVIEW: 'በግምገማ ላይ',
+  REJECTED: 'ውድቅ ተደርጓል',
+  APPROVED: 'ጸድቋል'
+};
+
+const TRANSACTION_TYPES = {
+  LAND_REGISTRATION: 'የመሬት ምዝገባ',
+  TRANSFER: 'ማስተላለፍ',
+  UPDATE: 'ማሻሻል',
+  OTHER: 'ሌላ'
+};
+
 module.exports = (db, DataTypes) => {
   const Application = db.define(
     'Application',
@@ -11,9 +26,22 @@ module.exports = (db, DataTypes) => {
       status: {
         type: DataTypes.STRING,
         allowNull: false,
-        defaultValue: 'በመጠባበቅ ላይ',
+        defaultValue: STATUS_TYPES.PENDING,
         validate: {
-          isIn: [['በመጠባበቅ ላይ', 'ተጻፎ ተቀምጧል', 'በግምገማ ላይ', 'ውድቅ ተደርጓል', 'ጸድቋል']]
+          isIn: {
+            args: [Object.values(STATUS_TYPES)],
+            msg: 'ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
+      },
+      transaction_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(TRANSACTION_TYPES)],
+            msg: 'የግብይት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
         }
       },
       submitted_at: {
@@ -22,6 +50,10 @@ module.exports = (db, DataTypes) => {
         defaultValue: DataTypes.NOW
       },
       updated_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+      },
+      deleted_at: {
         type: DataTypes.DATE,
         allowNull: true
       },
@@ -63,11 +95,47 @@ module.exports = (db, DataTypes) => {
       comments: {
         type: DataTypes.TEXT,
         allowNull: true
+      },
+      status_history: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: []
       }
     },
     {
       tableName: 'applications',
-      timestamps: false 
+      timestamps: true,
+      paranoid: true,
+      indexes: [
+        { fields: ['user_id'] },
+        { fields: ['administrative_unit_id'] },
+        { fields: ['land_record_id'] },
+        { fields: ['document_id'] },
+        { fields: ['land_payment_id'] },
+        { fields: ['status'] }
+      ],
+      validate: {
+        atLeastOneReference() {
+          if (!this.land_record_id && !this.document_id && !this.land_payment_id) {
+            throw new Error('ቢያንስ አንድ የመሬት መዝገብ፣ ሰነድ ወይም የመሬት ክፍያ መግለፅ አለበት።');
+          }
+        }
+      },
+      hooks: {
+        beforeUpdate: async (application) => {
+          if (application.changed('status')) {
+            const previousStatus = application.previous('status');
+            application.status_history = [
+              ...(application.status_history || []),
+              {
+                status: application.status,
+                changed_by: application.updated_by,
+                changed_at: new Date()
+              }
+            ];
+          }
+        }
+      }
     }
   );
 
