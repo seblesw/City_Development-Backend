@@ -8,9 +8,20 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false
       },
+      region_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'regions', key: 'id' }
+      },
       name: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
+        validate: {
+          len: {
+            args: [2, 100],
+            msg: 'የአስተዳደር ክፍል ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።'
+          }
+        }
       },
       name_translations: {
         type: DataTypes.JSON,
@@ -26,13 +37,25 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          isIn: [['ሪጂኦፖሊታን', 'መካከለኛ ከተማ', 'አነስተኛ ከተማ', 'መሪ ማዘጋጃ ከተማ', 'ንዑስ ማዘጋጃ ከተማ', 'ታዳጊ ከተማ', 'ሪጂዮን', 'ዞን', 'ወረዳ']]
+          isIn: {
+            args: [['ሪጂኦፖሊታን', 'መካከለኛ ከተማ', 'አነስተኛ ከተማ', 'መሪ ማዘጋጃ ከተማ', 'ንዑስ ማዘጋጃ ከተማ', 'ታዳጊ ከተማ', 'ሪጂዮን', 'ዞን', 'ወረዳ']],
+            msg: 'የአስተዳደር ክፍል አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
         }
       },
       unit_level: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        validate: { min: 1, max: 6 }
+        validate: {
+          min: {
+            args: 1,
+            msg: 'የክፍል ደረጃ ከ1 በታች መሆን አይችልም።'
+          },
+          max: {
+            args: 6,
+            msg: 'የክፍል ደረጃ ከ6 በላይ መሆን አይችልም።'
+          }
+        }
       },
       parent_id: {
         type: DataTypes.INTEGER,
@@ -42,12 +65,23 @@ module.exports = (db, DataTypes) => {
       code: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: true
+        allowNull: true,
+        validate: {
+          len: {
+            args: [1, 50],
+            msg: 'የክፍል ኮድ ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።'
+          }
+        }
       },
       max_land_levels: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        validate: { min: 1 },
+        validate: {
+          min: {
+            args: 1,
+            msg: 'ከፍተኛ የመሬት ደረጃዎች ከ1 በታች መሆን አይችልም።'
+          }
+        },
         set(value) {
           if (!this.is_jurisdiction && !value && this.unit_level) {
             const levels = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
@@ -59,7 +93,7 @@ module.exports = (db, DataTypes) => {
       },
       created_by: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
         references: { model: 'users', key: 'id' }
       },
       updated_by: {
@@ -77,8 +111,9 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       paranoid: true,
       indexes: [
-        { unique: true, fields: ['code'] },
+        { unique: true, fields: ['code'], where: { code: { [DataTypes.Op.ne]: null } } },
         { unique: true, fields: ['name', 'parent_id'] },
+        { fields: ['region_id'] },
         { fields: ['parent_id'] },
         { fields: ['unit_level'] },
         { fields: ['is_jurisdiction'] },
@@ -87,15 +122,17 @@ module.exports = (db, DataTypes) => {
       hooks: {
         beforeCreate: async (unit) => {
           if (!unit.code) {
+            const region = await db.models.Region.findByPk(unit.region_id);
+            const regionCode = region?.code || '';
             const parentCode = unit.parent_id ? (await AdministrativeUnit.findByPk(unit.parent_id))?.code : '';
-            unit.code = `${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
+            unit.code = `${regionCode}-${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
           }
         },
         beforeSave: async (unit) => {
           let currentId = unit.parent_id;
           const visited = new Set();
           while (currentId) {
-            if (visited.has(currentId)) throw new Error('Circular parent reference detected');
+            if (visited.has(currentId)) throw new Error('የወላጅ ማጣቀሻ ክብ ዑደት ተገኝቷል።');
             visited.add(currentId);
             const parent = await AdministrativeUnit.findByPk(currentId);
             currentId = parent?.parent_id;
@@ -112,6 +149,12 @@ module.exports = (db, DataTypes) => {
             if (!this.type || !this.unit_level || !this.max_land_levels) {
               throw new Error('ማዘጋጃ ቤቶች አይነት፣ ደረጃ እና ከፍተኛ የመሬት ደረጃ መግለፅ አለባቸው።');
             }
+          }
+        },
+        async validRegion() {
+          const region = await db.models.Region.findByPk(this.region_id);
+          if (!region) {
+            throw new Error('ትክክለኛ ክልል መግለፅ አለበት።');
           }
         }
       }

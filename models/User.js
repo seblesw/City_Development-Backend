@@ -98,12 +98,6 @@ module.exports = (db, DataTypes) => {
     return await bcrypt.compare(password, this.password);
   };
 
-  User.associate = (models) => {
-    User.hasMany(models.CoOwners, {
-      foreignKey: 'user_id',
-      as: 'coOwners'
-    });
-  };
 
   return User;
 };

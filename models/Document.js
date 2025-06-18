@@ -1,3 +1,11 @@
+const DOCUMENT_TYPES = {
+  OWNERSHIP_CERTIFICATE: 'የባለቤትነት ሰርተፍኬት',
+  LEASE_AGREEMENT: 'የኪራይ ስምምነት',
+  COURT_ORDER: 'የፍርድ ቤት ትእዛዝ',
+  PAYMENT_RECEIPT: 'የክፍያ ደረሰኝ',
+  OTHER: 'ሌላ'
+};
+
 module.exports = (db, DataTypes) => {
   const Document = db.define(
     'Document',
@@ -6,102 +14,64 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       land_record_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: {
-          model: 'land_records',
-          key: 'id',
-        },
+        references: { model: 'land_records', key: 'id' }
       },
-      document_name: {
+      map_number:{
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
+        unique:true,
       },
       document_type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['Ownership Certificate', 'Title Deed', 'Survey Plan', 'Tax Receipt', 'Permit', 'Lease Agreement', 'Other']],
-        },
+          isIn: {
+            args: [Object.values(DOCUMENT_TYPES)],
+            msg: 'የሰነድ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
       },
-      number_of_documnets: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-        },
-      },
-      file_reference: {
+      file_path: {
         type: DataTypes.STRING,
         allowNull: false,
-
+        validate: {
+          notEmpty: {
+            msg: 'የሰነድ ፋይል መንገድ ባዶ መሆን አይችልም።'
+          }
+        }
       },
-      map_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: true,
-
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true
       },
-      issue_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-      },
-      expiry_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-      },
-      uploaded_by: {
+      created_by: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
+        references: { model: 'users', key: 'id' }
       },
-      prepared_by: {
+      updated_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
+        references: { model: 'users', key: 'id' }
       },
-      verified_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id',
-        },
-      },
-      status: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: [['Pending', 'Verified', 'Rejected']],
-        },
-      },
-      file_size: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 0,
-        },
-      },
-      file_format: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: [['PDF', 'JPEG', 'PNG', 'Other']],
-        },
-      },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+      }
     },
     {
       tableName: 'documents',
       timestamps: true,
+      paranoid: true,
+      indexes: [
+        { fields: ['land_record_id'] },
+        { fields: ['document_type'] }
+      ]
     }
   );
 

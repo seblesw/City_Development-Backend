@@ -8,15 +8,15 @@ const LAND_USE_TYPES = {
   TRANSPORT: 'መንገዶች እና ትራንስፖርት',
   URBAN_AGRICULTURE: 'ከተማ ግብርና',
   FOREST: 'ደን',
-  RECREATION: 'መዝናኛ እና መጫወቶ ሜዳ',
+  RECREATION: 'መዝናኛ እና መጫወቻ ሜዳ',
   OTHER: 'ሌላ'
 };
 
 const OWNERSHIP_TYPES = {
   COURT_ORDER: 'የፍርድ ቤት ትእዛዝ',
   TRANSFER: 'የባለቤትነት ማስተላለፍ',
-  LEASE: 'የኪራይ ይዞታ',
-  LEASE_ALLOCATION: 'የኪራይ ይዞታ-ምደባ',
+  LEASE: 'የሊዝ ይዞታ',
+  LEASE_ALLOCATION: 'የሊዝ ይዞታ-ምደባ',
   NO_PRIOR_DOCUMENT: 'ቅድመ ሰነድ የሌለው',
   DISPLACEMENT: 'መፈናቀል'
 };
@@ -106,12 +106,17 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATEONLY,
         allowNull: false
       },
-      created_by: {
+      owner_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: { model: 'users', key: 'id' }
       },
-      updated_by: {
+      registered_by: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'users', key: 'id' }
+      },
+      approved_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' }
@@ -128,7 +133,8 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { unique: true, fields: ['parcel_number'] },
         { fields: ['administrative_unit_id'] },
-        { fields: ['land_level'] }
+        { fields: ['land_level'] },
+        { fields: ['owner_id'] }
       ],
       validate: {
         async validLandLevel() {
@@ -136,14 +142,11 @@ module.exports = (db, DataTypes) => {
           if (unit && this.land_level > unit.max_land_levels) {
             throw new Error('የመሬት ደረጃ ከአስተዳደር ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።');
           }
-        }
-      },
-      hooks: {
-        beforeSave: async (landRecord) => {
-          // Check if linked to an Application and ensure administrative_unit_id consistency
-          const application = await db.models.Application.findOne({ where: { land_record_id: landRecord.id } });
-          if (application && application.administrative_unit_id !== landRecord.administrative_unit_id) {
-            throw new Error('የመሬት መዝገብ እና የመጠየቂያ አስተዳደራዊ ክፍል መጣጣም አለባቸው።');
+        },
+        async validateOwnerConsistency() {
+          const application = await db.models.Application.findOne({ where: { land_record_id: this.id } });
+          if (application && application.user_id !== this.owner_id) {
+            throw new Error('የመሬት መዝገብ ባለቤት እና የመጠየቂያ ተጠቃሚ መጣጣም አለባቸው።');
           }
         }
       }

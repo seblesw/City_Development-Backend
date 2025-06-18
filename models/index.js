@@ -1,13 +1,16 @@
-const { Sequelize, DataTypes } = require('sequelize');
-const db = require('../config/database');
-const User=require('./User')(db, DataTypes);
-const Role=require('./Role')(db, DataTypes);
-const RefreshToken=require('./RefreshToken')(db, DataTypes);
-const AdministrativeUnit=require('./AdministrativeUnit')(db, DataTypes);
-const Region=require('./Region')(db, DataTypes);
-const LandRecord = require('./LandRecord')(db, DataTypes);
-const Document = require('./Document')(db, DataTypes);
-const LandPayment = require('./LandPayment')(db, DataTypes);
+const { Sequelize, DataTypes } = require("sequelize");
+const db = require("../config/database");
+const User = require("./User")(db, DataTypes);
+const Role = require("./Role")(db, DataTypes);
+const RefreshToken = require("./RefreshToken")(db, DataTypes);
+const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
+const Region = require("./Region")(db, DataTypes);
+const LandRecord = require("./LandRecord")(db, DataTypes);
+const Document = require("./Document")(db, DataTypes);
+const LandPayment = require("./LandPayment")(db, DataTypes);
+const CoOwners = require("./CoOwners")(db, DataTypes);
+const Application = require("./Application")(db, DataTypes);
+
 // Define models
 const models = {
   User,
@@ -17,32 +20,83 @@ const models = {
   Region,
   LandRecord,
   Document,
-  LandPayment
+  LandPayment,
+  CoOwners,
+  Application
 };
 
 // Define associations
-models.User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
-models.Role.hasMany(models.User, { foreignKey: 'role_id', as: 'users' });
+models.User.belongsTo(models.Role, { foreignKey: "role_id", as: "role" });
+models.Role.hasMany(models.User, { foreignKey: "role_id", as: "users" });
 
-AdministrativeUnit.belongsTo(AdministrativeUnit, { foreignKey: 'parent_id', as: 'parent' });
-AdministrativeUnit.hasMany(AdministrativeUnit, { foreignKey: 'parent_id', as: 'children' });
+models.User.hasMany(models.CoOwners, { foreignKey: "user_id", as: "coOwners" });
+models.CoOwners.belongsTo(models.User, { foreignKey: "user_id", as: "user" });
 
-models.User.hasMany(models.RefreshToken, { foreignKey: 'userId', as: 'refreshTokens' });
-models.RefreshToken.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
+models.Region.hasMany(models.AdministrativeUnit, { foreignKey: "region_id", as: "administrativeUnits" });
+models.AdministrativeUnit.belongsTo(models.Region, { foreignKey: "region_id", as: "region" });
 
-models.AdministrativeUnit.hasMany(models.User, { foreignKey: 'administrative_unit_id', as: 'users' });
-models.User.belongsTo(models.AdministrativeUnit, { foreignKey: 'administrative_unit_id', as: 'administrativeUnit' });
+models.AdministrativeUnit.belongsTo(models.AdministrativeUnit, {
+  foreignKey: "parent_id",
+  as: "parent",
+});
+models.AdministrativeUnit.hasMany(models.AdministrativeUnit, {
+  foreignKey: "parent_id",
+  as: "children",
+});
 
-LandRecord.belongsTo(User, { foreignKey: 'owner_id', as: 'owner' });
-LandRecord.belongsTo(User, { foreignKey: 'registered_by', as: 'registrar' });
-LandRecord.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
-LandRecord.belongsTo(AdministrativeUnit, { foreignKey: 'administrative_unit_id', as: 'administrativeUnit' });
+models.User.hasMany(models.RefreshToken, {
+  foreignKey: "userId",
+  as: "refreshTokens",
+});
+models.RefreshToken.belongsTo(models.User, {
+  foreignKey: "userId",
+  as: "user",
+});
 
-LandRecord.hasMany(Document, { foreignKey: 'land_record_id', as: 'documents' });
+models.AdministrativeUnit.hasMany(models.User, {
+  foreignKey: "administrative_unit_id",
+  as: "users",
+});
+models.User.belongsTo(models.AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrativeUnit",
+});
 
-LandPayment.belongsTo(models.LandRecord, { foreignKey: 'land_record_id', as: 'landRecord' });
-LandRecord.hasMany(models.LandPayment, { foreignKey: 'land_record_id', as: 'payments' });
-LandPayment.belongsTo(models.User, { foreignKey: 'recorded_by', as: 'recorder' });
+models.LandRecord.belongsTo(models.User, { foreignKey: "owner_id", as: "owner" });
+models.LandRecord.belongsTo(models.User, { foreignKey: "registered_by", as: "registrar" });
+models.LandRecord.belongsTo(models.User, { foreignKey: "approved_by", as: "approver" });
+models.LandRecord.belongsTo(models.AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrativeUnit",
+});
+
+models.LandRecord.hasMany(models.Document, { foreignKey: "land_record_id", as: "documents" });
+models.Document.belongsTo(models.LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
+
+models.LandPayment.belongsTo(models.LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
+models.LandRecord.hasMany(models.LandPayment, {
+  foreignKey: "land_record_id",
+  as: "payments",
+});
+models.LandPayment.belongsTo(models.User, {
+  foreignKey: "recorded_by",
+  as: "recorder",
+});
+
+models.Application.belongsTo(models.User, { foreignKey: "user_id", as: "owner" });
+models.Application.belongsTo(models.User, { foreignKey: "created_by", as: "creator" });
+models.Application.belongsTo(models.User, { foreignKey: "updated_by", as: "updater" });
+models.Application.belongsTo(models.AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrativeUnit",
+});
+models.Application.belongsTo(models.LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
+models.Application.belongsTo(models.Document, { foreignKey: "document_id", as: "document" });
+models.Application.belongsTo(models.LandPayment, { foreignKey: "land_payment_id", as: "landPayment" });
+
 // Export Sequelize instance and models
 module.exports = {
   sequelize: db,
