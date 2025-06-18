@@ -17,7 +17,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          notEmpty: { msg: 'ሙሉ ስም ባዶ መሆን አይችልም።' },
+          notEmpty: { msg: 'ሙሉ ስም ባዶ መሆን አዯችልም።' },
           len: { args: [2, 100], msg: 'ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።' }
         }
       },
@@ -32,14 +32,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [5, 20], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 20 ቁምፊዎች መሆን አለበት።' }
+          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
         }
       },
       address: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 255], msg: 'አድራሻ ከ255 ቁምፊዎች መብለጥ አይችልም።' }
+          len: { args: [0, 255], msg: 'አድራሻ ከ255 ቁምፊዎች መብለጥ አዯችልም።' }
         }
       },
       relationship_type: {
@@ -67,8 +67,10 @@ module.exports = (db, DataTypes) => {
       tableName: 'co_owners',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { fields: ['land_owner_id'] },
+        { fields: ['national_id'], unique: true, where: { national_id: { [db.Sequelize.Op.ne]: null } } }
       ]
     }
   );
