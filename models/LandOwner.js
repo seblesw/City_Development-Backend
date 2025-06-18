@@ -19,7 +19,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         unique: true,
         validate: {
-          len: { args: [5, 20], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 20 ቁምፊዎች መሆን አለበት።' }
+          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
         }
       },
       marital_status: {
@@ -38,7 +38,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [['ሴት', 'ወንድ', 'ሌላ']],
-            msg: 'ጾታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+            msg: 'ጾታ ከተፈቀዱት እሴቶች (ሴት፣ ወንድ፣ ሌላ) ውስጥ አንዱ መሆን አለበት።'
           }
         }
       },
@@ -78,20 +78,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
+
     },
     {
       tableName: 'land_owners',
@@ -99,8 +86,8 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { fields: ['user_id'] },
-        { fields: ['national_id'], where: { national_id: { [db.Sequelize.Op.ne]: null } } },
+        { fields: ['user_id'], unique: true },
+        { fields: ['national_id'], unique: true, where: { national_id: { [db.Sequelize.Op.ne]: null } } },
         { fields: ['administrative_unit_id'] }
       ]
     }

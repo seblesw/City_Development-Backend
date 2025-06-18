@@ -106,10 +106,21 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATEONLY,
         allowNull: false
       },
+      status: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'ረቂቅ',
+        validate: {
+          isIn: {
+            args: [['ረቂቅ', 'ተመዝግቧል', 'ጸድቋል', 'ውድቅ ተደርጓል']],
+            msg: 'የመሬት መዝገብ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
+      },
       owner_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'users', key: 'id' }
+        references: { model: 'land_owners', key: 'id' }
       },
       registered_by: {
         type: DataTypes.INTEGER,
@@ -121,15 +132,13 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
+
     },
     {
       tableName: 'land_records',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { unique: true, fields: ['parcel_number'] },
         { fields: ['administrative_unit_id'] },
@@ -145,7 +154,7 @@ module.exports = (db, DataTypes) => {
         },
         async validateOwnerConsistency() {
           const application = await db.models.Application.findOne({ where: { land_record_id: this.id } });
-          if (application && application.user_id !== this.owner_id) {
+          if (application && application.land_owner_id !== this.owner_id) {
             throw new Error('የመሬት መዝገብ ባለቤት እና የመጠየቂያ ተጠቃሚ መጣጣም አለባቸው።');
           }
         }

@@ -4,9 +4,9 @@ module.exports = (db, DataTypes) => {
     {
       id: {
         type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true,
         allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
       },
       name: {
         type: DataTypes.STRING,
@@ -14,7 +14,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [2, 100],
-            msg: 'የክልል ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።'
+            msg: 'የልል ስም ከ2 እስከ 100 ቁምፊዎች መሆ�ኖር አለበት።'
           }
         }
       },
@@ -26,14 +26,14 @@ module.exports = (db, DataTypes) => {
       code: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: true,
+        allowNull: false,
         validate: {
           len: {
             args: [1, 20],
-            msg: 'የክልል ኮድ ከ1 እስከ 20 ቁምፊዎች መሆን አለበት።'
+            msg: 'የልል ኮድ ከ1 እስከ 20 ቁምፊዎች መሆአለበት።'
           },
           isAlphanumeric: {
-            msg: 'የክልል ኮድ ፊደል እና ቁጥር ብቻ መሆን አለበት።'
+            msg: 'የልል ኮድ ፊደል እና ቁጥር ብቻ መሆን አለበት።'
           }
         }
       },
@@ -47,17 +47,14 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'regions',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
-        { unique: true, fields: ['code'], },
+        { fields: ['code'], unique: true, where: { code: { [db.Sequelize.Op.ne]: null } } },
         { fields: ['name'] }
       ]
     }

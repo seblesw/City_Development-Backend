@@ -83,7 +83,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(PAYMENT_METHODS)],
-            msg: 'የክፍያ ዘዴ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+            msg: 'የክፍያ ዘዴ ከተፈቀደው እሴቶች ውስጥ አንዱ መሆን አለበት።'
           }
         }
       },
@@ -133,17 +133,15 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
+
     },
     {
       tableName: 'land_payments',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
-        { unique: true, fields: ['transaction_reference'],  },
+        { fields: ['transaction_reference'], unique: true, where: { transaction_reference: { [db.Sequelize.Op.ne]: null } } },
         { fields: ['land_record_id'] },
         { fields: ['recorded_by'] },
         { fields: ['payment_status'] }

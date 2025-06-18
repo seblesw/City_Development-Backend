@@ -6,7 +6,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       name: {
         type: DataTypes.STRING,
@@ -21,7 +21,7 @@ module.exports = (db, DataTypes) => {
       },
       permissions: {
         type: DataTypes.JSON,
-        allowNull: true,
+        allowNull: true
       },
       created_by: {
         type: DataTypes.INTEGER,
@@ -33,15 +33,12 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'roles',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { unique: true, fields: ['name'] }
       ]

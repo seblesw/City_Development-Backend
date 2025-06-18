@@ -8,62 +8,59 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       full_name: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
           notEmpty: { msg: "ሙሉ ስም ባዶ መሆን አይችልም።" },
-          len: { args: [2, 100], msg: "ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።" },
-        },
+          len: { args: [2, 100], msg: "ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።" }
+        }
       },
       email: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
-        validate: { isEmail: { msg: "ትክክለኛ ኢሜይል ያስገቡ።" } },
+        validate: { isEmail: { msg: "ትክክለኛ ኢሜይል ያስገቡ።" } }
       },
       phone_number: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
         validate: {
-          is: { args: [/^\+251[79]\d{8}$/], msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ።" },
-        },
+          is: { args: [/^\+251[79]\d{8}$/], msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ።" }
+        }
       },
       password: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: true
       },
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: "roles", key: "id" },
+        references: { model: "roles", key: "id" }
       },
       is_active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: true,
+        defaultValue: true
       },
       last_login: {
         type: DataTypes.DATE,
-        allowNull: true,
-      },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
+        allowNull: true
       },
     },
     {
       tableName: "users",
       timestamps: true,
+      paranoid: true,
+      freezeTableName: true,
+      indexes: [
+        { fields: ['email'], unique: true },
+        { fields: ['phone_number'], unique: true },
+        { fields: ['role_id'] }
+      ],
       hooks: {
         beforeCreate: async (user) => {
           if (user.password) {
@@ -74,8 +71,8 @@ module.exports = (db, DataTypes) => {
           if (user.changed("password")) {
             user.password = await bcrypt.hash(user.password, 10);
           }
-        },
-      },
+        }
+      }
     }
   );
 

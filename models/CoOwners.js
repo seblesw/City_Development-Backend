@@ -62,26 +62,11 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'co_owners',
       timestamps: true,
       paranoid: true,
-      freezeTableName: true,
       indexes: [
         { fields: ['land_owner_id'] },
       ]

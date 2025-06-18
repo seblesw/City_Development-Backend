@@ -21,10 +21,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: 'land_records', key: 'id' }
       },
-      map_number:{
+      map_number: {
         type: DataTypes.STRING,
         allowNull: true,
-        unique:true,
+        unique: true
       },
       document_type: {
         type: DataTypes.STRING,
@@ -59,18 +59,17 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
+
     },
     {
       tableName: 'documents',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { fields: ['land_record_id'] },
-        { fields: ['document_type'] }
+        { fields: ['document_type'] },
+        { fields: ['map_number'], unique: true, where: { map_number: { [db.Sequelize.Op.ne]: null } } }
       ]
     }
   );

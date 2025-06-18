@@ -31,10 +31,10 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false
       },
-      user_id: {
+      land_owner_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'users', key: 'id' }
+        references: { model: 'land_owners', key: 'id' }
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
@@ -111,17 +111,14 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'applications',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
-        { fields: ['user_id'] },
+        { fields: ['land_owner_id'] },
         { fields: ['administrative_unit_id'] },
         { fields: ['land_record_id'] },
         { fields: ['document_id'] },
@@ -142,7 +139,7 @@ module.exports = (db, DataTypes) => {
             ];
             if (application.status === APPLICATION_STATUSES.APPROVED && application.land_record_id) {
               await db.models.LandRecord.update(
-                { status: 'ጸድቋል' }, // Assumes LandRecord has a status field
+                { status: 'ጸድቋል' },
                 { where: { id: application.land_record_id } }
               );
             }
@@ -151,13 +148,13 @@ module.exports = (db, DataTypes) => {
       },
       validate: {
         async validateCoOwners() {
-          const user = await db.models.User.findByPk(this.user_id);
-          const coOwnersCount = await db.models.CoOwners.count({ where: { user_id: this.user_id } });
-          if (user.marital_status === 'ባለትዳር' && coOwnersCount !== 1) {
+          const landOwner = await db.models.LandOwner.findByPk(this.land_owner_id);
+          const coOwnersCount = await db.models.CoOwners.count({ where: { land_owner_id: this.land_owner_id } });
+          if (landOwner && landOwner.marital_status === 'ባለትዳር' && coOwnersCount !== 1) {
             throw new Error('ባለትዳር ተጠቃሚ በትክክል አንድ ጋራ ባለቤት መኖር አለበት።');
-          } else if (user.marital_status === 'ጋራ ባለቤትነት' && coOwnersCount < 1) {
+          } else if (landOwner && landOwner.marital_status === 'ጋራ ባለቤትነት' && coOwnersCount < 1) {
             throw new Error('ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ ጋራ ባለቤት መኖር አለበት።');
-          } else if (['ነጠላ', 'ቤተሰብ'].includes(user.marital_status) && coOwnersCount > 0) {
+          } else if (landOwner && ['ነጠላ', 'ቤተሰብ'].includes(landOwner.marital_status) && coOwnersCount > 0) {
             throw new Error('ነጠላ ወይም ቤተሰብ ተጠቃሚ ጋራ ባለቤት መኖር አይችልም።');
           }
         },

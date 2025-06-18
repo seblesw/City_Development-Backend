@@ -49,7 +49,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           min: {
             args: 1,
-            msg: 'የክፍል ደረጃ ከ1 በታች መሆን አይችልም።'
+            msg: 'የክፍል ደረጃ ከ1 በታች መሆን አዯችልም።'
           },
           max: {
             args: 6,
@@ -79,7 +79,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           min: {
             args: 1,
-            msg: 'ከፍተኛ የመሬት ደረጃዎች ከ1 በታች መሆን አይችልም።'
+            msg: 'ከፍተኛ የመሬት ደረጃዎች ከ1 በታች መሆን አዯችልም።'
           }
         },
         set(value) {
@@ -101,18 +101,15 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'administrative_units',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { unique: true, fields: ['code'] },
-        { unique: true, fields: ['name', 'parent_id'] },
+        { unique: true, fields: ['name', 'parent_id'], where: { parent_id: { [db.Sequelize.Op.ne]: null } } },
         { fields: ['region_id'] },
         { fields: ['parent_id'] },
         { fields: ['unit_level'] },
@@ -142,7 +139,7 @@ module.exports = (db, DataTypes) => {
         validAttributes() {
           if (this.is_jurisdiction) {
             if (this.type || this.unit_level || this.max_land_levels) {
-              throw new Error('ዳይሬክቶሬቶች አይነት፣ ደረጃ ወይም ከፍተኛ የመሬት ደረጃ ሊኖራቸው አይችልም።');
+              throw new Error('ዳይሬክቶሬቶች አይነት፣ ደረጃ ወይም ከፍተኛ የመሬት ደረጃ ሊኖራቸው አዯችልም።');
             }
           } else {
             if (!this.type || !this.unit_level || !this.max_land_levels) {

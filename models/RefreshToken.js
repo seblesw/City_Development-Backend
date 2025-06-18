@@ -6,7 +6,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false,
+        allowNull: false
       },
       token: {
         type: DataTypes.STRING,
@@ -18,12 +18,12 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      userId: {
+      user_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
           model: 'users',
-          key: 'id',
+          key: 'id'
         }
       },
       expires_at: {
@@ -39,15 +39,15 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true
       },
-     
     },
     {
       tableName: 'refresh_tokens',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { unique: true, fields: ['token'] },
-        { fields: ['userId'] }
+        { fields: ['user_id'] }
       ],
       hooks: {
         beforeCreate: (token) => {
