@@ -1,9 +1,3 @@
-const RELATIONSHIP_TYPES = {
-  SPOUSE: 'ትዳር ጓደኛ',
-  FAMILY: 'ቤተሰብ',
-  PARTNER: 'አጋር'
-};
-
 module.exports = (db, DataTypes) => {
   const CoOwners = db.define(
     'CoOwners',
@@ -31,26 +25,29 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          is: { args: [/^\+?\d{10,15}$/], msg: 'የስልክ ቁጥር ትክክለኛ መሆን አለበት።' }
+          is: { args: [/^\+251[79]\d{8}$/], msg: 'ትክክለኛ ስልክ ቁጥር ያስገቡ።' }
         }
       },
       national_id: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [5, 20], msg: 'ብሔራዊ መታወቂያ ቁጥር ትክክለኛ መሆን አለበት።' }
+          len: { args: [5, 20], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 20 ቁምፊዎች መሆን አለበት።' }
         }
       },
       address: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        validate: {
+          len: { args: [0, 255], msg: 'አድራሻ ከ255 ቁምፊዎች መብለጥ አይችልም።' }
+        }
       },
       relationship_type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
           isIn: {
-            args: [Object.values(RELATIONSHIP_TYPES)],
+            args: [['ትዳር ጓደኛ', 'ልጅ', 'ወላጅ', 'ወንድም/እህት', 'ሌላ']],
             msg: 'የግንኙነት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
           }
         }
@@ -65,6 +62,16 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
+      created_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW
+      },
+      updated_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW
+      },
       deleted_at: {
         type: DataTypes.DATE,
         allowNull: true
@@ -74,17 +81,10 @@ module.exports = (db, DataTypes) => {
       tableName: 'co_owners',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { fields: ['land_owner_id'] },
-        { unique: true, fields: ['land_owner_id', 'national_id'], where: { national_id: { [db.Sequelize.Op.ne]: null } } }
-      ],
-      validate: {
-        atLeastOneIdentifier() {
-          if (!this.phone_number && !this.national_id) {
-            throw new Error('ቢያንስ አንድ የስልክ ቁጥር ወይም ብሔራዊ መታወቂዪ መግለፅ አለበት።');
-          }
-        }
-      }
+      ]
     }
   );
 

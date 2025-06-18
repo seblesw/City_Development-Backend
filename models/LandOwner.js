@@ -46,14 +46,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATEONLY,
         allowNull: true,
         validate: {
-          isDate: { msg: 'ትክክለኛ የትውልድ ቀን ያስገቡ።' }
+          isDate: { msg: 'ትክክለኛ የልደት ቀን ያስገቡ።' }
         }
       },
       address_kebele: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: 'አድራሻ (ቀበሌ) ከ100 ቁምፊዎች መብለጥ አይችልም።' }
+          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አይችልም።' }
         }
       },
       profile_picture: {
@@ -78,6 +78,16 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'users', key: 'id' }
       },
+      created_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW
+      },
+      updated_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW
+      },
       deleted_at: {
         type: DataTypes.DATE,
         allowNull: true
@@ -87,6 +97,7 @@ module.exports = (db, DataTypes) => {
       tableName: 'land_owners',
       timestamps: true,
       paranoid: true,
+      freezeTableName: true,
       indexes: [
         { fields: ['user_id'] },
         { fields: ['national_id'], where: { national_id: { [db.Sequelize.Op.ne]: null } } },

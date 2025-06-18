@@ -34,7 +34,7 @@ module.exports = (db, DataTypes) => {
       },
       password: {
         type: DataTypes.STRING,
-        allowNull: true, // Null for OTP-based login
+        allowNull: true,
       },
       role_id: {
         type: DataTypes.INTEGER,
