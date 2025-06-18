@@ -14,38 +14,31 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false
       },
-      user_id: {
+      land_owner_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'users', key: 'id' }
+        references: { model: 'land_owners', key: 'id' }
       },
       full_name: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          notEmpty: {
-            msg: 'ሙሉ ስም ባዶ መሆን አይችልም።'
-          }
+          notEmpty: { msg: 'ሙሉ ስም ባዶ መሆን አይችልም።' },
+          len: { args: [2, 100], msg: 'ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።' }
         }
       },
       phone_number: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          is: {
-            args: [/^\+?\d{10,15}$/],
-            msg: 'የስልክ ቁጥር ትክክለኛ መሆን አለበት።'
-          }
+          is: { args: [/^\+?\d{10,15}$/], msg: 'የስልክ ቁጥር ትክክለኛ መሆን አለበት።' }
         }
       },
       national_id: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: {
-            args: [5, 20],
-            msg: 'ብሔራዊ መታወቂያ ቁጥር ትክክለኛ መሆን አለበት።'
-          }
+          len: { args: [5, 20], msg: 'ብሔራዊ መታወቂያ ቁጥር ትክክለኛ መሆን አለበት።' }
         }
       },
       address: {
@@ -62,14 +55,28 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'users', key: 'id' }
+      },
+      updated_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' }
+      },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+      }
     },
     {
       tableName: 'co_owners',
       timestamps: true,
       paranoid: true,
       indexes: [
-        { fields: ['user_id'] },
-        { unique: true, fields: ['user_id', 'national_id'], }
+        { fields: ['land_owner_id'] },
+        { unique: true, fields: ['land_owner_id', 'national_id'], where: { national_id: { [db.Sequelize.Op.ne]: null } } }
       ],
       validate: {
         atLeastOneIdentifier() {
