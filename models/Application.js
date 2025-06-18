@@ -1,16 +1,24 @@
-const STATUS_TYPES = {
-  PENDING: 'በመጠባበቅ ላይ',
-  DRAFT: 'ተጻፎ ተቀምጧል',
-  IN_REVIEW: 'በግምገማ ላይ',
+const APPLICATION_STATUSES = {
+  DRAFT: 'ረቂቅ',
+  SUBMITTED: 'ቀርቧል',
+  UNDER_REVIEW: 'በግምገማ ላይ',
+  APPROVED: 'ጸድቋል',
   REJECTED: 'ውድቅ ተደርጓል',
-  APPROVED: 'ጸድቋል'
+  CANCELLED: 'ተሰርዟል'
 };
 
-const TRANSACTION_TYPES = {
-  LAND_REGISTRATION: 'የመሬት ምዝገባ',
-  TRANSFER: 'ማስተላለፍ',
-  UPDATE: 'ማሻሻል',
+const APPLICATION_TYPES = {
+  OWNERSHIP_REGISTRATION: 'የባለቤትነት ምዝገባ',
+  OWNERSHIP_TRANSFER: 'የባለቤትነት ሽግግር',
+  LEASE_REGISTRATION: 'የኪራይ ምዝገባ',
+  PAYMENT_REQUEST: 'የክፍያ ጥያቄ',
   OTHER: 'ሌላ'
+};
+
+const PRIORITIES = {
+  LOW: 'ዝቅተኛ',
+  MEDIUM: 'መካከለኛ',
+  HIGH: 'ከፍተኛ'
 };
 
 module.exports = (db, DataTypes) => {
@@ -23,59 +31,15 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false
       },
-      status: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        defaultValue: STATUS_TYPES.PENDING,
-        validate: {
-          isIn: {
-            args: [Object.values(STATUS_TYPES)],
-            msg: 'ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
-      },
-      transaction_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: {
-            args: [Object.values(TRANSACTION_TYPES)],
-            msg: 'የግብይት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
-      },
-      submitted_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      },
-      created_by: {
+      user_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'users', key: 'id' }
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
         references: { model: 'users', key: 'id' }
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: { model: 'administrative_units', key: 'id' }
-      },
-      user_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'users', key: 'id' }
       },
       land_record_id: {
         type: DataTypes.INTEGER,
@@ -92,14 +56,64 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: 'land_payments', key: 'id' }
       },
-      comments: {
-        type: DataTypes.TEXT,
-        allowNull: true
+      status: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: APPLICATION_STATUSES.DRAFT,
+        validate: {
+          isIn: {
+            args: [Object.values(APPLICATION_STATUSES)],
+            msg: 'የመጠየቂያ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
       },
       status_history: {
         type: DataTypes.JSON,
         allowNull: true,
         defaultValue: []
+      },
+      application_type: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isIn: {
+            args: [Object.values(APPLICATION_TYPES)],
+            msg: 'የመጠየቂያ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
+      },
+      priority: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: PRIORITIES.MEDIUM,
+        validate: {
+          isIn: {
+            args: [Object.values(PRIORITIES)],
+            msg: 'ቅድሚያ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
+      },
+      comments: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      rejection_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'users', key: 'id' }
+      },
+      updated_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' }
+      },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
       }
     },
     {
@@ -112,33 +126,12 @@ module.exports = (db, DataTypes) => {
         { fields: ['land_record_id'] },
         { fields: ['document_id'] },
         { fields: ['land_payment_id'] },
-        { fields: ['status'] }
+        { fields: ['status'] },
+        { fields: ['priority'] }
       ],
-      validate: {
-        async validateCoOwners() {
-          const user = await db.models.User.findByPk(this.user_id);
-          const coOwners = await db.models.CoOwners.findAll({ where: { user_id: this.user_id } });
-
-          if (user.marital_status === 'ነጠላ' && coOwners.length > 0) {
-            throw new Error('ነጠላ ተጠቃሚ ጋራ ባለቤቶች ሊኖሩት አይችልም።');
-          }
-          if (user.marital_status === 'ባለትዳር' && (coOwners.length !== 1 || !coOwners.find(co => co.relationship_type === 'ትዳር ጓደኛ'))) {
-            throw new Error('ባለትዳር ተጠቃሚ አንድ ትዳር ጓደኛ እንደ ጋራ ባለቤት መግለፅ አለበት።');
-          }
-          if (['ቤተሰብ', 'ጋራ ባለቤትነት'].includes(user.marital_status) && coOwners.length === 0) {
-            throw new Error('ቤተሰብ ወይም ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ ጋራ ባለቤት መግለፅ አለበት።');
-          }
-        },
-        atLeastOneReference() {
-          if (!this.land_record_id && !this.document_id && !this.land_payment_id) {
-            throw new Error('ቢያንስ አንድ የመሬት መዝገብ፣ ሰነድ ወይም የመሬት ክፍያ መግለፅ አለበት።');
-          }
-        }
-      },
       hooks: {
         beforeUpdate: async (application) => {
           if (application.changed('status')) {
-            const previousStatus = application.previous('status');
             application.status_history = [
               ...(application.status_history || []),
               {
@@ -147,6 +140,33 @@ module.exports = (db, DataTypes) => {
                 changed_at: new Date()
               }
             ];
+            if (application.status === APPLICATION_STATUSES.APPROVED && application.land_record_id) {
+              await db.models.LandRecord.update(
+                { status: 'ጸድቋል' }, // Assumes LandRecord has a status field
+                { where: { id: application.land_record_id } }
+              );
+            }
+          }
+        }
+      },
+      validate: {
+        async validateCoOwners() {
+          const user = await db.models.User.findByPk(this.user_id);
+          const coOwnersCount = await db.models.CoOwners.count({ where: { user_id: this.user_id } });
+          if (user.marital_status === 'ባለትዳር' && coOwnersCount !== 1) {
+            throw new Error('ባለትዳር ተጠቃሚ በትክክል አንድ ጋራ ባለቤት መኖር አለበት።');
+          } else if (user.marital_status === 'ጋራ ባለቤትነት' && coOwnersCount < 1) {
+            throw new Error('ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ ጋራ ባለቤት መኖር አለበት።');
+          } else if (['ነጠላ', 'ቤተሰብ'].includes(user.marital_status) && coOwnersCount > 0) {
+            throw new Error('ነጠላ ወይም ቤተሰብ ተጠቃሚ ጋራ ባለቤት መኖር አይችልም።');
+          }
+        },
+        async validateApplicationConsistency() {
+          if (this.land_payment_id) {
+            const payment = await db.models.LandPayment.findByPk(this.land_payment_id);
+            if (payment && payment.land_record_id && this.land_record_id && payment.land_record_id !== this.land_record_id) {
+              throw new Error('የክፍያ እና የመጠየቂያ መሬት መዝገብ መጣጣም አለባቸው።');
+            }
           }
         }
       }
