@@ -81,7 +81,7 @@ module.exports = (db, DataTypes) => {
       validate: {
         atLeastOneIdentifier() {
           if (!this.phone_number && !this.national_id) {
-            throw new Error('ቢያንስ አንድ የስልክ ቁጥር ወይም ብሔራዊ መታወቂያ መግለፅ አለበት።');
+            throw new Error('ቢያንስ አንድ የስልክ ቁጥር ወይም ብሔራዊ መታወቂዪ መግለፅ አለበት።');
           }
         }
       }
