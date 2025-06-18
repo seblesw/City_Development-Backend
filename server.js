@@ -42,7 +42,9 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connected successfully');
     // Sync models with the database
-    await sequelize.sync({force:true}); // Set force to true only in development to drop tables
+    // Set force to true only in development to drop tables={force:true}
+    // set alter to true for to add new attribuete with out drop existing table {alter:true}
+    await sequelize.sync(); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);
