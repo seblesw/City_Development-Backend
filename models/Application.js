@@ -115,6 +115,20 @@ module.exports = (db, DataTypes) => {
         { fields: ['status'] }
       ],
       validate: {
+        async validateCoOwners() {
+          const user = await db.models.User.findByPk(this.user_id);
+          const coOwners = await db.models.CoOwners.findAll({ where: { user_id: this.user_id } });
+
+          if (user.marital_status === 'ነጠላ' && coOwners.length > 0) {
+            throw new Error('ነጠላ ተጠቃሚ ጋራ ባለቤቶች ሊኖሩት አይችልም።');
+          }
+          if (user.marital_status === 'ባለትዳር' && (coOwners.length !== 1 || !coOwners.find(co => co.relationship_type === 'ትዳር ጓደኛ'))) {
+            throw new Error('ባለትዳር ተጠቃሚ አንድ ትዳር ጓደኛ እንደ ጋራ ባለቤት መግለፅ አለበት።');
+          }
+          if (['ቤተሰብ', 'ጋራ ባለቤትነት'].includes(user.marital_status) && coOwners.length === 0) {
+            throw new Error('ቤተሰብ ወይም ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ ጋራ ባለቤት መግለፅ አለበት።');
+          }
+        },
         atLeastOneReference() {
           if (!this.land_record_id && !this.document_id && !this.land_payment_id) {
             throw new Error('ቢያንስ አንድ የመሬት መዝገብ፣ ሰነድ ወይም የመሬት ክፍያ መግለፅ አለበት።');
