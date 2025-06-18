@@ -39,22 +39,10 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          isIn: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "ጋራ ባለቤትነት"]],
+          isIn: [['ነጠላ', 'ባለትዳር', 'ቤተሰብ', 'ጋራ ባለቤትነት']],
         },
       },
-      spouse_name: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      spouse_phone_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       profile_picture: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      spouse_profile_picture: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -93,13 +81,13 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       hooks: {
         beforeCreate: async (user) => {
-          if (user.password_hash) {
-            user.password_hash = await bcrypt.hash(user.password_hash, 10);
+          if (user.password) {
+            user.password = await bcrypt.hash(user.password, 10);
           }
         },
         beforeUpdate: async (user) => {
           if (user.changed("password")) {
-            user.password_hash = await bcrypt.hash(user.password_hash, 10);
+            user.password = await bcrypt.hash(user.password, 10);
           }
         },
       },
@@ -107,7 +95,14 @@ module.exports = (db, DataTypes) => {
   );
 
   User.prototype.validatePassword = async function (password) {
-    return await bcrypt.compare(password, this.password_hash);
+    return await bcrypt.compare(password, this.password);
+  };
+
+  User.associate = (models) => {
+    User.hasMany(models.CoOwners, {
+      foreignKey: 'user_id',
+      as: 'coOwners'
+    });
   };
 
   return User;

@@ -62,25 +62,6 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      name_translations: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        defaultValue: {}
-      },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'users', key: 'id' }
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: 'users', key: 'id' }
-      },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true
-      }
     },
     {
       tableName: 'co_owners',
