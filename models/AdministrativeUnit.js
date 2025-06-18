@@ -65,7 +65,7 @@ module.exports = (db, DataTypes) => {
       code: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: true,
+        allowNull: false,
         validate: {
           len: {
             args: [1, 50],
@@ -111,7 +111,7 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       paranoid: true,
       indexes: [
-        { unique: true, fields: ['code'], where: { code: { [DataTypes.Op.ne]: null } } },
+        { unique: true, fields: ['code'] },
         { unique: true, fields: ['name', 'parent_id'] },
         { fields: ['region_id'] },
         { fields: ['parent_id'] },
@@ -121,12 +121,11 @@ module.exports = (db, DataTypes) => {
       ],
       hooks: {
         beforeCreate: async (unit) => {
-          if (!unit.code) {
-            const region = await db.models.Region.findByPk(unit.region_id);
-            const regionCode = region?.code || '';
-            const parentCode = unit.parent_id ? (await AdministrativeUnit.findByPk(unit.parent_id))?.code : '';
-            unit.code = `${regionCode}-${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
-          }
+          const region = await db.models.Region.findByPk(unit.region_id);
+          if (!region) throw new Error('ትክክለኛ ክልል መግለፅ አለበት።');
+          const regionCode = region.code || '';
+          const parentCode = unit.parent_id ? (await AdministrativeUnit.findByPk(unit.parent_id))?.code : '';
+          unit.code = `${regionCode}-${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
         },
         beforeSave: async (unit) => {
           let currentId = unit.parent_id;

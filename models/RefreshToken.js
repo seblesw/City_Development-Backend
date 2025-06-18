@@ -1,47 +1,63 @@
-// models/RefreshToken.js
 module.exports = (db, DataTypes) => {
-    const RefreshToken = db.define(
-        'RefreshToken',
-        {
-            id: {
-                type: DataTypes.INTEGER,
-                autoIncrement: true,
-                primaryKey: true,
-                allowNull: false,
-            },
-            token: {
-                type: DataTypes.STRING,
-                allowNull: false,
-                unique: true,
-                validate: {
-                    notEmpty: true,
-                },
-            },
-            userId: {
-                type: DataTypes.INTEGER,
-                allowNull: false,
-                references: {
-                    model: 'users',
-                    key: 'id',
-                },
-            },
-            expiresAt: {
-                type: DataTypes.DATE,
-                allowNull: false,
-            },
-            isRevoked: {
-                type: DataTypes.BOOLEAN,
-                allowNull: false,
-                defaultValue: false,
-            },
-
-        },
-        {
-            tableName: 'refresh_tokens',
-            timestamps: true,
-
+  const RefreshToken = db.define(
+    'RefreshToken',
+    {
+      id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+        allowNull: false,
+      },
+      token: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+          notEmpty: {
+            msg: 'የማደስ ቶከን ባዶ መሆን አይችልም።'
+          }
         }
-    );
+      },
+      userId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: 'users',
+          key: 'id',
+        }
+      },
+      expires_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        validate: {
+          isDate: {
+            msg: 'የማብቂያ ቀን ትክክለኛ መሆን አለበት።'
+          }
+        }
+      },
+      revoked_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+      },
+     
+    },
+    {
+      tableName: 'refresh_tokens',
+      timestamps: true,
+      paranoid: true,
+      indexes: [
+        { unique: true, fields: ['token'] },
+        { fields: ['userId'] }
+      ],
+      hooks: {
+        beforeCreate: (token) => {
+          if (!token.expires_at) {
+            token.expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+          }
+        }
+      }
+    }
+  );
 
-    return RefreshToken;
+  return RefreshToken;
 };

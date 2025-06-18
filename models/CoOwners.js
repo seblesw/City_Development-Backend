@@ -69,7 +69,7 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       indexes: [
         { fields: ['user_id'] },
-        { unique: true, fields: ['user_id', 'national_id'], where: { national_id: { [DataTypes.Op.ne]: null } } }
+        { unique: true, fields: ['user_id', 'national_id'], }
       ],
       validate: {
         atLeastOneIdentifier() {

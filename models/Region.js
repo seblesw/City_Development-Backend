@@ -57,7 +57,7 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       paranoid: true,
       indexes: [
-        { unique: true, fields: ['code'], where: { code: { [DataTypes.Op.ne]: null } } },
+        { unique: true, fields: ['code'], },
         { fields: ['name'] }
       ]
     }

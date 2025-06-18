@@ -24,6 +24,15 @@ module.exports = (db, DataTypes) => {
       full_name: {
         type: DataTypes.STRING,
         allowNull: false,
+        validate: {
+          notEmpty: {
+            msg: 'ሙሉ ስም ባዶ መሆን አይችልም።'
+          },
+          len: {
+            args: [2, 100],
+            msg: 'ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።'
+          }
+        }
       },
       phone_number: {
         type: DataTypes.STRING,

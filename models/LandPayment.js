@@ -143,7 +143,7 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       paranoid: true,
       indexes: [
-        { unique: true, fields: ['transaction_reference'], where: { transaction_reference: { [DataTypes.Op.ne]: null } } },
+        { unique: true, fields: ['transaction_reference'],  },
         { fields: ['land_record_id'] },
         { fields: ['recorded_by'] },
         { fields: ['payment_status'] }
