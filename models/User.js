@@ -32,6 +32,11 @@ module.exports = (db, DataTypes) => {
           is: { args: [/^\+251[79]\d{8}$/], msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ።" }
         }
       },
+      administrative_unit_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "administrative_units", key: "id" }
+      },
       password: {
         type: DataTypes.STRING,
         allowNull: true
