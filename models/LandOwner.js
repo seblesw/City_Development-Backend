@@ -1,3 +1,4 @@
+
 module.exports = (db, DataTypes) => {
   const LandOwner = db.define(
     'LandOwner',
@@ -16,9 +17,10 @@ module.exports = (db, DataTypes) => {
       },
       national_id: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
         unique: true,
         validate: {
+          notEmpty: { msg: 'ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አዯችልም።' },
           len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
         }
       },
@@ -34,7 +36,7 @@ module.exports = (db, DataTypes) => {
       },
       gender: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
         validate: {
           isIn: {
             args: [['ሴት', 'ወንድ', 'ሌላ']],
@@ -42,25 +44,11 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      date_of_birth: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-        validate: {
-          isDate: { msg: 'ትክክለኛ የልደት ቀን ያስገቡ።' }
-        }
-      },
       address_kebele: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አይችልም።' }
-        }
-      },
-      profile_picture: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 255], msg: 'የመገለጫ ፎቶ መንገድ ከ255 ቁምፊዎች መብለጥ አይችልም።' }
+          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አዯችልም።' }
         }
       },
       administrative_unit_id: {
@@ -77,8 +65,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' }
-      },
-
+      }
     },
     {
       tableName: 'land_owners',
@@ -87,9 +74,32 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { fields: ['user_id'], unique: true },
-        { fields: ['national_id'], unique: true, where: { national_id: { [db.Sequelize.Op.ne]: null } } },
-        { fields: ['administrative_unit_id'] }
-      ]
+        { fields: ['national_id'], unique: true },
+        { fields: ['administrative_unit_id'] },
+        { fields: ['marital_status'] }
+      ],
+      hooks: {
+        beforeCreate: async (landOwner, options) => {
+          // Ensure administrative_unit_id matches User's administrative_unit_id
+          const user = await db.models.User.findByPk(landOwner.user_id, {
+            transaction: options.transaction
+          });
+          if (!user) throw new Error('ተጠቃሚ አልተገኘም።');
+          if (user.administrative_unit_id !== landOwner.administrative_unit_id) {
+            throw new Error('የመሬት ባለቤት አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።');
+          }
+        },
+        beforeUpdate: async (landOwner, options) => {
+          if (landOwner.changed('administrative_unit_id')) {
+            const user = await db.models.User.findByPk(landOwner.user_id, {
+              transaction: options.transaction
+            });
+            if (user.administrative_unit_id !== landOwner.administrative_unit_id) {
+              throw new Error('የመሬት ባለቤት አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።');
+            }
+          }
+        }
+      }
     }
   );
 

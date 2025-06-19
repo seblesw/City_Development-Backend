@@ -1,6 +1,7 @@
+
 module.exports = (db, DataTypes) => {
-  const CoOwners = db.define(
-    'CoOwners',
+  const CoOwner = db.define(
+    'CoOwner',
     {
       id: {
         type: DataTypes.INTEGER,
@@ -21,25 +22,37 @@ module.exports = (db, DataTypes) => {
           len: { args: [2, 100], msg: 'ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።' }
         }
       },
+      national_id: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+          notEmpty: { msg: 'ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አዯችልም።' },
+          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
+        }
+      },
       phone_number: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          is: { args: [/^\+251[79]\d{8}$/], msg: 'ትክክለኛ ስልክ ቁጥር ያስገቡ።' }
+          is: { args: [/^\+251[79]\d{8}$/], msg: 'ትክክለኛ ስልክ ቁጥር ያስገቡ (+2519... ወይም +2517...)።' }
         }
       },
-      national_id: {
+      gender: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isIn: {
+            args: [['ሴት', 'ወንድ', 'ሌላ']],
+            msg: 'ጾታ ከተፈቀዱት እሴቶች (ሴት፣ ወንድ፣ ሌላ) ውስጥ አንዱ መሆን አለበት።'
+          }
+        }
+      },
+      address_kebele: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
-        }
-      },
-      address: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 255], msg: 'አድራሻ ከ255 ቁምፊዎች መብለጥ አዯችልም።' }
+          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አዯችልም።' }
         }
       },
       relationship_type: {
@@ -47,7 +60,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           isIn: {
-            args: [['ትዳር ጓደኛ', 'ልጅ', 'ወላጅ', 'ወንድም/እህት', 'ሌላ']],
+            args: [['የትዳር ጓደኛ', 'ልጅ', 'ወላጅ', 'ወንድም/እህት', 'ሌላ']],
             msg: 'የግንኙነት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
           }
         }
@@ -61,7 +74,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' }
-      },
+      }
     },
     {
       tableName: 'co_owners',
@@ -70,10 +83,10 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { fields: ['land_owner_id'] },
-        { fields: ['national_id'], unique: true, where: { national_id: { [db.Sequelize.Op.ne]: null } } }
+        { fields: ['national_id'], unique: true }
       ]
     }
   );
 
-  return CoOwners;
+  return CoOwner;
 };
