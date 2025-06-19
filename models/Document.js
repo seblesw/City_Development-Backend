@@ -21,7 +21,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: 'land_records', key: 'id' }
       },
-      map_number: {
+      plot_number: {
         type: DataTypes.STRING,
         allowNull: true,
         unique: true
@@ -41,7 +41,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: {
-            msg: 'የሰነድ ፋይል መንገድ ባዶ መሆን አይችልም።'
+            msg: 'የሰነድ ፋይል  ባዶ መሆን አይችልም።'
           }
         }
       },

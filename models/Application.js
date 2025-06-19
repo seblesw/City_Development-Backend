@@ -151,11 +151,11 @@ module.exports = (db, DataTypes) => {
           const landOwner = await db.models.LandOwner.findByPk(this.land_owner_id);
           const coOwnersCount = await db.models.CoOwners.count({ where: { land_owner_id: this.land_owner_id } });
           if (landOwner && landOwner.marital_status === 'ባለትዳር' && coOwnersCount !== 1) {
-            throw new Error('ባለትዳር ተጠቃሚ በትክክል አንድ ጋራ ባለቤት መኖር አለበት።');
+            throw new Error('ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።');
           } else if (landOwner && landOwner.marital_status === 'ጋራ ባለቤትነት' && coOwnersCount < 1) {
-            throw new Error('ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ ጋራ ባለቤት መኖር አለበት።');
+            throw new Error('ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።');
           } else if (landOwner && ['ነጠላ', 'ቤተሰብ'].includes(landOwner.marital_status) && coOwnersCount > 0) {
-            throw new Error('ነጠላ ወይም ቤተሰብ ተጠቃሚ ጋራ ባለቤት መኖር አይችልም።');
+            throw new Error('ነጠላ ወይም ቤተሰብ ተጠቃሚ የጋራ ባለቤት መኖር አይችልም።');
           }
         },
         async validateApplicationConsistency() {
