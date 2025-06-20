@@ -12,17 +12,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         unique: true,
         allowNull: false,
-        validate: {
-          len: {
-            args: [2, 50],
-            msg: 'የሚና ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።'
-          }
-        }
-      },
-      permissions: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        defaultValue: {}
+        defaultValue: 'ተጠቃሚ',
       },
       created_by: {
         type: DataTypes.INTEGER,
@@ -44,19 +34,17 @@ module.exports = (db, DataTypes) => {
         { unique: true, fields: ['name'] }
       ],
       hooks: {
-        afterSync: async (options) => {
-          const defaultRole = {
-            name: 'ተጠቃሚ',
-            // permissions: {
-            //   view_own_records: true,
-            //   submit_application: true
-            // },
-          };
-          await db.models.Role.findOrCreate({
-            where: { name: defaultRole.name },
-            defaults: defaultRole,
-            transaction: options.transaction
-          });
+        beforeCreate: async (role, options) => {
+          // Ensure default role 'ተጠቃሚ' exists or is being created
+          if (role.name !== 'ተጠቃሚ') {
+            const defaultRole = await db.models.Role.findOne({
+              where: { name: 'ተጠቃሚ' },
+              transaction: options.transaction
+            });
+            if (!defaultRole) {
+              throw new Error('ነባሪ ሚና ተጠቃሚ መጀመሪያ መፍጠር አለበት።');
+            }
+          }
         }
       }
     }
