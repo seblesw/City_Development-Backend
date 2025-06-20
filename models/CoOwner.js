@@ -65,16 +65,6 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: "users", key: "id" }
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" }
-      }
     },
     {
       tableName: "co_owners",
@@ -97,8 +87,7 @@ module.exports = (db, DataTypes) => {
               transaction: options.transaction
             });
             if (!adminUnit) throw new Error("አስተዳደራዊ ክፍል አልተገኘም።");
-            // Placeholder for kebele validation; customize based on your kebele hierarchy
-            // Example: Check if address_kebele matches adminUnit's naming convention
+           
           }
         },
         beforeUpdate: async (coOwner, options) => {

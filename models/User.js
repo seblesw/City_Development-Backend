@@ -8,29 +8,46 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false
+        allowNull: false,
       },
       full_name: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
           notEmpty: { msg: "ሙሉ ስም ባዶ መሆን አዯችልም።" },
-          len: { args: [2, 100], msg: "ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።" }
-        }
+          len: { args: [2, 100], msg: "ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።" },
+        },
       },
       email: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
-        validate: { isEmail: { msg: "ትክክለኛ ኢሜይል ያስገቡ።" } }
+        validate: { isEmail: { msg: "ትክክለኛ ኢሜይል ያስገቡ።" } },
       },
       phone_number: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
         validate: {
-          is: { args: [/^\+251[79]\d{8}$/], msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ (+2517... ወይም +2519...)።" }
-        }
+          is: {
+            args: [/^\+251[79]\d{8}$/],
+            msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ (+2517... ወይም +2519...)።",
+          },
+        },
+      },
+      password: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      role_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "roles", key: "id" },
+      },
+      administrative_unit_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "administrative_units", key: "id" },
       },
       national_id: {
         type: DataTypes.STRING,
@@ -38,19 +55,19 @@ module.exports = (db, DataTypes) => {
         unique: true,
         validate: {
           notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አዯችልም።" },
-          len: { args: [5, 50], msg: "ብሔራ�ዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለቘ።" },
-          is: { args: /^[A-Za-z0-9-]+$/, msg: "ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።" }
-        }
+          len: {
+            args: [5, 50],
+            msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለቘ።",
+          },
+          is: {
+            args: /^[A-Za-z0-9-]+$/,
+            msg: "ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።",
+          },
+        },
       },
-      marital_status: {
+      address: {
         type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          isIn: {
-            args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "ጋራ ባለቤትነት"]],
-            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።"
-          }
-        }
+        allowNull: true,
       },
       gender: {
         type: DataTypes.STRING,
@@ -58,45 +75,50 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [["ሴት", "ወንድ", "ሌላ"]],
-            msg: "ጾታ ከተፈቀዱት እሴቶች (ሴት፣ ወንድ፣ ሌላ) ውስጥ አንዱ መሆን አለበት።"
-          }
-        }
+            msg: "ጾታ ከተፈቀዱት እሴቶች (ሴት፣ ወንድ፣ ሌላ) ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
       },
-      administrative_unit_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: "administrative_units", key: "id" }
-      },
-      password: {
+      marital_status: {
         type: DataTypes.STRING,
-        allowNull: true
-      },
-      role_id: {
-        type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: "roles", key: "id" }
+        validate: {
+          isIn: {
+            args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"]],
+            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
+      },
+      relationship_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [["የትዳር ጓደኛ", "ልጅ", "ወላጅ", "ወንድም/እህት", "ሌላ"]],
+            msg: "የግንኙነት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
       },
       is_active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: true
+        defaultValue: true,
       },
       last_login: {
         type: DataTypes.DATE,
-        allowNull: true
-      }
+        allowNull: true,
+      },
     },
     {
       tableName: "users",
       timestamps: true,
       paranoid: true,
-      freezeTableName: true,
       indexes: [
         { fields: ["email"], unique: true },
         { fields: ["phone_number"], unique: true },
         { fields: ["national_id"], unique: true },
         { fields: ["role_id"] },
-        { fields: ["administrative_unit_id"] }
+        { fields: ["administrative_unit_id"] },
       ],
       hooks: {
         beforeCreate: async (user, options) => {
@@ -106,7 +128,7 @@ module.exports = (db, DataTypes) => {
           // Validate co-owner count based on marital status
           const coOwnersCount = await db.models.CoOwner.count({
             where: { user_id: user.id },
-            transaction: options.transaction
+            transaction: options.transaction,
           });
           if (user.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
             throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
@@ -125,11 +147,14 @@ module.exports = (db, DataTypes) => {
           if (user.changed("marital_status")) {
             const coOwnersCount = await db.models.CoOwner.count({
               where: { user_id: user.id },
-              transaction: options.transaction
+              transaction: options.transaction,
             });
             if (user.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
               throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
-            } else if (user.marital_status === "ጋራ ባለቤትነት" && coOwnersCount < 1) {
+            } else if (
+              user.marital_status === "ጋራ ባለቤትነት" &&
+              coOwnersCount < 1
+            ) {
               throw new Error("ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
             } else if (user.marital_status === "ቤተሰብ" && coOwnersCount < 1) {
               throw new Error("ቤተሰብ ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
@@ -137,8 +162,8 @@ module.exports = (db, DataTypes) => {
               throw new Error("ነጠላ ተጠቃሚ የጋራ ባለቤት መኖር አዯችልም።");
             }
           }
-        }
-      }
+        },
+      },
     }
   );
 

@@ -21,7 +21,8 @@ module.exports = (db, DataTypes) => {
       },
       permissions: {
         type: DataTypes.JSON,
-        allowNull: true
+        allowNull: true,
+        defaultValue: {}
       },
       created_by: {
         type: DataTypes.INTEGER,
@@ -32,7 +33,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' }
-      },
+      }
     },
     {
       tableName: 'roles',
@@ -41,7 +42,23 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { unique: true, fields: ['name'] }
-      ]
+      ],
+      hooks: {
+        afterSync: async (options) => {
+          const defaultRole = {
+            name: 'ተጠቃሚ',
+            permissions: {
+              view_own_records: true,
+              submit_application: true
+            },
+          };
+          await db.models.Role.findOrCreate({
+            where: { name: defaultRole.name },
+            defaults: defaultRole,
+            transaction: options.transaction
+          });
+        }
+      }
     }
   );
 

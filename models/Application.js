@@ -31,10 +31,10 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false
       },
-      land_owner_id: {
+      user_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'land_owners', key: 'id' }
+        references: { model: 'users', key: 'id' }
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
@@ -123,12 +123,12 @@ module.exports = (db, DataTypes) => {
       ],
       hooks: {
         beforeCreate: async (application, options) => {
-          // Ensure administrative_unit_id matches created_by and land_owner_id
+          // Ensure administrative_unit_id matches created_by and user_id
           const user = await db.models.User.findByPk(application.created_by, {
             transaction: options.transaction
           });
           if (!user) throw new Error('ተጠቃሚ አልተገኘም።');
-          const landOwner = await db.models.LandOwner.findByPk(application.land_owner_id, {
+          const landOwner = await db.models.LandOwner.findByPk(application.user_id, {
             transaction: options.transaction
           });
           if (!landOwner) throw new Error('የመሬት ባለቤት አልተገኘም።');
