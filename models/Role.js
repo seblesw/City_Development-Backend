@@ -47,10 +47,10 @@ module.exports = (db, DataTypes) => {
         afterSync: async (options) => {
           const defaultRole = {
             name: 'ተጠቃሚ',
-            permissions: {
-              view_own_records: true,
-              submit_application: true
-            },
+            // permissions: {
+            //   view_own_records: true,
+            //   submit_application: true
+            // },
           };
           await db.models.Role.findOrCreate({
             where: { name: defaultRole.name },
