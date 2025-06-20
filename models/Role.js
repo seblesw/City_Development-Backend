@@ -10,7 +10,6 @@ module.exports = (db, DataTypes) => {
       },
       name: {
         type: DataTypes.STRING,
-        unique: true,
         allowNull: false,
         defaultValue: 'ተጠቃሚ',
       },
