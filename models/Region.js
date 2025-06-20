@@ -14,7 +14,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [2, 100],
-            msg: 'የልል ስም ከ2 እስከ 100 ቁምፊዎች መሆ�ኖር አለበት።'
+            msg: 'የክልል ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።'
           }
         }
       },
@@ -30,10 +30,11 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [1, 20],
-            msg: 'የልል ኮድ ከ1 እስከ 20 ቁምፊዎች መሆአለበት።'
+            msg: 'የክልል ኮድ ከ1 እስከ 20 ቁምፊዎች መሆን አለበት።'
           },
-          isAlphanumeric: {
-            msg: 'የልል ኮድ ፊደል እና ቁጥር ብቻ መሆን አለበት።'
+          is: {
+            args: /^[A-Za-z0-9-]+$/,
+            msg: 'የክልል ኮድ ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።'
           }
         }
       },
@@ -56,7 +57,14 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { fields: ['code'], unique: true, where: { code: { [db.Sequelize.Op.ne]: null } } },
         { fields: ['name'] }
-      ]
+      ],
+      hooks: {
+        beforeCreate: async (region) => {
+          if (!region.code) {
+            region.code = region.name.toUpperCase().replace(/\s/g, '').slice(0, 10) + '-' + Math.random().toString(36).slice(-4);
+          }
+        }
+      }
     }
   );
 

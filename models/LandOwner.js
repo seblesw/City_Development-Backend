@@ -1,4 +1,3 @@
-
 module.exports = (db, DataTypes) => {
   const LandOwner = db.define(
     'LandOwner',
@@ -21,7 +20,8 @@ module.exports = (db, DataTypes) => {
         unique: true,
         validate: {
           notEmpty: { msg: 'ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አዯችልም።' },
-          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' }
+          len: { args: [5, 50], msg: 'ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።' },
+          is: { args: /^[A-Za-z0-9-]+$/, msg: 'ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።' }
         }
       },
       marital_status: {
@@ -34,23 +34,7 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      gender: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          isIn: {
-            args: [['ሴት', 'ወንድ', 'ሌላ']],
-            msg: 'ጾታ ከተፈቀዱት እሴቶች (ሴት፣ ወንድ፣ ሌላ) ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
-      },
-      address_kebele: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አዯችልም።' }
-        }
-      },
+
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -80,7 +64,6 @@ module.exports = (db, DataTypes) => {
       ],
       hooks: {
         beforeCreate: async (landOwner, options) => {
-          // Ensure administrative_unit_id matches User's administrative_unit_id
           const user = await db.models.User.findByPk(landOwner.user_id, {
             transaction: options.transaction
           });

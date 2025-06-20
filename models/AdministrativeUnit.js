@@ -53,7 +53,7 @@ module.exports = (db, DataTypes) => {
           },
           max: {
             args: 6,
-            msg: 'የክፍል ደረጃ ከ6 በላይ መሆን አይችልም።'
+            msg: 'የክፍል ደረጃ ከ6 በላይ መሆን አዯችልም።'
           }
         }
       },
@@ -120,9 +120,13 @@ module.exports = (db, DataTypes) => {
         beforeCreate: async (unit) => {
           const region = await db.models.Region.findByPk(unit.region_id);
           if (!region) throw new Error('ትክክለኛ ክልል መግለፅ አለበት።');
+          const parent = unit.parent_id ? await db.models.AdministrativeUnit.findByPk(unit.parent_id) : null;
+          if (parent && parent.region_id !== unit.region_id) {
+            throw new Error('የወላጅ አስተዳደራዊ ክፍል ከተመሳሳይ ክልል መሆን አለበት።');
+          }
           const regionCode = region.code || '';
-          const parentCode = unit.parent_id ? (await AdministrativeUnit.findByPk(unit.parent_id))?.code : '';
-          unit.code = `${regionCode}-${parentCode}${unit.name.toUpperCase().replace(/\s/g, '')}${Date.now().toString().slice(-4)}`;
+          const parentCode = parent ? parent.code + '-' : '';
+          unit.code = `${regionCode}-${parentCode}${unit.name.toUpperCase().replace(/\s/g, '').slice(0, 10)}`;
         },
         beforeSave: async (unit) => {
           let currentId = unit.parent_id;
@@ -130,7 +134,7 @@ module.exports = (db, DataTypes) => {
           while (currentId) {
             if (visited.has(currentId)) throw new Error('የወላጅ ማጣቀሻ ክብ ዑደት ተገኝቷል።');
             visited.add(currentId);
-            const parent = await AdministrativeUnit.findByPk(currentId);
+            const parent = await db.models.AdministrativeUnit.findByPk(currentId);
             currentId = parent?.parent_id;
           }
         }

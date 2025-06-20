@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 
 const LAND_USE_TYPES = {
   RESIDENTIAL: 'መኖሪያ',
@@ -26,124 +27,57 @@ module.exports = (db, DataTypes) => {
   const LandRecord = db.define(
     'LandRecord',
     {
-      id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true,
-        allowNull: false
-      },
-      parcel_number: {
-        type: DataTypes.STRING,
-        unique: true,
-        allowNull: false
-      },
+      id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true, allowNull: false },
+      parcel_number: { type: DataTypes.STRING, unique: true, allowNull: false },
       land_level: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        validate: {
-          min: {
-            args: [1],
-            msg: 'የመሬት ደረጃ ከ1 በታች መሆን አዯችልም።'
-          }
-        }
+        validate: { min: { args: [1], msg: 'የመሬት ደረጃ ከ1 በታች መሆን አዯችልም።' } }
       },
-      administrative_unit_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'administrative_units', key: 'id' }
-      },
-      application_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        unique: true,
-        references: { model: 'applications', key: 'id' }
-      },
+      administrative_unit_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'administrative_units', key: 'id' } },
+      application_id: { type: DataTypes.INTEGER, allowNull: false, unique: true, references: { model: 'applications', key: 'id' } },
       area: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        validate: {
-          min: {
-            args: [0],
-            msg: 'ስፋት ከ0 በታች መሆን አዯችልም።'
-          }
-        }
+        validate: { min: { args: [0], msg: 'ስፋት ከ0 በታች መሆን አዯችልም።' } }
       },
       land_use: {
         type: DataTypes.STRING,
         allowNull: false,
-        validate: {
-          isIn: {
-            args: [Object.values(LAND_USE_TYPES)],
-            msg: 'የመሬት አጠቃቀም ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
+        validate: { isIn: { args: [Object.values(LAND_USE_TYPES)], msg: 'የመሬት አጠቃቀም ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።' } }
       },
       ownership_type: {
         type: DataTypes.STRING,
         allowNull: false,
-        validate: {
-          isIn: {
-            args: [Object.values(OWNERSHIP_TYPES)],
-            msg: 'የባለቤትነት አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
-      },
-      address_kebele: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: 'የኬቤሌ አድራሻ ከ100 ቁምፊዎች መብለጥ አዯችልም።' }
-        }
+        validate: { isIn: { args: [Object.values(OWNERSHIP_TYPES)], msg: 'የባለቤትነት አይነት ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።' } }
       },
       coordinates: {
         type: DataTypes.JSONB,
         allowNull: true,
         validate: {
           isValidCoordinates(value) {
-            if (!value) return; // Allow null
-            if (!(Array.isArray(value.coordinates) && value.type === 'Point')) {
-              throw new Error('መጋጠሚያዎች የGeoJSON Point መሆን አለባቸው።');
+            if (!value) return;
+            if (!['Point', 'Polygon'].includes(value.type)) throw new Error('ትክክለኛ GeoJSON መሆን አለባቸው።');
+            if (value.type === 'Point') {
+              const [lon, lat] = value.coordinates;
+              if (lon < -180 || lon > 180 || lat < -90 || lat > 90) throw new Error('ኮርድኔት የተሳሳተ ነው።');
             }
-            const [lon, lat] = value.coordinates;
-            if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-              throw new Error('መጋጠሚያዎች ትክክለኛ የሆኑ ኬንትሮስ እና ኬንትሮስ መሆን አለባቸው።');
+            if (value.type === 'Polygon' && (!Array.isArray(value.coordinates) || !value.coordinates.every(ring => Array.isArray(ring)))) {
+              throw new Error('Polygon መጋጠሚያ ትክክል አይደለም።');
             }
           }
         }
       },
-      registration_date: {
-        type: DataTypes.DATEONLY,
-        allowNull: false,
-        validate: {
-          isDate: { msg: 'ትክክለኛ የምዝገባ ቀን ያስገቡ (YYYY-MM-DD)።' }
-        }
-      },
+      registration_date: { type: DataTypes.DATEONLY, allowNull: false, validate: { isDate: { msg: 'ትክክለኛ ቀን ያስገቡ (YYYY-MM-DD)' } } },
       status: {
         type: DataTypes.STRING,
         allowNull: false,
         defaultValue: 'ረቂቅ',
-        validate: {
-          isIn: {
-            args: [['ረቂቅ', 'ተመዝግቧል', 'ጸድቋል', 'ውድቅ ተደርጓል']],
-            msg: 'የመሬት መዝገብ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።'
-          }
-        }
+        validate: { isIn: { args: [['ረቂቅ', 'ተመዝግቧል', 'ጸድቋል', 'ውድቅ ተደርጓል']], msg: 'የሁኔታ እሴት የተሳሳተ ነው።' } }
       },
-      owner_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'land_owners', key: 'id' }
-      },
-      registered_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'users', key: 'id' }
-      },
-      approved_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: 'users', key: 'id' }
-      }
+      user_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'users', key: 'id' } },
+      registered_by: { type: DataTypes.INTEGER, allowNull: false, references: { model: 'users', key: 'id' } },
+      approved_by: { type: DataTypes.INTEGER, allowNull: true, references: { model: 'users', key: 'id' } }
     },
     {
       tableName: 'land_records',
@@ -154,37 +88,60 @@ module.exports = (db, DataTypes) => {
         { unique: true, fields: ['parcel_number', 'administrative_unit_id'] },
         { fields: ['administrative_unit_id'] },
         { fields: ['land_level'] },
-        { fields: ['owner_id'] },
+        { fields: ['user_id'] },
         { fields: ['application_id'], unique: true },
         { fields: ['land_use'] },
         { fields: ['ownership_type'] }
       ],
       hooks: {
         beforeCreate: async (landRecord, options) => {
-          // Ensure administrative_unit_id matches registered_by user's unit
-          const user = await db.models.User.findByPk(landRecord.registered_by, {
-            transaction: options.transaction
-          });
+          // Validate registered_by and administrative_unit_id
+          const user = await db.models.User.findByPk(landRecord.registered_by, { transaction: options.transaction });
           if (!user) throw new Error('ተጠቃሚ አልተገኘም።');
           if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-            throw new Error('የመሬት መዝገብ አስተዳደራዊ ክፍል ከመመዝገቢው ተጠቃሚ ጋር መመሳሰል አለበት።');
+            throw new Error('የመሬት መዝገብ አስተዳደራዊ ክፍል ከመመዝገቢው ጋር መመሳሰል አለበት።');
           }
-          // Ensure owner_id matches application’s land_owner_id
-          const application = await db.models.Application.findByPk(landRecord.application_id, {
+          // Validate unique parcel_number within administrative_unit_id
+          const existing = await db.models.LandRecord.findOne({
+            where: { parcel_number: landRecord.parcel_number, administrative_unit_id: landRecord.administrative_unit_id },
             transaction: options.transaction
           });
+          if (existing) throw new Error('ይህ የመሬት ቁጥር አስቀድመው ተመዝግቧል።');
+          // Validate application_id and user_id consistency
+          const application = await db.models.Application.findByPk(landRecord.application_id, { transaction: options.transaction });
           if (!application) throw new Error('መጠየቂያ አልተገኘም።');
-          if (application.land_owner_id !== landRecord.owner_id) {
-            throw new Error('የመሬት መዝገብ ባለቤት እና የመጠየቂያ ተጠቃሚ መጣጣም አለባቸው።');
+          if (application.user_id !== landRecord.user_id) {
+            throw new Error('የመጠየቂያ ተጠቃሚ እና የመሬት መዝገብ ተጠቃሚ መመሳሰል አለባቸው።');
           }
         },
         beforeUpdate: async (landRecord, options) => {
+          const previous = await db.models.LandRecord.findByPk(landRecord.id, { transaction: options.transaction });
+          // Prevent reverting APPROVED to DRAFT
+          if (previous.status === 'ጸድቋል' && landRecord.status === 'ረቂቅ') {
+            throw new Error('የጸድቋል መዝገብ ወደ ረቂቅ መመለስ አዯችልም።');
+          }
+          // Prevent changing user_id or application_id for APPROVED records
+          if (
+            previous.status === 'ጸድቋል' &&
+            (landRecord.user_id !== previous.user_id || landRecord.application_id !== previous.application_id)
+          ) {
+            throw new Error('የጸድቋል መዝገቦች ተጠቃሚ ወይም መጠየቂያ መቀየር አዯችልም።');
+          }
+          // Validate administrative_unit_id on update
           if (landRecord.changed('administrative_unit_id')) {
-            const user = await db.models.User.findByPk(landRecord.registered_by, {
-              transaction: options.transaction
-            });
+            const user = await db.models.User.findByPk(landRecord.registered_by, { transaction: options.transaction });
             if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-              throw new Error('የመሬት መዝገብ አስተዳደራዊ ክፍል ከመመዝገቢው ተጠቃሚ ጋር መመሳሰል አለበት።');
+              throw new Error('የመሬት መዝገብ አስተዳደራዊ ክፍል ከመመዝገቢው ጋር መመሳሰል አለበት።');
+            }
+          }
+          // Sync status with Application
+          if (landRecord.changed('status')) {
+            const application = await db.models.Application.findByPk(landRecord.application_id, { transaction: options.transaction });
+            if (landRecord.status === 'ጸድቋል' && application.status !== 'ጸድቋል') {
+              throw new Error('የመሬት መዝገብ ጸድቆ መጠየቂያው ጸድቆ መሆን አለበት።');
+            }
+            if (landRecord.status === 'ውድቅ ተደርጓል' && application.status !== 'ውድቅ ተደርጓል') {
+              throw new Error('የመሬት መዝገብ ውድቅ ሲደረግ መጠየቂያው ውድቅ መሆን አለበት።');
             }
           }
         }
