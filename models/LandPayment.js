@@ -35,11 +35,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: 'applications', key: 'id' }
       },
-      land_record_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'land_records', key: 'id' }
-      },
       payment_type: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -56,7 +51,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           min: {
             args: [0],
-            msg: 'የክፍያ መጠን ከ0 በታች መሆን አዯችልም።'
+            msg: 'የክፍያ መጠን ከ0 በታች መሆን አይቻልም።'
           }
         }
       },
@@ -67,7 +62,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [['ETB', 'USD']],
-            msg: 'የገንዘብ አይነት ትክክለኛ መሆን አለበት (ETB ወዯም USD)።'
+            msg: 'የገንዘብ አይነት ትክክለኛ መሆን አለበት (ETB ወይም USD)።'
           }
         }
       },
@@ -96,12 +91,19 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATEONLY,
         allowNull: false,
         validate: {
-          isDate: { msg: 'ትክክለኛ የክፍያ ቀን ያስገቡ (YYYY-MM-DD)።' }
+          isDate: { msg: 'ትክክለኛ የክፍያ ቀን ያስገቡ (YYYY-MM-DD)።' },
+          notFutureDate(value) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (new Date(value) > today) {
+              throw new Error('የክፍያ ቀን ወደፊት መሆን አይቻልም።');
+            }
+          }
         }
       },
       payment_due_date: {
         type: DataTypes.DATEONLY,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isDate: { msg: 'ትክክለኛ የክፍያ ተጠናቀቀበት ቀን ያስገቡ (YYYY-MM-DD)።' }
         }
@@ -113,7 +115,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [0, 50],
-            msg: 'የግብይት ማጣቀሻ ከ50 ቁምፊዎች መብለጥ አዯችልም።'
+            msg: 'የግብይት ማጣቀሻ ከ50 ቁምፊዎች መብለጥ አይቻልም።'
           }
         }
       },
@@ -124,7 +126,17 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [0, 50],
-            msg: 'የውጭ ክፍያ መለያ ከ50 ቁምፊዎች መብለጥ አዯችልም።'
+            msg: 'የውጭ ክፍያ መለያ ከ50 ቁምፊዎች መብለጥ አይቻልም።'
+          }
+        }
+      },
+      description: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 500],
+            msg: 'መግለጫ ከ500 ቁምፊዎች መብለጥ አይቻልም።'
           }
         }
       },
@@ -132,7 +144,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.JSON,
         allowNull: true,
         defaultValue: []
-      },
+      }
     },
     {
       tableName: 'land_payments',
@@ -141,7 +153,6 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { fields: ['application_id'] },
-        { fields: ['land_record_id'] },
         { fields: ['payment_type'] },
         { fields: ['payment_status'] },
         { fields: ['transaction_reference'], unique: true, where: { transaction_reference: { [db.Sequelize.Op.ne]: null } } },
@@ -149,39 +160,34 @@ module.exports = (db, DataTypes) => {
       ],
       hooks: {
         beforeCreate: async (payment, options) => {
-          // Validate created_by and administrative_unit_id
-          const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
-            transaction: options.transaction
-          });
-          if (!landRecord) throw new Error('የመሬት መዝገብ አልተገኘም።');
-          const user = await db.models.User.findByPk(payment.created_by, {
-            transaction: options.transaction
-          });
-          if (!user) throw new Error('ተጠቃሚ አልተገኘም።');
-          if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-            throw new Error('የክፍያ መመዝገቢ አስተዳደራዊ ክፍል ከመሬት መዝገብ ጋር መመሳሰል አለበት።');
-          }
-          // Validate application_id and land_record_id consistency
+          // Validate application_id
           const application = await db.models.Application.findByPk(payment.application_id, {
             transaction: options.transaction
           });
           if (!application) throw new Error('መጠየቂያ አልተገኘም።');
-          if (landRecord.application_id !== payment.application_id || application.land_record_id !== payment.land_record_id) {
-            throw new Error('የክፍያ መጠየቂያ እና የመሬት መዝገብ መመሳሰል አለባቸው።');
-          }
-          // Validate payment_type for lease ownership
-          if (
-            landRecord.ownership_type === 'የሊዝ ይዞታ' &&
-            payment.payment_type !== PAYMENT_TYPES.LEASE_PAYMENT
-          ) {
-            throw new Error('የሊዝ ይዞታ ባለቤትነት የኪራይ ክፍያ ይፈልጋል።');
+          if (!['ቀርቧል', 'ጸድቋል'].includes(application.status)) {
+            throw new Error('ክፍያዎች በቀርቧል ወይም ጸድቋል ሁኔታ ላይ ብቻ ሊፈጠሩ ይችላሉ።');
           }
           // Validate payment dates
-          if (payment.payment_date > payment.payment_due_date) {
+          if (payment.payment_due_date && new Date(payment.payment_date) > new Date(payment.payment_due_date)) {
             throw new Error('የክፍያ ቀን ከክፍያ ተጠናቀቀበት ቀን በፊት መሆን አለበት።');
           }
         },
         beforeUpdate: async (payment, options) => {
+          // Validate application_id on update
+          if (payment.changed('application_id')) {
+            const application = await db.models.Application.findByPk(payment.application_id, {
+              transaction: options.transaction
+            });
+            if (!application) throw new Error('መጠየቂያ አልተገኘም።');
+          }
+          // Prevent updates if application is APPROVED and payment is COMPLETED
+          const application = await db.models.Application.findByPk(payment.application_id, {
+            transaction: options.transaction
+          });
+          if (application.status === 'ጸድቋል' && payment.payment_status === PAYMENT_STATUSES.COMPLETED) {
+            throw new Error('የጸድቋል መጠየቂያ እና ተጠናቅቋል ክፍያ መቀየር አይቻልም።');
+          }
           // Validate payment_status transitions
           const validTransitions = {
             [PAYMENT_STATUSES.PENDING]: [PAYMENT_STATUSES.COMPLETED, PAYMENT_STATUSES.FAILED, PAYMENT_STATUSES.CANCELLED],
@@ -192,41 +198,16 @@ module.exports = (db, DataTypes) => {
           if (payment.changed('payment_status')) {
             const previousStatus = payment.previous('payment_status');
             if (!validTransitions[previousStatus].includes(payment.payment_status)) {
-              throw new Error(`ከ${previousStatus} ወደ ${payment.payment_status} መሸጋገር አዯችልም።`);
+              throw new Error(`ከ${previousStatus} ወደ ${payment.payment_status} መሸጋገር አይቻልም።`);
             }
+            // Update payment_history
             payment.payment_history = [
               ...(payment.payment_history || []),
               {
                 status: payment.payment_status,
-                changed_by: payment.updated_by,
                 changed_at: new Date()
               }
             ];
-            // Sync with Application status
-            const application = await db.models.Application.findByPk(payment.application_id, {
-              transaction: options.transaction
-            });
-            if (payment.payment_status === PAYMENT_STATUSES.COMPLETED && application.status !== 'ጸድቋል') {
-              await db.models.Application.update(
-                { status: 'ጸድቋል', status_history: [...(application.status_history || []), { status: 'ጸድቋል', changed_by: payment.updated_by, changed_at: new Date() }] },
-                { where: { id: payment.application_id }, transaction: options.transaction }
-              );
-            }
-            if (payment.payment_status === PAYMENT_STATUSES.FAILED && application.status === 'ጸድቋል') {
-              throw new Error('የክፍያ ሁኔታ ወደ አልተሳካም ሲቀየር መጠየቂያው ጸድቆ መሆን አዯችልም።');
-            }
-          }
-          // Validate application_id and land_record_id on update
-          if (payment.changed('application_id') || payment.changed('land_record_id')) {
-            const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
-              transaction: options.transaction
-            });
-            const application = await db.models.Application.findByPk(payment.application_id, {
-              transaction: options.transaction
-            });
-            if (landRecord.application_id !== payment.application_id || application.land_record_id !== payment.land_record_id) {
-              throw new Error('የክፍያ መጠየቂያ እና የመሬት መዝገብ መመሳሰል አለባቸው።');
-            }
           }
         }
       }
