@@ -1,3 +1,4 @@
+// models/User.js
 const bcrypt = require("bcryptjs");
 
 module.exports = (db, DataTypes) => {
@@ -10,23 +11,31 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      full_name: {
+      first_name: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          notEmpty: { msg: "ሙሉ ስም ባዶ መሆን አዯችልም።" },
-          len: { args: [2, 100], msg: "ሙሉ ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።" },
+          notEmpty: { msg: "ስም ባዶ መሆን አይችልም።" },
+          len: { args: [2, 50], msg: "ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+        },
+      },
+      last_name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          notEmpty: { msg: "የአባት ስም ባዶ መሆን አይችልም።" },
+          len: { args: [2, 50], msg: "የአባት ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
         },
       },
       email: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: { isEmail: { msg: "ትክክለኛ ኢሜይል ያስገቡ።" } },
       },
       phone_number: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: {
           is: {
@@ -37,11 +46,11 @@ module.exports = (db, DataTypes) => {
       },
       password: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: true, // Nullable for landowners
       },
       role_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true, // Nullable for landowners
         references: { model: "roles", key: "id" },
       },
       administrative_unit_id: {
@@ -54,10 +63,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         unique: true,
         validate: {
-          notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አዯችልም።" },
+          notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አይችልም።" },
           len: {
             args: [5, 50],
-            msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለቘ።",
+            msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
           is: {
             args: /^[A-Za-z0-9-]+$/,
@@ -99,6 +108,11 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      primary_owner_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
       is_active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -114,58 +128,28 @@ module.exports = (db, DataTypes) => {
       timestamps: true,
       paranoid: true,
       indexes: [
-        { fields: ["email"], unique: true },
-        { fields: ["phone_number"], unique: true },
+        { fields: ["email"], unique: true, where: { email: { [db.Op.ne]: null } } },
+        { fields: ["phone_number"], unique: true, where: { phone_number: { [db.Op.ne]: null } } },
         { fields: ["national_id"], unique: true },
-        { fields: ["role_id"] },
+        { fields: ["role_id"], where: { role_id: { [db.Op.ne]: null } } },
         { fields: ["administrative_unit_id"] },
+        { fields: ["primary_owner_id"], where: { primary_owner_id: { [db.Op.ne]: null } } },
       ],
       hooks: {
-        beforeCreate: async (user, options) => {
+        beforeCreate: async (user) => {
           if (user.password) {
             user.password = await bcrypt.hash(user.password, 10);
           }
-          // Validate co-owner count based on marital status
-          const coOwnersCount = await db.models.CoOwner.count({
-            where: { user_id: user.id },
-            transaction: options.transaction,
-          });
-          if (user.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
-            throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
-          } else if (user.marital_status === "ጋራ ባለቤትነት" && coOwnersCount < 1) {
-            throw new Error("ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
-          } else if (user.marital_status === "ቤተሰብ" && coOwnersCount < 1) {
-            throw new Error("ቤተሰብ ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
-          } else if (user.marital_status === "ነጠላ" && coOwnersCount > 0) {
-            throw new Error("ነጠላ ተጠቃሚ የጋራ ባለቤት መኖር አዯችልም።");
-          }
         },
-        beforeUpdate: async (user, options) => {
+        beforeUpdate: async (user) => {
           if (user.changed("password") && user.password) {
             user.password = await bcrypt.hash(user.password, 10);
-          }
-          if (user.changed("marital_status")) {
-            const coOwnersCount = await db.models.CoOwner.count({
-              where: { user_id: user.id },
-              transaction: options.transaction,
-            });
-            if (user.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
-              throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
-            } else if (
-              user.marital_status === "ጋራ ባለቤትነት" &&
-              coOwnersCount < 1
-            ) {
-              throw new Error("ጋራ ባለቤትነት ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
-            } else if (user.marital_status === "ቤተሰብ" && coOwnersCount < 1) {
-              throw new Error("ቤተሰብ ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።");
-            } else if (user.marital_status === "ነጠላ" && coOwnersCount > 0) {
-              throw new Error("ነጠላ ተጠቃሚ የጋራ ባለቤት መኖር አዯችልም።");
-            }
           }
         },
       },
     }
   );
+
 
   User.prototype.validatePassword = async function (password) {
     return await bcrypt.compare(password, this.password);

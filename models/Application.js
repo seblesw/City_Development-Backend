@@ -1,3 +1,6 @@
+// models/Application.js
+const { Sequelize, DataTypes, Op } = require("sequelize");
+
 const APPLICATION_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ቀርቧል",
@@ -35,8 +38,8 @@ module.exports = (db, DataTypes) => {
         unique: true,
         allowNull: false,
         validate: {
-          notEmpty: { msg: "የመጠየቂያ ኮድ ባዶ መሆን አይቻልም።" },
-          len: { args: [7, 20], msg: "የመጠየቂያ ኮድ ከ7 እስከ 20 ቁምፊዎች መሆን አለበት።" }
+          notEmpty: { msg: "የመጠየቂያ ኮድ ባዶ መሆን አይችልም።" },
+          len: { args: [10, 20], msg: "የመጠየቂያ ኮድ ከ10 እስከ 20 ቁምፊዎች መሆን አለበት።" }
         }
       },
       user_id: {
@@ -95,7 +98,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 500], msg: "የውድቅ ምክንያት ከ500 ቁምፊዎች መብለጥ አይቻልም።" }
+          len: { args: [0, 500], msg: "የውድቅ ምክንያት ከ500 ቁምፊዎች መብለጥ አይችልም።" }
         }
       },
       submitted_at: {
@@ -140,39 +143,44 @@ module.exports = (db, DataTypes) => {
         { unique: true, fields: ["application_code"] },
         { fields: ["user_id"] },
         { fields: ["administrative_unit_id"] },
-        { fields: ["land_record_id"] },
+        { fields: ["land_record_id"], where: { land_record_id: { [Op.ne]: null } } },
         { fields: ["status"] },
         { fields: ["application_type"] },
         { fields: ["priority"] }
       ],
       hooks: {
         beforeCreate: async (application, options) => {
-          // Fetch administrative unit name for application_code
-          const adminUnit = await db.models.AdministrativeUnit.findByPk(application.administrative_unit_id, {
+          // Generate unique application_code
+          const generateCode = () => {
+            const timestamp = Date.now().toString().slice(-6);
+            const random = Math.floor(100000 + Math.random() * 900000).toString();
+            return `APP-${timestamp}-${random}`;
+          };
+          let code = generateCode();
+          let existing = await db.models.Application.findOne({
+            where: { application_code: code },
             transaction: options.transaction
           });
-          if (!adminUnit) throw new Error("አስተዳደራዊ ክፍል አልተገኘም።");
-          const prefix = adminUnit.name.slice(0, 3).toUpperCase();
-          const random = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit random number
-          application.application_code = `${prefix}000${random}`;
-          // Ensure application_code is unique
-          const existing = await db.models.Application.findOne({
-            where: { application_code: application.application_code },
-            transaction: options.transaction
-          });
-          if (existing) throw new Error("የመጠየቂያ ኮድ አስቀድመው ጥቅም ላይ ውሏል።");
+          while (existing) {
+            code = generateCode();
+            existing = await db.models.Application.findOne({
+              where: { application_code: code },
+              transaction: options.transaction
+            });
+          }
+          application.application_code = code;
+
           // Validate created_by role
           const creator = await db.models.User.findByPk(application.created_by, {
             include: [{ model: db.models.Role, as: "role" }],
             transaction: options.transaction
           });
-          if (!creator || !["መመዝገቢ", "አስተዳደር"].includes(creator.role.name)) {
+          if (!creator || !["መመዝገቢ", "አስተዳደር"].includes(creator.role?.name)) {
             throw new Error("መጠየቂያ መፍጠር የሚችሉት መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
           }
-          // Validate administrative_unit_id
-          const owner = await db.models.User.findByPk(application.user_id, {
-            transaction: options.transaction
-          });
+
+          // Validate administrative_unit_id consistency
+          const owner = await db.models.User.findByPk(application.user_id, { transaction: options.transaction });
           if (!owner) throw new Error("ተጠቃሚ አልተገኘም።");
           if (
             creator.administrative_unit_id !== owner.administrative_unit_id ||
@@ -180,6 +188,7 @@ module.exports = (db, DataTypes) => {
           ) {
             throw new Error("አስተዳደራዊ ክፍል ከመመዝገቢው እና ተጠቃሚ ጋር መመሳሰል አለበት።");
           }
+
           // Validate land_record_id
           if (application.land_record_id) {
             const landRecord = await db.models.LandRecord.findByPk(application.land_record_id, {
@@ -187,28 +196,17 @@ module.exports = (db, DataTypes) => {
             });
             if (!landRecord) throw new Error("የመሬት መዝገብ አልተገኘም።");
             if (
-              (landRecord.application_id !== null && landRecord.application_id !== application.id) ||
+              (landRecord.application_id && landRecord.application_id !== application.id) ||
               landRecord.administrative_unit_id !== application.administrative_unit_id ||
               landRecord.user_id !== application.user_id
             ) {
               throw new Error("የመሬት መዝገብ ከመጠየቂያ፣ ተጠቃሚ እና አስተዳደራዊ ክፍል ጋር መመሳሰል አለበት።");
             }
           }
-          // Validate co-owners
-          const coOwnersCount = await db.models.User.count({
-            where: { primary_owner_id: application.user_id },
-            transaction: options.transaction
-          });
-          if (owner.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
-            throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
-          } else if (["ቤተሰብ", "የጋራ ባለቤትነት"].includes(owner.marital_status) && coOwnersCount < 1) {
-            throw new Error(`${owner.marital_status} ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።`);
-          } else if (owner.marital_status === "ነጠላ" && coOwnersCount > 0) {
-            throw new Error("ነጠላ ተጠቃሚ የጋራ ባለቤት መኖር አይቻልም።");
-          }
+
           // Initialize status_history
           application.status_history = [
-            { status: APPLICATION_STATUSES.DRAFT, changed_by: application.created_by, changed_at: new Date() }
+            { status: application.status, changed_by: application.created_by, changed_at: new Date() }
           ];
         },
         beforeUpdate: async (application, options) => {
@@ -217,26 +215,30 @@ module.exports = (db, DataTypes) => {
             [APPLICATION_STATUSES.DRAFT]: [APPLICATION_STATUSES.SUBMITTED],
             [APPLICATION_STATUSES.SUBMITTED]: [APPLICATION_STATUSES.UNDER_REVIEW],
             [APPLICATION_STATUSES.UNDER_REVIEW]: [APPLICATION_STATUSES.APPROVED, APPLICATION_STATUSES.REJECTED],
-            [APPLICATION_STATUSES.APPROVED]: [],
-            [APPLICATION_STATUSES.REJECTED]: []
+            [APPLICATION_STATUSES.REJECTED]: [APPLICATION_STATUSES.SUBMITTED],
+            [APPLICATION_STATUSES.APPROVED]: []
           };
           if (application.changed("status")) {
             const previousStatus = application.previous("status");
-            if (!validTransitions[previousStatus].includes(application.status)) {
-              throw new Error(`ከ${previousStatus} ወደ ${application.status} መሸጋገር አይቻልም።`);
+            if (!validTransitions[previousStatus]?.includes(application.status)) {
+              throw new Error(`ከ${previousStatus} ወደ ${application.status} መሸጋገር አይችልም።`);
             }
+
             // Validate updated_by role
             const updater = await db.models.User.findByPk(application.updated_by, {
               include: [{ model: db.models.Role, as: "role" }],
               transaction: options.transaction
             });
-            if (!updater || !["መመዝገቢ", "አስተዳደር"].includes(updater.role.name)) {
+            if (!updater || !["መመዝገቢ", "አስተዳደር"].includes(updater.role?.name)) {
               throw new Error("መጠየቂያ መቀየር የሚችሉት መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
             }
+
+            // Update status_history
             application.status_history = [
               ...(application.status_history || []),
               { status: application.status, changed_by: application.updated_by, changed_at: new Date() }
             ];
+
             // Update timestamps and approved_by
             if (application.status === APPLICATION_STATUSES.SUBMITTED) {
               application.submitted_at = new Date();
@@ -252,36 +254,30 @@ module.exports = (db, DataTypes) => {
               }
             }
           }
+
           // Ensure land_record_id for SUBMITTED status
-          if (application.status === APPLICATION_STATUSES.SUBMITTED && !application.land_record_id) {
+          if (
+            application.status === APPLICATION_STATUSES.SUBMITTED &&
+            !application.land_record_id &&
+            !application.changed("land_record_id")
+          ) {
             throw new Error("ቀርቧል ሁኔታ የመሬት መዝገብ መለያ ይፈልጋል።");
           }
-          // Validate co-owners and administrative_unit_id on user_id or administrative_unit_id change
+
+          // Validate user_id or administrative_unit_id changes
           if (application.changed("user_id") || application.changed("administrative_unit_id")) {
             const owner = await db.models.User.findByPk(application.user_id, { transaction: options.transaction });
-            const adminUnit = await db.models.AdministrativeUnit.findByPk(application.administrative_unit_id, {
-              transaction: options.transaction
-            });
-            if (!owner || !adminUnit) throw new Error("ተጠቃሚ ወይም አስተዳደራዊ ክፍል አልተገኘም።");
+            if (!owner) throw new Error("ተጠቃሚ አልተገኘም።");
             if (owner.administrative_unit_id !== application.administrative_unit_id) {
               throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
-            }
-            const coOwnersCount = await db.models.User.count({
-              where: { primary_owner_id: application.user_id },
-              transaction: options.transaction
-            });
-            if (owner.marital_status === "ባለትዳር" && coOwnersCount !== 1) {
-              throw new Error("ባለትዳር ተጠቃሚ በትክክል አንድ የጋራ ባለቤት መኖር አለበት።");
-            } else if (["ቤተሰብ", "የጋራ ባለቤትነት"].includes(owner.marital_status) && coOwnersCount < 1) {
-              throw new Error(`${owner.marital_status} ተጠቃሚ ቢያንስ አንድ የጋራ ባለቤት መኖር አለበት።`);
-            } else if (owner.marital_status === "ነጠላ" && coOwnersCount > 0) {
-              throw new Error("ነጠላ ተጠቃሚ የጋራ ባለቤት መኖር አይቻልም።");
             }
           }
         }
       }
     }
   );
+
+
 
   return Application;
 };
