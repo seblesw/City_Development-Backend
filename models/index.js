@@ -1,4 +1,4 @@
-const { Sequelize, DataTypes } = require("sequelize");
+const { Sequelize,DataTypes } = require("sequelize");
 const db = require("../config/database");
 
 // Load models in dependency order
@@ -23,80 +23,67 @@ const models = {
   Document
 };
 
-// Define associations
+// Define Associations
 
 // Role associations
-models.Role.hasMany(models.User, { foreignKey: "role_id", as: "users" });
-models.Role.belongsTo(models.User, { foreignKey: "created_by", as: "roleCreator" });
-models.Role.belongsTo(models.User, { foreignKey: "updated_by", as: "roleUpdater" });
+Role.hasMany(User, { foreignKey: "role_id", as: "users" });
+Role.belongsTo(User, { foreignKey: "created_by", as: "creator" }); 
+Role.belongsTo(User, { foreignKey: "updated_by", as: "updater" }); 
 
 // User associations
-models.User.belongsTo(models.Role, { foreignKey: "role_id", as: "role" });
-models.User.belongsTo(models.AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
-models.User.belongsTo(models.User, { foreignKey: "primary_owner_id", as: "primaryOwner" });
-models.User.hasMany(models.User, { foreignKey: "primary_owner_id", as: "coOwners" });
-models.User.hasMany(models.Role, { foreignKey: "created_by", as: "createdRoles" });
-models.User.hasMany(models.Role, { foreignKey: "updated_by", as: "updatedRoles" });
-models.User.hasMany(models.Region, { foreignKey: "created_by", as: "createdRegions" });
-models.User.hasMany(models.Region, { foreignKey: "updated_by", as: "updatedRegions" });
-models.User.hasMany(models.AdministrativeUnit, { foreignKey: "created_by", as: "createdUnits" });
-models.User.hasMany(models.AdministrativeUnit, { foreignKey: "updated_by", as: "updatedUnits" });
-models.User.hasMany(models.LandRecord, { foreignKey: "user_id", as: "ownedLandRecords" });
-models.User.hasMany(models.LandRecord, { foreignKey: "registered_by", as: "registeredLandRecords" });
-models.User.hasMany(models.LandRecord, { foreignKey: "approved_by", as: "approvedLandRecords" });
-models.User.hasMany(models.Application, { foreignKey: "user_id", as: "ownedApplications" });
-models.User.hasMany(models.Application, { foreignKey: "created_by", as: "createdApplications" });
-models.User.hasMany(models.Application, { foreignKey: "updated_by", as: "updatedApplications" });
-models.User.hasMany(models.LandPayment, { foreignKey: "created_by", as: "createdPayments" });
-models.User.hasMany(models.LandPayment, { foreignKey: "updated_by", as: "updatedPayments" });
-models.User.hasMany(models.Document, { foreignKey: "created_by", as: "createdDocuments" });
-models.User.hasMany(models.Document, { foreignKey: "updated_by", as: "updatedDocuments" });
+User.belongsTo(Role, { foreignKey: "role_id", as: "role" });
+User.belongsTo(AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
+User.belongsTo(User, { foreignKey: "primary_owner_id", as: "primaryOwner" });
+User.hasMany(User, { foreignKey: "primary_owner_id", as: "coOwners" });
+User.hasMany(Application, { foreignKey: "user_id", as: "ownedApplications" });
+User.hasMany(Application, { foreignKey: "created_by", as: "createdApplications" });
+User.hasMany(Application, { foreignKey: "updated_by", as: "updatedApplications" });
+User.hasMany(Application, { foreignKey: "approved_by", as: "approvedApplications" });
+User.hasMany(Application, { foreignKey: "deleted_by", as: "deletedApplications" });
+User.hasMany(LandRecord, { foreignKey: "user_id", as: "ownedLandRecords" });
+User.hasMany(LandPayment, { foreignKey: "created_by", as: "createdPayments" });
+User.hasMany(LandPayment, { foreignKey: "updated_by", as: "updatedPayments" }); 
 
 // Region associations
-models.Region.hasMany(models.AdministrativeUnit, { foreignKey: "region_id", as: "administrativeUnits" });
-models.Region.belongsTo(models.User, { foreignKey: "created_by", as: "regionCreator" });
-models.Region.belongsTo(models.User, { foreignKey: "updated_by", as: "regionUpdater" });
+Region.hasMany(AdministrativeUnit, { foreignKey: "region_id", as: "administrativeUnits" });
+Region.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+Region.belongsTo(User, { foreignKey: "updated_by", as: "updater" }); 
 
 // AdministrativeUnit associations
-models.AdministrativeUnit.belongsTo(models.Region, { foreignKey: "region_id", as: "region" });
-models.AdministrativeUnit.belongsTo(models.AdministrativeUnit, { foreignKey: "parent_id", as: "parent" });
-models.AdministrativeUnit.hasMany(models.AdministrativeUnit, { foreignKey: "parent_id", as: "children" });
-models.AdministrativeUnit.hasMany(models.User, { foreignKey: "administrative_unit_id", as: "users" });
-models.AdministrativeUnit.hasMany(models.Application, { foreignKey: "administrative_unit_id", as: "applications" });
-models.AdministrativeUnit.hasMany(models.LandRecord, { foreignKey: "administrative_unit_id", as: "landRecords" });
-models.AdministrativeUnit.belongsTo(models.User, { foreignKey: "created_by", as: "unitCreator" });
-models.AdministrativeUnit.belongsTo(models.User, { foreignKey: "updated_by", as: "unitUpdater" });
+AdministrativeUnit.belongsTo(Region, { foreignKey: "region_id", as: "region" });
+AdministrativeUnit.belongsTo(AdministrativeUnit, { foreignKey: "parent_id", as: "parent" });
+AdministrativeUnit.hasMany(AdministrativeUnit, { foreignKey: "parent_id", as: "children" });
+AdministrativeUnit.hasMany(User, { foreignKey: "administrative_unit_id", as: "users" });
+AdministrativeUnit.hasMany(Application, { foreignKey: "administrative_unit_id", as: "applications" });
+AdministrativeUnit.hasMany(LandRecord, { foreignKey: "administrative_unit_id", as: "landRecords" });
+AdministrativeUnit.belongsTo(User, { foreignKey: "created_by", as: "creator" }); 
+AdministrativeUnit.belongsTo(User, { foreignKey: "updated_by", as: "updater" }); 
 
 // LandRecord associations
-models.LandRecord.belongsTo(models.User, { foreignKey: "user_id", as: "owner" });
-models.LandRecord.belongsTo(models.AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
-models.LandRecord.belongsTo(models.Application, { foreignKey: "application_id", as: "application" });
-models.LandRecord.belongsTo(models.User, { foreignKey: "registered_by", as: "registrar" });
-models.LandRecord.belongsTo(models.User, { foreignKey: "approved_by", as: "approver" });
-models.LandRecord.hasMany(models.Document, { foreignKey: "land_record_id", as: "documents" });
-models.LandRecord.hasMany(models.LandPayment, { foreignKey: "land_record_id", as: "payments" });
-models.LandRecord.hasOne(models.Application, { foreignKey: "land_record_id", as: "relatedApplication" });
+LandRecord.belongsTo(User, { foreignKey: "user_id", as: "owner" });
+LandRecord.belongsTo(AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
+LandRecord.belongsTo(Application, { foreignKey: "application_id", as: "application" });
+LandRecord.hasOne(Application, { foreignKey: "land_record_id", as: "relatedApplication" });
 
 // Application associations
-models.Application.belongsTo(models.User, { foreignKey: "user_id", as: "owner" });
-models.Application.belongsTo(models.AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
-models.Application.belongsTo(models.LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
-models.Application.hasMany(models.Document, { foreignKey: "application_id", as: "documents" });
-models.Application.hasMany(models.LandPayment, { foreignKey: "application_id", as: "payments" });
-models.Application.belongsTo(models.User, { foreignKey: "created_by", as: "applicationCreator" });
-models.Application.belongsTo(models.User, { foreignKey: "updated_by", as: "applicationUpdater" });
+Application.belongsTo(User, { foreignKey: "user_id", as: "owner" });
+Application.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+Application.belongsTo(User, { foreignKey: "updated_by", as: "updater" });
+Application.belongsTo(User, { foreignKey: "approved_by", as: "approver" });
+Application.belongsTo(User, { foreignKey: "deleted_by", as: "deleter" });
+Application.belongsTo(AdministrativeUnit, { foreignKey: "administrative_unit_id", as: "administrativeUnit" });
+Application.belongsTo(LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
+Application.hasMany(Document, { foreignKey: "application_id", as: "documents" });
+Application.hasMany(LandPayment, { foreignKey: "application_id", as: "payments" });
 
 // LandPayment associations
-models.LandPayment.belongsTo(models.LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
-models.LandPayment.belongsTo(models.Application, { foreignKey: "application_id", as: "application" });
-models.LandPayment.belongsTo(models.User, { foreignKey: "created_by", as: "paymentCreator" });
-models.LandPayment.belongsTo(models.User, { foreignKey: "updated_by", as: "paymentUpdater" });
+LandPayment.belongsTo(LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
+LandPayment.belongsTo(Application, { foreignKey: "application_id", as: "application" });
+LandPayment.belongsTo(User, { foreignKey: "created_by", as: "creator" }); 
+LandPayment.belongsTo(User, { foreignKey: "updated_by", as: "updater" }); 
 
 // Document associations
-models.Document.belongsTo(models.LandRecord, { foreignKey: "land_record_id", as: "landRecord" });
-models.Document.belongsTo(models.Application, { foreignKey: "application_id", as: "application" });
-models.Document.belongsTo(models.User, { foreignKey: "created_by", as: "documentCreator" });
-models.Document.belongsTo(models.User, { foreignKey: "updated_by", as: "documentUpdater" });
+Document.belongsTo(Application, { foreignKey: "application_id", as: "application" });
 
 // Export Sequelize instance and models
 module.exports = {

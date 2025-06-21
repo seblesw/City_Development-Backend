@@ -133,16 +133,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         defaultValue: []
       },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'users', key: 'id' }
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: 'users', key: 'id' }
-      }
     },
     {
       tableName: 'land_payments',

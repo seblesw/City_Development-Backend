@@ -1,4 +1,3 @@
-
 const DOCUMENT_TYPES = {
   OWNERSHIP_CERTIFICATE: 'የባለቤትነት ሰርተፍኬት',
   LEASE_AGREEMENT: 'የኪራይ ስምምነት',
@@ -22,11 +21,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: 'applications', key: 'id' }
       },
-      land_record_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'land_records', key: 'id' }
-      },
       document_type: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -40,9 +34,10 @@ module.exports = (db, DataTypes) => {
       file_path: {
         type: DataTypes.STRING,
         allowNull: false,
+        unique: true,
         validate: {
-          notEmpty: { msg: 'የሰነድ ፋይል መንገድ ባዶ መሆን አዯችልም።' },
-          len: { args: [1, 255], msg: 'የፋይል መንገድ ከ255 ቁምፊዎች መብለጥ አዯችልም።' },
+          notEmpty: { msg: 'የሰነድ ፋይል መንገድ ባዶ መሆን አይቻልም።' },
+          len: { args: [1, 255], msg: 'የፋይል መንገድ ከ255 ቁምፊዎች መብለጥ አይቻልም።' },
           is: {
             args: /\.(pdf|jpg|jpeg|png)$/i,
             msg: 'የፋይል ቅጥያ ትክክለኛ መሆን አለበት (pdf, jpg, jpeg, png)።'
@@ -53,18 +48,8 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 500], msg: 'መግለጫ ከ500 ቁምፊዎች መብለጥ አዯችልም።' }
+          len: { args: [0, 500], msg: 'መግለጫ ከ500 ቁምፊዎች መብለጥ አይቻልም።' }
         }
-      },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: 'users', key: 'id' }
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: 'users', key: 'id' }
       }
     },
     {
@@ -74,33 +59,27 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { fields: ['application_id'] },
-        { fields: ['land_record_id'] },
-        { fields: ['document_type'] }
+        { fields: ['document_type'] },
+        { unique: true, fields: ['file_path'] }
       ],
       hooks: {
         beforeCreate: async (document, options) => {
-          // Ensure created_by user's administrative_unit_id matches land_record's
-          const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
+          // Validate application_id
+          const application = await db.models.Application.findByPk(document.application_id, {
             transaction: options.transaction
           });
-          if (!landRecord) throw new Error('የመሬት መዝገብ አልተገኘም።');
-          const user = await db.models.User.findByPk(document.created_by, {
+          if (!application) throw new Error('መጠየቂያ አልተገኘም።');
+          if (!['ረቂቅ', 'ቀርቧል'].includes(application.status)) {
+            throw new Error('ሰነዶች በረቂቅ ወይም ቀርቧል ሁኔታ ላይ ብቻ ሊፈጠሩ ይችላሉ።');
+          }
+        },
+        beforeUpdate: async (document, options) => {
+          // Prevent updates if application is APPROVED
+          const application = await db.models.Application.findByPk(document.application_id, {
             transaction: options.transaction
           });
-          if (!user) throw new Error('ተጠቃሚ አልተገኘም።');
-          if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-            throw new Error('የሰነድ መመዝገቢው አስተዳደራዊ ክፍል ከመሬት መዝገብ ጋር መመሳሰል አለበት።');
-          }
-          // Ensure application_id matches land_record's application_id
-          if (landRecord.application_id !== document.application_id) {
-            throw new Error('የሰነድ መጠየቂያ ከመሬት መዝገብ መጠየቂያ ጋር መመሳሰል አለበት።');
-          }
-          // Validate document_type based on land_record's ownership_type
-          if (
-            landRecord.ownership_type === 'የፍርድ ቤት ትእዛዝ' &&
-            document.document_type !== DOCUMENT_TYPES.COURT_ORDER
-          ) {
-            throw new Error('የፍርድ ቤት ትእዛዝ ባለቤትነት የፍርድ ቤት ትእዛዝ ሰነድ ይፈልጋል።');
+          if (application.status === 'ጸድቋል') {
+            throw new Error('የጸድቋል መጠየቂያ ጋር የተገናኘ ሰነድ መቀየር አይቻልም።');
           }
         }
       }
