@@ -1,4 +1,3 @@
-// models/AdministrativeUnit.js
 const { Op } = require("sequelize");
 
 module.exports = (db, DataTypes) => {
@@ -9,91 +8,86 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
-        allowNull: false
+        allowNull: false,
       },
       region_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: "regions", key: "id" }
+        references: { model: "regions", key: "id" },
+      },
+      zone_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "zones", key: "id" },
+      },
+      woreda_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "woredas", key: "id" },
+      },
+      oversight_office_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "oversight_offices", key: "id" },
       },
       name: {
         type: DataTypes.STRING,
         allowNull: false,
-        validate: {
-          len: {
-            args: [2, 100],
-            msg: "የአስተዳደር ክፍል ስም ከ2 እስከ 100 ቁምፊዎች መሆን አለበት።"
-          }
-        }
+        validate: { len: [2, 100] },
       },
       name_translations: {
         type: DataTypes.JSON,
         allowNull: true,
-        defaultValue: {}
-      },
-      is_jurisdiction: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false
+        defaultValue: {},
       },
       type: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
         validate: {
-          isIn: {
-            args: [["ሪጂኦፖሊታን", "መካከለኛ ከተማ", "አነስተኛ ከተማ", "መሪ ማዘጋጃ ከተማ", "ንዑስ ማዘጋጃ ከተማ", "ታዳጊ ከተማ", "ሪጂዮን", "ዞን", "ወረዳ"]],
-            msg: "የአስተዳደር ክፍል አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።"
-          }
-        }
+          isIn: [["ሪጂኦፖሊታን", "መካከለኛ ከተማ", "አነስተኛ ከተማ", "መሪ ማዘጋጃ ከተማ", "ንዑስ ማዘጋጃ ከተማ", "ታዳጊ ከተማ"]],
+        },
       },
       unit_level: {
         type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-          min: {
-            args: 1,
-            msg: "የክፍል ደረጃ ከ1 በታች መሆን አይችልም።"
-          },
-          max: {
-            args: 6,
-            msg: "የክፍል ደረጃ ከ6 በላይ መሆን አይችልም።"
-          }
-        }
+        allowNull: false,
+        validate: { min: 1, max: 6 },
+        set(value) {
+          const typeLevels = {
+            "ሪጂኦፖሊታን": 1,
+            "መካከለኛ ከተማ": 2,
+            "አነስተኛ ከተማ": 3,
+            "መሪ ማዘጋጃ ከተማ": 4,
+            "ንዑስ ማዘጋጃ ከተማ": 5,
+            "ታዳጊ ከተማ": 6,
+          };
+          this.setDataValue("unit_level", typeLevels[this.type] || value);
+        },
       },
-      parent_id: {
+      max_land_levels: {
         type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "administrative_units", key: "id" }
+        allowNull: false,
+        validate: { min: 1 },
+        set(value) {
+          const levelMap = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
+          this.setDataValue("max_land_levels", levelMap[this.unit_level] || value);
+        },
       },
       code: {
         type: DataTypes.STRING,
         unique: true,
         allowNull: false,
-        validate: {
-          len: {
-            args: [1, 50],
-            msg: "የክፍል ኮድ ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።"
-          }
-        }
+        validate: { len: [1, 50] },
       },
-      max_land_levels: {
+      created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        validate: {
-          min: {
-            args: 1,
-            msg: "ከፍተኛ የመሬት ደረጃዎች ከ1 በታች መሆን አይችልም።"
-          }
-        },
-        set(value) {
-          if (!this.is_jurisdiction && !value && this.unit_level) {
-            const levels = { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3, 6: 2 };
-            this.setDataValue("max_land_levels", levels[this.unit_level] || null);
-          } else {
-            this.setDataValue("max_land_levels", value);
-          }
-        }
-      }
+        references: { model: "users", key: "id" },
+      },
+      updated_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
     },
     {
       tableName: "administrative_units",
@@ -101,79 +95,45 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { unique: true, fields: ["code"] },
-        { unique: true, fields: ["name", "parent_id"], where: { parent_id: { [Op.ne]: null } } },
+        { unique: true, fields: ["code"], where: { deleted_at: { [Op.eq]: null } } },
+        { unique: true, fields: ["name", "region_id", "oversight_office_id"], where: { deleted_at: { [Op.eq]: null } } },
         { fields: ["region_id"] },
-        { fields: ["parent_id"], where: { parent_id: { [Op.ne]: null } } },
-        { fields: ["unit_level"] },
-        { fields: ["is_jurisdiction"] },
-        { fields: ["type"] }
+        { fields: ["zone_id"], where: { zone_id: { [Op.ne]: null } } },
+        { fields: ["woreda_id"], where: { woreda_id: { [Op.ne]: null } } },
+        { fields: ["oversight_office_id"], where: { oversight_office_id: { [Op.ne]: null } } },
       ],
       hooks: {
         beforeCreate: async (unit, options) => {
-          // Generate unique code
           const region = await db.models.Region.findByPk(unit.region_id, { transaction: options.transaction });
-          if (!region) throw new Error("ትክክለኛ ክልል መግለፅ አለበት።");
-          const timestamp = Date.now().toString().slice(-6);
-          const random = Math.floor(1000 + Math.random() * 9000).toString();
-          unit.code = `${region.code || "REG"}-${timestamp}-${random}`;
-
-          // Ensure code uniqueness
+          if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
+          const zone = unit.zone_id ? await db.models.Zone.findByPk(unit.zone_id, { transaction: options.transaction }) : null;
+          const woreda = unit.woreda_id ? await db.models.Woreda.findByPk(unit.woreda_id, { transaction: options.transaction }) : null;
+          const oversight = unit.oversight_office_id ? await db.models.OversightOffice.findByPk(unit.oversight_office_id, { transaction: options.transaction }) : null;
+          if (unit.oversight_office_id && (!oversight || oversight.region_id !== unit.region_id)) throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
+          const count = await db.models.AdministrativeUnit.count({ transaction: options.transaction });
+          unit.code = `${region.code}-${zone?.code.split("-")[1] || "NZ"}-${woreda?.code.split("-")[2] || "NW"}-AU${count + 1}`;
           const existing = await db.models.AdministrativeUnit.findOne({
             where: { code: unit.code },
-            transaction: options.transaction
+            transaction: options.transaction,
           });
-          if (existing) throw new Error("የክፍል ኮድ አስቀድመው ጥቅም ላይ ውሏል።");
-
-          // Validate parent_id
-          const parent = unit.parent_id ? await db.models.AdministrativeUnit.findByPk(unit.parent_id, { transaction: options.transaction }) : null;
-          if (parent && parent.region_id !== unit.region_id) {
-            throw new Error("የወላጅ አስተዳደራዊ ክፍል ከተመሳሳይ ክልል መሆን አለበት።");
-          }
+          if (existing) throw new Error("የክፍል ኮድ ተይዟል።");
         },
         beforeUpdate: async (unit, options) => {
-          // Validate circular references
-          let currentId = unit.parent_id;
-          const visited = new Set();
-          while (currentId) {
-            if (visited.has(currentId)) throw new Error("የወላጅ ማጣቀሻ ክብ ዑደት ተገኝቷል።");
-            visited.add(currentId);
-            const parent = await db.models.AdministrativeUnit.findByPk(currentId, { transaction: options.transaction });
-            currentId = parent?.parent_id;
-          }
-          // Validate code uniqueness on update
           if (unit.changed("code")) {
             const existing = await db.models.AdministrativeUnit.findOne({
               where: { code: unit.code, id: { [Op.ne]: unit.id } },
-              transaction: options.transaction
+              transaction: options.transaction,
             });
-            if (existing) throw new Error("የክፍል ኮድ አስቀድመው ጥቅም ላይ ውሏል።");
+            if (existing) throw new Error("የክፍል ኮድ ተይዟል።");
           }
-        }
-      },
-      validate: {
-        validAttributes() {
-          if (this.is_jurisdiction) {
-            if (this.type || this.unit_level || this.max_land_levels) {
-              throw new Error("ዳይሬክቶሬቶች አይነት፣ ደረጃ ወይም ከፍተኛ የመሬት ደረጃ ሊኖራቸው አይችልም።");
-            }
-          } else {
-            if (!this.type || !this.unit_level || !this.max_land_levels) {
-              throw new Error("ማዘጋጃ ቤቶች አይነት፣ ደረጃ እና ከፍተኛ የመሬት ደረጃ መግለፅ አለባቸው።");
-            }
+          if (unit.changed("oversight_office_id")) {
+            const oversight = unit.oversight_office_id ? await db.models.OversightOffice.findByPk(unit.oversight_office_id, { transaction: options.transaction }) : null;
+            if (unit.oversight_office_id && (!oversight || oversight.region_id !== unit.region_id)) throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
           }
         },
-        async validRegion() {
-          const region = await db.models.Region.findByPk(this.region_id);
-          if (!region) {
-            throw new Error("ትክክለኛ ክልል መግለፅ አለበት።");
-          }
-        }
-      }
+      },
     }
   );
-
-
 
   return AdministrativeUnit;
 };

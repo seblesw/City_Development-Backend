@@ -11,6 +11,8 @@ const LandRecord = require("./LandRecord")(db, DataTypes);
 const Application = require("./Application")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
+const Zone =require("./Zone")(db, DataTypes);
+const Woreda = require("./Woreda")(db, DataTypes);
 
 // Define models
 const models = {
@@ -21,7 +23,9 @@ const models = {
   LandRecord,
   Application,
   LandPayment,
-  Document
+  Document,
+  Zone,
+  Woreda,
 };
 
 // Define Associations
