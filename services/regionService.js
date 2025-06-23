@@ -1,97 +1,69 @@
-const {Region}  = require('../models');
-
-exports.createRegionService = async (data) => {
-  const { name, code } = data;
-  if (!Region) {
-    throw new Error('Region model is not defined');
-  }
+const { Op } = require("sequelize");
+const { Region, Zone, Woreda } = require("../models");
+exports.createRegionService = async (data, userId, transaction) => {
+  const { name } = data;
   try {
-    const existingRegion = await Region.findOne({ where: { name } });
-    if (existingRegion) {
-      throw new Error('Region with this name already exists');
-    }
-    if (code) {
-      const existingCode = await Region.findOne({ where: { code } });
-      if (existingCode) {
-        throw new Error('Region code must be unique');
-      }
-    }
-    const region = await Region.create({ name, code });
-    return region;
+    const existingRegion = await Region.findOne({ where: { name, deleted_at: { [Op.eq]: null } }, transaction });
+    if (existingRegion) throw new Error("ይህ ስም ያለው ክልል ተመዝግቧል።");
+    return await Region.create({ name, created_by: userId }, { transaction });
   } catch (error) {
-    throw new Error(`Failed to create region: ${error.message}`);
+    throw new Error(error.message || "ክልል መፍጠር አልተሳካም።");
   }
 };
 
 exports.getAllRegionsService = async () => {
-  if (!Region) {
-    throw new Error('Region model is not defined');
-  }
   try {
-    const regions = await Region.findAll();
-    return regions;
+    return await Region.findAll({
+      where: { deleted_at: { [Op.eq]: null } },
+      include: [
+        { model: Zone, as: "zones", where: { deleted_at: { [Op.eq]: null } }, required: false, include: [
+          { model: Woreda, as: "woredas", where: { deleted_at: { [Op.eq]: null } }, required: false }
+        ] }
+      ]
+    });
   } catch (error) {
-    throw new Error(`Failed to fetch regions: ${error.message}`);
+    throw new Error(error.message || "ክልሎችን ማግኘት አልተሳካም።");
   }
 };
 
 exports.getRegionByIdService = async (id) => {
-  if (!Region) {
-    throw new Error('Region model is not defined');
-  }
   try {
-    const region = await Region.findByPk(id);
-    if (!region) {
-      throw new Error('Region not found');
-    }
+    const region = await Region.findByPk(id, {
+      include: [
+        { model: Zone, as: "zones", where: { deleted_at: { [Op.eq]: null } }, required: false, include: [
+          { model: Woreda, as: "woredas", where: { deleted_at: { [Op.eq]: null } }, required: false }
+        ] }
+      ]
+    });
+    if (!region) throw new Error("ክልል አልተገኘም።");
     return region;
   } catch (error) {
-    throw new Error(`Failed to fetch region: ${error.message}`);
+    throw new Error(error.message || "ክልል ማግኘት አልተሳካም።");
   }
 };
 
-exports.updateRegionService = async (id, data) => {
-  const { name, code } = data;
-  if (!Region) {
-    throw new Error('Region model is not defined');
-  }
+exports.updateRegionService = async (id, data, userId, transaction) => {
+  const { name } = data;
   try {
-    const region = await Region.findByPk(id);
-    if (!region) {
-      throw new Error('Region not found');
-    }
+    const region = await Region.findByPk(id, { transaction });
+    if (!region) throw new Error("ክልል አልተገኘም።");
     if (name && name !== region.name) {
-      const existingRegion = await Region.findOne({ where: { name } });
-      if (existingRegion) {
-        throw new Error('Region with this name already exists');
-      }
+      const existingRegion = await Region.findOne({ where: { name, deleted_at: { [Op.eq]: null } }, transaction });
+      if (existingRegion) throw new Error("ይህ ስም ያለው ክልል ተመዝግቧል።");
     }
-    if (code && code !== region.code) {
-      const existingCode = await Region.findOne({ where: { code } });
-      if (existingCode) {
-        throw new Error('Region code must be unique');
-      }
-    }
-    await region.update({ name, code });
+    await region.update({ name, updated_by: userId }, { transaction });
     return region;
   } catch (error) {
-    throw new Error(`Failed to update region: ${error.message}`);
+    throw new Error(error.message || "ክልል ማዘመን አልተሳካም።");
   }
 };
 
-exports.deleteRegionService = async (id) => {
-  if (!Region) {
-    throw new Error('Region model is not defined');
-  }
+exports.deleteRegionService = async (id, userId, transaction) => {
   try {
-    const region = await Region.findByPk(id);
-    if (!region) {
-      throw new Error('Region not found');
-    }
-    await region.destroy();
-    return { message: 'Region deleted successfully' };
+    const region = await Region.findByPk(id, { transaction });
+    if (!region) throw new Error("ክልል አልተገኘም።");
+    await region.destroy({ transaction });
   } catch (error) {
-    throw new Error(`Failed to delete region: ${error.message}`);
+    throw new Error(error.message || "ክልል መሰረዝ አልተሳካም።");
   }
 };
-
