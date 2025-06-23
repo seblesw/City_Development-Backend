@@ -8,31 +8,38 @@ const {
 
 exports.createAdministrativeUnit = async (req, res) => {
   try {
-    const unit = await createAdministrativeUnitService(req.body);
-    return res.status(201).json({
+    const { name, region_id, zone_id, woreda_id, oversight_office_id, type, name_translations } = req.body;
+    const userId = req.user.id;
+    const unit = await createAdministrativeUnitService(
+      { name, region_id, zone_id, woreda_id, oversight_office_id, type, name_translations },
+      userId
+    );
+    res.status(201).json({
       status: 'success',
-      message: 'Administrative unit created successfully',
       data: unit,
     });
   } catch (error) {
-    return res.status(400).json({
+    res.status(400).json({
       status: 'error',
-      message: error.message,
+      message: error.message || 'አስተዳደራዊ ክፍል መፍጠር አልተሳካም።',
     });
   }
 };
 
 exports.getAllAdministrativeUnits = async (req, res) => {
   try {
-    const units = await getAllAdministrativeUnitsService();
-    return res.status(200).json({
+    const { regionId, oversightOfficeId } = req.query;
+    const units = await getAllAdministrativeUnitsService(regionId, oversightOfficeId);
+    const numberOfUnits = units.length;
+    res.status(200).json({
       status: 'success',
+      numberOfUnits,
       data: units,
     });
   } catch (error) {
-    return res.status(500).json({
+    res.status(400).json({
       status: 'error',
-      message: error.message,
+      message: error.message || 'አስተዳደራዊ ክፍሎችን ማግኘቤት አልተሳካም።',
     });
   }
 };
@@ -40,47 +47,48 @@ exports.getAllAdministrativeUnits = async (req, res) => {
 exports.getAdministrativeUnitById = async (req, res) => {
   try {
     const unit = await getAdministrativeUnitByIdService(req.params.id);
-    return res.status(200).json({
+    res.status(200).json({
       status: 'success',
-      message: 'Administrative unit retrieved successfully',
       data: unit,
     });
   } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 500).json({
+    res.status(404).json({
       status: 'error',
-      message: error.message,
+      message: error.message || 'አስተዳደራዊ ክፍል አልተገኘም።',
     });
   }
 };
 
 exports.updateAdministrativeUnit = async (req, res) => {
   try {
-    const unit = await updateAdministrativeUnitService(req.params.id, req.body);
-    return res.status(200).json({
+    const { name, region_id, zone_id, woreda_id, oversight_office_id, type, name_translations } = req.body;
+    const userId = req.user.id;
+    const unit = await updateAdministrativeUnitService(
+      req.params.id,
+      { name, region_id, zone_id, woreda_id, oversight_office_id, type, name_translations },
+      userId
+    );
+    res.status(200).json({
       status: 'success',
-      message: 'Administrative unit updated successfully',
       data: unit,
     });
   } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 400).json({
+    res.status(400).json({
       status: 'error',
-      message: error.message,
+      message: error.message || 'አስተዳደራዊ ክፍል ማዘመን አልተሳካም።',
     });
   }
 };
 
 exports.deleteAdministrativeUnit = async (req, res) => {
   try {
-    const result = await deleteAdministrativeUnitService(req.params.id);
-    return res.status(200).json({
-      status: 'success',
-      message: result.message,
-      data: null,
-    });
+    const userId = req.user.id;
+    await deleteAdministrativeUnitService(req.params.id, userId);
+    res.status(204).send();
   } catch (error) {
-    return res.status(error.message.includes('not found') ? 404 : 400).json({
+    res.status(404).json({
       status: 'error',
-      message: error.message,
+      message: error.message || 'አስተዳደራዊ ክፍል መሰረዝ አልተሳካም።',
     });
   }
 };
