@@ -42,6 +42,13 @@ module.exports = (db, DataTypes) => {
           len: { args: [1, 50], msg: "የመሬት ቁጥር ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።" }
         }
       },
+      land_level: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        validate: {
+          min: { args: [1], msg: "ማህበረ ደረጃ ከ1 በታች መሆን አይችልም።" }
+        }
+      },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -49,7 +56,7 @@ module.exports = (db, DataTypes) => {
       },
       application_id: {
         type: DataTypes.INTEGER,
-        allowNull: true, // Nullable for initial creation
+        allowNull: true,
         references: { model: "applications", key: "id" }
       },
       user_id: {
@@ -132,7 +139,8 @@ module.exports = (db, DataTypes) => {
         { fields: ["user_id"] },
         { fields: ["application_id"], where: { application_id: { [Op.ne]: null } } },
         { fields: ["land_use"] },
-        { fields: ["ownership_type"] }
+        { fields: ["ownership_type"] },
+        { fields: ["land_level"] }
       ],
       hooks: {
         beforeCreate: async (landRecord, options) => {
@@ -170,9 +178,19 @@ module.exports = (db, DataTypes) => {
             if (existing) throw new Error("ይህ የመሬት ቁጥር አስቀድመው ተመዝግቧል።");
           }
         }
+      },
+      validate: {
+        async validLandLevel() {
+          const unit = await db.models.AdministrativeUnit.findByPk(this.administrative_unit_id);
+          if (unit && this.land_level > unit.max_land_levels) {
+            throw new Error("የመሬት ደረጃ ከአስተዳደር ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
+          }
+        }
       }
     }
   );
+
+
 
   return LandRecord;
 };
