@@ -1,47 +1,102 @@
-const userService = require('../services/userService');
+const {
+  registerUserService,
+  loginUserService,
+  getAllUsersService,
+  getUserByIdService,
+  updateUserService,
+  deleteUserService,
+} = require('../services/userService');
 
-exports.createUser = async (req, res) => {
-    try {
-        const user = await userService.createUserService(req.body);
-        res.status(201).json({ message: 'User created successfully.', user });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+exports.registerUser = async (req, res) => {
+  try {
+    const userId = req.user.id; // Assumes authenticated admin or encoder
+    const user = await registerUserService(req.body, userId);
+    res.status(201).json({
+      status: 'success',
+      data: user,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message || 'ተጠቃሚ መፍጠር አልተሳካም።',
+    });
+  }
+};
+
+exports.loginUser = async (req, res) => {
+  try {
+    const { email, phone_number, password } = req.body;
+    const { user, token } = await loginUserService({ email, phone_number, password });
+    res.status(200).json({
+      status: 'success',
+      data: { user, token },
+    });
+  } catch (error) {
+    res.status(401).json({
+      status: 'error',
+      message: error.message || 'መግባት አልተሳካም።',
+    });
+  }
 };
 
 exports.getAllUsers = async (req, res) => {
-    try {
-        const users = await userService.getAllUsersService();
-        res.status(200).json(users);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const { administrativeUnitId, oversightOfficeId } = req.query;
+    const users = await getAllUsersService(administrativeUnitId, oversightOfficeId);
+    const numberOfUsers = users.length;
+    res.status(200).json({
+      status: 'success',
+      numberOfUsers,
+      data: users,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message || 'ተጠቃሚዎችን ማግኘት አልተሳካም።',
+    });
+  }
 };
 
 exports.getUserById = async (req, res) => {
-    try {
-        const user = await userService.getUserByIdService(req.params.id);
-        if (!user) return res.status(404).json({ message: 'User not found.' });
-        res.status(200).json(user);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const user = await getUserByIdService(req.params.id);
+    res.status(200).json({
+      status: 'success',
+      data: user,
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      message: error.message || 'ተጠቃሚ አልተገኘም።',
+    });
+  }
 };
 
 exports.updateUser = async (req, res) => {
-    try {
-        const user = await userService.updateUserService(req.params.id, req.body);
-        res.status(200).json({ message: 'User updated successfully.', user });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const userId = req.user.id;
+    const user = await updateUserService(req.params.id, req.body, userId);
+    res.status(200).json({
+      status: 'success',
+      data: user,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message || 'ተጠቃሚ ማዘመን አልተሳካም።',
+    });
+  }
 };
 
 exports.deleteUser = async (req, res) => {
-    try {
-        await userService.deleteUserService(req.params.id);
-        res.status(200).json({ message: 'User deleted successfully.' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const userId = req.user.id;
+    await deleteUserService(req.params.id, userId);
+    res.status(204).send();
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      message: error.message || 'ተጠቃሚ መሰረዝ አልተሳካም።',
+    });
+  }
 };
