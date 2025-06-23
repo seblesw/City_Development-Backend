@@ -6,6 +6,7 @@ const { sequelize } = require('./models');
 const regionRoutes = require('./routes/regionRoutes'); 
 const ZoneRoutes = require('./routes/zoneRoutes');
 const WoredaRoutes = require('./routes/woredaRoutes');
+const OversightOfficeRoutes = require('./routes/oversightOfficeRoutes');
 const roleRoutes = require('./routes/roleRoutes'); 
 const AdministrativeUnitRoutes = require('./routes/admiistrativeUnitRoutes');
 const landRecordRoutes = require('./routes/landRecordRoutes');
@@ -33,6 +34,7 @@ app.get('/', (req, res) => {
 app.use('/api/v1/regions', regionRoutes);
 app.use('/api/v1/zones', ZoneRoutes);
 app.use('/api/v1/woredas', WoredaRoutes);
+app.use('/api/v1/oversight-offices', OversightOfficeRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/administrative-units', AdministrativeUnitRoutes);
 app.use('/api/v1/land-records', landRecordRoutes);
