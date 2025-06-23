@@ -1,206 +1,98 @@
 const { Op } = require("sequelize");
-const jwt = require("jsonwebtoken");
-const { User, Role, AdministrativeUnit, OversightOffice } = require("../models");
+const { Role, User } = require("../models");
 
-exports.registerUserService = async (data, userId, transaction) => {
-  const { first_name, last_name, email, phone_number, role_id, administrative_unit_id, oversight_office_id, national_id, address, gender, marital_status, relationship_type, primary_owner_id } = data;
+exports.createRoleService = async (data, userId, transaction) => {
+  const { name, permissions } = data;
   try {
-    // Validate administrative_unit_id
-    const adminUnit = await AdministrativeUnit.findByPk(administrative_unit_id, { transaction });
-    if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
+    const existingRole = await Role.findOne({
+      where: { name, deleted_at: { [Op.eq]: null } },
+      transaction,
+    });
+    if (existingRole) throw new Error("ይህ ሚና ስም ቀደም ሲል ተመዝግቧል።");
 
-    // Validate oversight_office_id if provided
-    if (role_id && oversight_office_id) {
-      const office = await OversightOffice.findByPk(oversight_office_id, { transaction });
-      if (!office) throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
-      if (office.administrative_unit_id !== administrative_unit_id) {
-        throw new Error("ቢሮው ከተመረጠው አስተዳደራዊ ክፍል ጋር መዛመድ አለበት።");
-      }
-    }
-
-    // Validate role_id if provided
-    if (role_id) {
-      const role = await Role.findByPk(role_id, { transaction });
-      if (!role) throw new Error("ትክክለኛ ሚና ይምረጡ።");
-    }
-
-    // Validate primary_owner_id for co-owners
-    if (primary_owner_id) {
-      const primaryOwner = await User.findByPk(primary_owner_id, { transaction });
-      if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
-        throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
-      }
-      if (marital_status === "ነጠላ") {
-        throw new Error("ነጠላ የጋብቻ ሁኔታ ያለባቸው ተጠቃሚዎች የጋራ ባለቤት መኖር አይችልም።");
-      }
-    }
-
-    // Create user
-    const user = await User.create(
-      {
-        first_name,
-        last_name,
-        email,
-        phone_number,
-        role_id,
-        administrative_unit_id,
-        oversight_office_id,
-        national_id,
-        address,
-        gender,
-        marital_status,
-        relationship_type,
-        primary_owner_id,
-        created_by: userId,
-      },
+    return await Role.create(
+      { name, permissions, created_by: userId },
       { transaction }
     );
-
-    return user;
   } catch (error) {
-    throw new Error(error.message || "ተጠቃሚ መፍጠር አልተሳካም።");
+    throw new Error(error.message || "ሚና መፍጠር አልተሳካም።");
   }
 };
 
-exports.loginUserService = async ({ email, phone_number, password }) => {
+exports.getAllRolesService = async () => {
   try {
-    const user = await User.findOne({
-      where: {
-        [Op.or]: [{ email }, { phone_number }],
-        deleted_at: { [Op.eq]: null },
-      },
-    });
-    if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
-    if (!user.password) throw new Error("ይህ ተጠቃሚ መግባት አይችልም።");
-    const isValid = await user.validatePassword(password);
-    if (!isValid) throw new Error("የተሳሳተ የይለፍ ቃል።");
-
-    const token = jwt.sign(
-      { id: user.id, role_id: user.role_id, administrative_unit_id: user.administrative_unit_id, oversight_office_id: user.oversight_office_id },
-      process.env.JWT_SECRET || "your_jwt_secret",
-      { expiresIn: "1h" }
-    );
-
-    await user.update({ last_login: new Date() });
-    return { user, token };
-  } catch (error) {
-    throw new Error(error.message || "መግባት አልተሳካም።");
-  }
-};
-
-exports.getAllUsersService = async (administrativeUnitId, oversightOfficeId) => {
-  try {
-    const where = { deleted_at: { [Op.eq]: null } };
-    if (administrativeUnitId) where.administrative_unit_id = administrativeUnitId;
-    if (oversightOfficeId) where.oversight_office_id = oversightOfficeId;
-    return await User.findAll({
-      where,
+    return await Role.findAll({
+      where: { deleted_at: { [Op.eq]: null } },
       include: [
-        { model: Role, as: "role", attributes: ["id", "name"] },
-        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"], required: false },
-        { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"], required: false },
+        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
+        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
       ],
     });
   } catch (error) {
-    throw new Error(error.message || "ተጠቃሚዎችን ማግኘት አልተሳካም።");
+    throw new Error(error.message || "ሚናዎችን ማግኘቤት አልተሳካም።");
   }
 };
 
-exports.getUserByIdService = async (id) => {
+exports.getRoleByIdService = async (id) => {
   try {
-    const user = await User.findByPk(id, {
+    const role = await Role.findByPk(id, {
       include: [
-        { model: Role, as: "role", attributes: ["id", "name"] },
-        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"], required: false },
-        { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"], required: false },
+        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
+        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
       ],
     });
-    if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
-    return user;
+    if (!role) throw new Error("ሚና አልተገኘም።");
+    return role;
   } catch (error) {
-    throw new Error(error.message || "ተጠቃሚ ማግኘት አልተሳካም።");
+    throw new Error(error.message || "ሚና ማግኘቤት አልተሳካም።");
   }
 };
 
-exports.updateUserService = async (id, data, userId, transaction) => {
-  const { first_name, last_name, email, phone_number, role_id, administrative_unit_id, oversight_office_id, national_id, address, gender, marital_status, relationship_type, primary_owner_id } = data;
+exports.updateRoleService = async (id, data, userId, transaction) => {
+  const { name, permissions } = data;
   try {
-    const user = await User.findByPk(id, { transaction });
-    if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
+    const role = await Role.findByPk(id, { transaction });
+    if (!role) throw new Error("ሚና አልተገኘም።");
 
-    // Validate administrative_unit_id
-    if (administrative_unit_id) {
-      const adminUnit = await AdministrativeUnit.findByPk(administrative_unit_id, { transaction });
-      if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
+    if (name && name !== role.name) {
+      const existingRole = await Role.findOne({
+        where: { name, deleted_at: { [Op.eq]: null } },
+        transaction,
+      });
+      if (existingRole) throw new Error("ይህ ሚና ስም ቀደም ሲል ተመዝግቧል።");
     }
 
-    // Validate oversight_office_id if provided
-    if (role_id && oversight_office_id) {
-      const office = await OversightOffice.findByPk(oversight_office_id, { transaction });
-      if (!office) throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
-      if (office.administrative_unit_id !== (administrative_unit_id || user.administrative_unit_id)) {
-        throw new Error("ቢሮው ከተመረጠው አስተዳደራዊ ክፍል ጋር መዛመድ አለበት።");
-      }
-    }
-
-    // Validate role_id if provided
-    if (role_id) {
-      const role = await Role.findByPk(role_id, { transaction });
-      if (!role) throw new Error("ትክክለኛ ሚና ይምረጡ።");
-    }
-
-    // Validate primary_owner_id for co-owners
-    if (primary_owner_id && primary_owner_id !== user.primary_owner_id) {
-      const primaryOwner = await User.findByPk(primary_owner_id, { transaction });
-      if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
-        throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
-      }
-      if (marital_status === "ነጠላ") {
-        throw new Error("ነጠላ የጋብቻ ሁኔታ ያለባቸው ተጠቃሚዎች የጋራ ባለቤት መኖር አይችልም።");
-      }
-    }
-
-    await user.update(
-      {
-        first_name,
-        last_name,
-        email,
-        phone_number,
-        role_id,
-        administrative_unit_id,
-        oversight_office_id,
-        national_id,
-        address,
-        gender,
-        marital_status,
-        relationship_type,
-        primary_owner_id,
-        updated_by: userId,
-      },
+    await role.update(
+      { name, permissions, updated_by: userId },
       { transaction }
     );
-    return await User.findByPk(id, {
+    return await Role.findByPk(id, {
       include: [
-        { model: Role, as: "role", attributes: ["id", "name"] },
-        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"], required: false },
-        { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"], required: false },
+        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
+        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
       ],
       transaction,
     });
   } catch (error) {
-    throw new Error(error.message || "ተጠቃሚ ማዘመን አልተሳካም።");
+    throw new Error(error.message || "ሚና ማዘመን አልተሳካም።");
   }
 };
 
-exports.deleteUserService = async (id, userId, transaction) => {
+exports.deleteRoleService = async (id, userId, transaction) => {
   try {
-    const user = await User.findByPk(id, { transaction });
-    if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
-    await user.destroy({ transaction });
+    const role = await Role.findByPk(id, { transaction });
+    if (!role) throw new Error("ሚና አልተገኘም።");
+    if (role.name === "ተጠቃሚ") throw new Error("ነባሪ ሚና 'ተጠቃሚ' መሰረዝ አይችልም።");
+
+    // Check if role is assigned to users
+    const usersWithRole = await User.findOne({
+      where: { role_id: id, deleted_at: { [Op.eq]: null } },
+      transaction,
+    });
+    if (usersWithRole) throw new Error("ይህ ሚና ለተጠቃሚዎች ተመድቧል፣ መሰረዝ አይችልም።");
+
+    await role.destroy({ transaction });
   } catch (error) {
-    throw new Error(error.message || "ተጠቃሚ መሰረዝ አልተሳካም።");
+    throw new Error(error.message || "ሚና መሰረዝ አልተሳካም።");
   }
 };
