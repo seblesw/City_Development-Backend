@@ -18,11 +18,6 @@ module.exports = (db, DataTypes) => {
           }
         }
       },
-      name_translations: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        defaultValue: {}
-      },
       code: {
         type: DataTypes.STRING,
         unique: true,

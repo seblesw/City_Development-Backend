@@ -35,11 +35,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: { len: [2, 100] },
       },
-      name_translations: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        defaultValue: {},
-      },
       type: {
         type: DataTypes.STRING,
         allowNull: false,
