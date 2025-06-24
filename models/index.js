@@ -134,6 +134,12 @@ Zone.hasMany(Woreda, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+Zone.hasMany(AdministrativeUnit, {
+  foreignKey: "zone_id",
+  as: "administrativeUnits",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 // Woreda associations
 Woreda.belongsTo(Zone, {

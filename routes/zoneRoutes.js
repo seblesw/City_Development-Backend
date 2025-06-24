@@ -6,7 +6,7 @@ const {
   getZoneById,
   updateZone,
   deleteZone,
-} = require("../controllers/ZoneController");
+} = require("../controllers/zoneController");
 
 router.post("/", createZone);
 router.get("/", getAllZones);
