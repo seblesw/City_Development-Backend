@@ -1,98 +1,216 @@
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const { Op } = require("sequelize");
-const { Role, User } = require("../models");
+const {
+  User,
+  Role,
+  AdministrativeUnit,
+  OversightOffice,
+} = require("../models");
 
-exports.createRoleService = async (data, userId, transaction) => {
-  const { name, permissions } = data;
-  try {
-    const existingRole = await Role.findOne({
-      where: { name, deleted_at: { [Op.eq]: null } },
-      transaction,
-    });
-    if (existingRole) throw new Error("ይህ ሚና ስም ቀደም ሲል ተመዝግቧል።");
+const registerUserService = async (userData, createdByUserId) => {
+  const {
+    first_name,
+    last_name,
+    email,
+    phone_number,
+    password,
+    role_id,
+    administrative_unit_id,
+    oversight_office_id,
+  } = userData;
 
-    return await Role.create(
-      { name, permissions, created_by: userId },
-      { transaction }
-    );
-  } catch (error) {
-    throw new Error(error.message || "ሚና መፍጠር አልተሳካም።");
+  const existingUser = await User.findOne({
+    where: {
+      [Op.or]: [{ email }, { phone_number }],
+      deleted_at: null,
+    },
+  });
+  if (existingUser) {
+    throw new Error("ኢሜል ወይም ስልክ ቁጥር ተይዟል።");
   }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = await User.create({
+    first_name,
+    last_name,
+    email,
+    phone_number,
+    password: hashedPassword,
+    role_id,
+    administrative_unit_id,
+    oversight_office_id,
+    created_by: createdByUserId,
+  });
+
+  return User.findByPk(user.id, {
+    attributes: { exclude: ["password", "deleted_at"] },
+    include: [
+      { model: Role, as: "role" },
+      { model: AdministrativeUnit, as: "administrativeUnit" },
+      { model: OversightOffice, as: "oversightOffice" },
+    ],
+  });
 };
 
-exports.getAllRolesService = async () => {
-  try {
-    return await Role.findAll({
-      where: { deleted_at: { [Op.eq]: null } },
-      include: [
-        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
-        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
-      ],
-    });
-  } catch (error) {
-    throw new Error(error.message || "ሚናዎችን ማግኘቤት አልተሳካም።");
+const loginUserService = async ({ email, phone_number, password }) => {
+  const user = await User.findOne({
+    where: {
+      [Op.or]: [{ email }, { phone_number }],
+      deleted_at: null,
+    },
+    include: [
+      { model: Role, as: "role" },
+      { model: AdministrativeUnit, as: "administrativeUnit" },
+      { model: OversightOffice, as: "oversightOffice" },
+    ],
+  });
+
+  if (!user) {
+    throw new Error("ተጠቃሚ አልተገኘም።");
   }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw new Error("የተሳሳተ የይለፍ ቃል።");
+  }
+
+  const token = jwt.sign(
+    { id: user.id, role_id: user.role_id },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+
+  return {
+    user: {
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone_number: user.phone_number,
+      role: user.role,
+      administrativeUnit: user.administrativeUnit,
+    },
+    token,
+  };
 };
 
-exports.getRoleByIdService = async (id) => {
-  try {
-    const role = await Role.findByPk(id, {
-      include: [
-        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
-        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
-      ],
-    });
-    if (!role) throw new Error("ሚና አልተገኘም።");
-    return role;
-  } catch (error) {
-    throw new Error(error.message || "ሚና ማግኘቤት አልተሳካም።");
+const getAllUsersService = async (administrativeUnitId, oversightOfficeId) => {
+  const where = { deleted_at: null };
+  if (administrativeUnitId) {
+    where.administrative_unit_id = administrativeUnitId;
   }
+  if (oversightOfficeId) {
+    const adminUnits = await AdministrativeUnit.findAll({
+      where: { oversight_office_id: oversightOfficeId, deleted_at: null },
+      attributes: ["id"],
+    });
+    where.administrative_unit_id = adminUnits.map((unit) => unit.id);
+  }
+
+  return User.findAll({
+    where,
+    attributes: { exclude: ["password", "deleted_at"] },
+    include: [
+      { model: Role, as: "role" },
+      { model: AdministrativeUnit, as: "administrativeUnit" },
+      { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "coOwners", attributes: ["id", "first_name", "last_name"] },
+    ],
+    order: [["created_at", "DESC"]],
+  });
 };
 
-exports.updateRoleService = async (id, data, userId, transaction) => {
-  const { name, permissions } = data;
-  try {
-    const role = await Role.findByPk(id, { transaction });
-    if (!role) throw new Error("ሚና አልተገኘም።");
+const getUserByIdService = async (id) => {
+  const user = await User.findByPk(id, {
+    where: { deleted_at: null },
+    attributes: { exclude: ["password", "deleted_at"] },
+    include: [
+      { model: Role, as: "role" },
+      { model: AdministrativeUnit, as: "administrativeUnit" },
+      { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "coOwners", attributes: ["id", "first_name", "last_name"] },
+    ],
+  });
 
-    if (name && name !== role.name) {
-      const existingRole = await Role.findOne({
-        where: { name, deleted_at: { [Op.eq]: null } },
-        transaction,
-      });
-      if (existingRole) throw new Error("ይህ ሚና ስም ቀደም ሲል ተመዝግቧል።");
+  if (!user) {
+    throw new Error("ተጠቃሚ አልተገኘም።");
+  }
+
+  return user;
+};
+
+const updateUserService = async (id, userData, updatedByUserId) => {
+  const user = await User.findByPk(id, { where: { deleted_at: null } });
+  if (!user) {
+    throw new Error("ተጠቃሚ አልተገኘም።");
+  }
+
+  const {
+    first_name,
+    last_name,
+    email,
+    phone_number,
+    password,
+    role_id,
+    administrative_unit_id,
+  } = userData;
+
+  if (email || phone_number) {
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [{ email }, { phone_number }],
+        id: { [Op.ne]: id },
+        deleted_at: null,
+      },
+    });
+    if (existingUser) {
+      throw new Error("ኢሜል ወይም ስልክ ቁጥር ተይዟል።");
     }
-
-    await role.update(
-      { name, permissions, updated_by: userId },
-      { transaction }
-    );
-    return await Role.findByPk(id, {
-      include: [
-        { model: User, as: "creator", attributes: ["id", "first_name", "last_name"] },
-        { model: User, as: "updater", attributes: ["id", "first_name", "last_name"], required: false },
-      ],
-      transaction,
-    });
-  } catch (error) {
-    throw new Error(error.message || "ሚና ማዘመን አልተሳካም።");
   }
+
+  const updateData = {
+    first_name,
+    last_name,
+    email,
+    phone_number,
+    role_id,
+    administrative_unit_id,
+    updated_by: updatedByUserId,
+  };
+
+  if (password) {
+    updateData.password = await bcrypt.hash(password, 10);
+  }
+
+  await user.update(updateData);
+
+  return User.findByPk(id, {
+    attributes: { exclude: ["password", "deleted_at"] },
+    include: [
+      { model: Role, as: "role" },
+      { model: AdministrativeUnit, as: "administrativeUnit" },
+      { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "coOwners", attributes: ["id", "first_name", "last_name"] },
+    ],
+  });
 };
 
-exports.deleteRoleService = async (id, userId, transaction) => {
-  try {
-    const role = await Role.findByPk(id, { transaction });
-    if (!role) throw new Error("ሚና አልተገኘም።");
-    if (role.name === "ተጠቃሚ") throw new Error("ነባሪ ሚና 'ተጠቃሚ' መሰረዝ አይችልም።");
-
-    // Check if role is assigned to users
-    const usersWithRole = await User.findOne({
-      where: { role_id: id, deleted_at: { [Op.eq]: null } },
-      transaction,
-    });
-    if (usersWithRole) throw new Error("ይህ ሚና ለተጠቃሚዎች ተመድቧል፣ መሰረዝ አይችልም።");
-
-    await role.destroy({ transaction });
-  } catch (error) {
-    throw new Error(error.message || "ሚና መሰረዝ አልተሳካም።");
+const deleteUserService = async (id, deletedByUserId) => {
+  const user = await User.findByPk(id, { where: { deleted_at: null } });
+  if (!user) {
+    throw new Error("ተጠቃሚ አልተገኘም።");
   }
+
+  await user.update({ deleted_at: new Date(), deleted_by: deletedByUserId });
+};
+
+module.exports = {
+  registerUserService,
+  loginUserService,
+  getAllUsersService,
+  getUserByIdService,
+  updateUserService,
+  deleteUserService,
 };

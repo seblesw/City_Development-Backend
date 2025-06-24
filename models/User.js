@@ -126,6 +126,21 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null,
+        validate: {
+          isDate: { msg: "የማጥፊያ ቀን ትክክለኛ መሆን አለበት።" },
+        },
+        field: "deleted_at",
+      },
+      created_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+        
+      },
     },
     {
       tableName: "users",

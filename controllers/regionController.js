@@ -4,21 +4,20 @@ const {
   getRegionByIdService,
   updateRegionService,
   deleteRegionService,
-} = require('../services/RegionService');
+} = require("../services/regionService");
 
 exports.createRegion = async (req, res) => {
   try {
-    const { name } = req.body;
-    const userId = req.user.id;
-    const region = await createRegionService({ name }, userId);
+ 
+    const region = await createRegionService(req.body);
     res.status(201).json({
-      status: 'success',
+      status: "success",
       data: region,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ክልል መፍጠር አልተሳካም።',
+      status: "error",
+      message: error.message || "ክልል መፍጠር አልተሳካም።",
     });
   }
 };
@@ -28,14 +27,14 @@ exports.getAllRegions = async (req, res) => {
     const regions = await getAllRegionsService();
     const numberOfRegions = regions.length;
     res.status(200).json({
-      status: 'success',
+      status: "success",
       numberOfRegions,
       data: regions,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ክልሎችን ማግኘት አልተሳካም።',
+      status: "error",
+      message: error.message || "ክልሎችን ማግኘት አልተሳካም።",
     });
   }
 };
@@ -44,30 +43,29 @@ exports.getRegionById = async (req, res) => {
   try {
     const region = await getRegionByIdService(req.params.id);
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: region,
     });
   } catch (error) {
     res.status(404).json({
-      status: 'error',
-      message: error.message || 'ክልል አልተገኘም።',
+      status: "error",
+      message: error.message || "ክልል አልተገኘም።",
     });
   }
 };
 
 exports.updateRegion = async (req, res) => {
   try {
-    const { name } = req.body;
     const userId = req.user.id;
-    const region = await updateRegionService(req.params.id, { name }, userId);
+    const region = await updateRegionService(req.params.id, req.body, userId);
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: region,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ክልል ማዘመን አልተሳካም።',
+      status: "error",
+      message: error.message || "ክልል ማዘመን አልተሳካም።",
     });
   }
 };
@@ -79,8 +77,8 @@ exports.deleteRegion = async (req, res) => {
     res.status(204).send();
   } catch (error) {
     res.status(404).json({
-      status: 'error',
-      message: error.message || 'ክልል መሰረዝ አልተሳካም።',
+      status: "error",
+      message: error.message || "ክልል መሰረዝ አልተሳካም።",
     });
   }
 };

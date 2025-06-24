@@ -1,69 +1,108 @@
 const { Op } = require("sequelize");
-const { Region, Zone, Woreda } = require("../models");
-exports.createRegionService = async (data, userId, transaction) => {
-  const { name } = data;
-  try {
-    const existingRegion = await Region.findOne({ where: { name, deleted_at: { [Op.eq]: null } }, transaction });
-    if (existingRegion) throw new Error("ይህ ስም ያለው ክልል ተመዝግቧል።");
-    return await Region.create({ name, created_by: userId }, { transaction });
-  } catch (error) {
-    throw new Error(error.message || "ክልል መፍጠር አልተሳካም።");
+const { Region, Zone, AdministrativeUnit, OversightOffice } = require("../models/index");
+
+const createRegionService = async (regionData) => {
+  const { name } = regionData;
+
+  // Generate code: first 3 letters of name in uppercase + random suffix
+  const code = `${name.slice(0, 3).toUpperCase()}-${Math.random().toString(36).slice(-4)}`;
+
+  const existingRegion = await Region.findOne({
+    where: { [Op.or]: [{ name }, { code }], deleted_at: null },
+  });
+  if (existingRegion) {
+    throw new Error("የክልል ስም ወይም ኮድ ተይዟል።");
   }
+
+  const region = await Region.create({
+    name,
+    code,
+  });
+
+  return Region.findByPk(region.id, {
+    include: [
+      { model: Zone, as: "zones" },
+    ],
+  });
 };
 
-exports.getAllRegionsService = async () => {
-  try {
-    return await Region.findAll({
-      where: { deleted_at: { [Op.eq]: null } },
-      include: [
-        { model: Zone, as: "zones", where: { deleted_at: { [Op.eq]: null } }, required: false, include: [
-          { model: Woreda, as: "woredas", where: { deleted_at: { [Op.eq]: null } }, required: false }
-        ] }
-      ]
+const getAllRegionsService = async () => {
+  return Region.findAll({
+    where: { deleted_at: null },
+    include: [
+      { model: Zone, as: "zones" },
+   
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+};
+
+const getRegionByIdService = async (id) => {
+  const region = await Region.findByPk(id, {
+    where: { deleted_at: null },
+    include: [
+      { model: Zone, as: "zones" },
+ 
+    ],
+  });
+
+  if (!region) {
+    throw new Error("ክልል አልተገኘም።");
+  }
+
+  return region;
+};
+
+const updateRegionService = async (id, regionData, updatedByUserId) => {
+  const region = await Region.findByPk(id, { where: { deleted_at: null } });
+  if (!region) {
+    throw new Error("ክልል አልተገኘም።");
+  }
+
+  const { name } = regionData;
+  let { code } = regionData;
+
+  if (name && !code) {
+    code = `${name.slice(0, 3).toUpperCase()}-${Math.random().toString(36).slice(-4)}`;
+  }
+
+  if (name || code) {
+    const existingRegion = await Region.findOne({
+      where: { [Op.or]: [{ name }, { code }], id: { [Op.ne]: id }, deleted_at: null },
     });
-  } catch (error) {
-    throw new Error(error.message || "ክልሎችን ማግኘት አልተሳካም።");
-  }
-};
-
-exports.getRegionByIdService = async (id) => {
-  try {
-    const region = await Region.findByPk(id, {
-      include: [
-        { model: Zone, as: "zones", where: { deleted_at: { [Op.eq]: null } }, required: false, include: [
-          { model: Woreda, as: "woredas", where: { deleted_at: { [Op.eq]: null } }, required: false }
-        ] }
-      ]
-    });
-    if (!region) throw new Error("ክልል አልተገኘም።");
-    return region;
-  } catch (error) {
-    throw new Error(error.message || "ክልል ማግኘት አልተሳካም።");
-  }
-};
-
-exports.updateRegionService = async (id, data, userId, transaction) => {
-  const { name } = data;
-  try {
-    const region = await Region.findByPk(id, { transaction });
-    if (!region) throw new Error("ክልል አልተገኘም።");
-    if (name && name !== region.name) {
-      const existingRegion = await Region.findOne({ where: { name, deleted_at: { [Op.eq]: null } }, transaction });
-      if (existingRegion) throw new Error("ይህ ስም ያለው ክልል ተመዝግቧል።");
+    if (existingRegion) {
+      throw new Error("የክልል ስም ወይም ኮድ ተይዟል።");
     }
-    await region.update({ name, updated_by: userId }, { transaction });
-    return region;
-  } catch (error) {
-    throw new Error(error.message || "ክልል ማዘመን አልተሳካም።");
   }
+
+  await region.update({
+    name,
+    code,
+    updated_by: updatedByUserId,
+  });
+
+  return Region.findByPk(id, {
+    include: [
+      { model: Zone, as: "zones" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+      { model: OversightOffice, as: "oversightOffices" },
+    ],
+  });
 };
 
-exports.deleteRegionService = async (id, userId, transaction) => {
-  try {
-    const region = await Region.findByPk(id, { transaction });
-    if (!region) throw new Error("ክልል አልተገኘም።");
-    await region.destroy({ transaction });
-  } catch (error) {
-    throw new Error(error.message || "ክልል መሰረዝ አልተሳካም።");
+const deleteRegionService = async (id, deletedByUserId) => {
+  const region = await Region.findByPk(id, { where: { deleted_at: null } });
+  if (!region) {
+    throw new Error("ክልል አልተገኘም።");
   }
+
+  await region.update({ deleted_at: new Date(), deleted_by: deletedByUserId });
+};
+
+module.exports = {
+  createRegionService,
+  getAllRegionsService,
+  getRegionByIdService,
+  updateRegionService,
+  deleteRegionService,
 };

@@ -6,7 +6,7 @@ const {
   getRegionById,
   updateRegion,
   deleteRegion,
-} = require("../controllers/RegionController");
+} = require("../controllers/regionController");
 
 router.post("/", createRegion);
 router.get("/", getAllRegions);

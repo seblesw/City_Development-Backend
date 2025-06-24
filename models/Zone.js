@@ -36,6 +36,10 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
+    deleted_at:{
+      type: DataTypes.DATE,
+      allowNull:true,
+    },
     },
     {
       tableName: "zones",
