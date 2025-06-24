@@ -8,8 +8,8 @@ const {
 
 exports.createRegion = async (req, res) => {
   try {
- 
-    const region = await createRegionService(req.body);
+    const userId = req.user ? req.user.id : null; // Fallback to null if req.user is undefined
+    const region = await createRegionService(req.body, userId);
     res.status(201).json({
       status: "success",
       data: region,
@@ -56,7 +56,7 @@ exports.getRegionById = async (req, res) => {
 
 exports.updateRegion = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user ? req.user.id : null; // Fallback to null
     const region = await updateRegionService(req.params.id, req.body, userId);
     res.status(200).json({
       status: "success",
@@ -72,7 +72,7 @@ exports.updateRegion = async (req, res) => {
 
 exports.deleteRegion = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user ? req.user.id : null; // Fallback to null
     await deleteRegionService(req.params.id, userId);
     res.status(204).send();
   } catch (error) {

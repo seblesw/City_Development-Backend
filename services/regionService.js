@@ -1,11 +1,11 @@
 const { Op } = require("sequelize");
 const { Region, Zone, AdministrativeUnit, OversightOffice } = require("../models/index");
 
-const createRegionService = async (regionData) => {
+const createRegionService = async (regionData, createdByUserId) => {
   const { name } = regionData;
 
   // Generate code: first 3 letters of name in uppercase + random suffix
-  const code = `${name.slice(0, 3).toUpperCase()}-${Math.random().toString(36).slice(-4)}`;
+  const code = `${name.slice(0, 3).toUpperCase()}`;
 
   const existingRegion = await Region.findOne({
     where: { [Op.or]: [{ name }, { code }], deleted_at: null },
@@ -17,11 +17,14 @@ const createRegionService = async (regionData) => {
   const region = await Region.create({
     name,
     code,
+    created_by: createdByUserId || null,
   });
 
   return Region.findByPk(region.id, {
     include: [
       { model: Zone, as: "zones" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+      { model: OversightOffice, as: "oversightOffices" },
     ],
   });
 };
@@ -31,7 +34,8 @@ const getAllRegionsService = async () => {
     where: { deleted_at: null },
     include: [
       { model: Zone, as: "zones" },
-   
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+      { model: OversightOffice, as: "oversightOffices" },
     ],
     order: [["createdAt", "DESC"]],
   });
@@ -42,7 +46,8 @@ const getRegionByIdService = async (id) => {
     where: { deleted_at: null },
     include: [
       { model: Zone, as: "zones" },
- 
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+      { model: OversightOffice, as: "oversightOffices" },
     ],
   });
 
@@ -78,7 +83,7 @@ const updateRegionService = async (id, regionData, updatedByUserId) => {
   await region.update({
     name,
     code,
-    updated_by: updatedByUserId,
+    updated_by: updatedByUserId || null,
   });
 
   return Region.findByPk(id, {
@@ -96,7 +101,7 @@ const deleteRegionService = async (id, deletedByUserId) => {
     throw new Error("ክልል አልተገኘም።");
   }
 
-  await region.update({ deleted_at: new Date(), deleted_by: deletedByUserId });
+  await region.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
 };
 
 module.exports = {

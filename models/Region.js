@@ -56,9 +56,7 @@ module.exports = (db, DataTypes) => {
         beforeCreate: async (region) => {
           if (!region.code) {
             region.code =
-              region.name.toUpperCase().replace(/\s/g, "").slice(0, 10) +
-              "-" +
-              Math.random().toString(36).slice(-4);
+              region.name.toUpperCase().replace(/\s/g, "").slice(0, 10);
           }
         },
       },

@@ -108,6 +108,18 @@ Region.hasMany(Zone, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+Region.hasMany(AdministrativeUnit, {
+  foreignKey: "region_id",
+  as: "administrativeUnits",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Region.hasMany(OversightOffice, {
+  foreignKey: "region_id",
+  as: "oversightOffices",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 // Zone associations
 Zone.belongsTo(Region, {
@@ -158,6 +170,18 @@ AdministrativeUnit.belongsTo(Woreda, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+AdministrativeUnit.belongsTo(Zone, {
+  foreignKey: "zone_id",
+  as: "zone",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+AdministrativeUnit.belongsTo(Region, {
+  foreignKey: "region_id",
+  as: "region",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 AdministrativeUnit.hasMany(User, {
   foreignKey: "administrative_unit_id",
   as: "users",
@@ -194,6 +218,20 @@ LandRecord.belongsTo(Application, {
   foreignKey: "application_id",
   as: "application",
   onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+//oversightOffice associations
+OversightOffice.hasMany(User, {
+  foreignKey: "oversight_office_id",
+  as: "users",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+OversightOffice.belongsTo(Region, {
+  foreignKey: "region_id",
+  as: "region",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
