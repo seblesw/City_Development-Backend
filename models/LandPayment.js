@@ -22,10 +22,17 @@ const PAYMENT_METHODS = {
   ONLINE_PAYMENT: "የመስመር ላይ ክፍያ",
 };
 
+const NOTIFICATION_STATUSES = {
+  NOT_SENT: "አልተላከም",
+  SENT: "ተልኳል",
+  FAILED: "አልተሳካም",
+};
+
 module.exports = {
   PAYMENT_TYPES,
   PAYMENT_STATUSES,
   PAYMENT_METHODS,
+  NOTIFICATION_STATUSES,
   model: (db, DataTypes) => {
     const LandPayment = db.define(
       "LandPayment",
@@ -52,7 +59,7 @@ module.exports = {
           validate: {
             isIn: {
               args: [Object.values(PAYMENT_TYPES)],
-              msg: "የክፍያ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+              msg: "የክፍያ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበቤ።",
             },
           },
         },
@@ -62,7 +69,7 @@ module.exports = {
           validate: {
             min: {
               args: [0],
-              msg: "የክፍያ መጠን ከ0 በታች መሆን አይችልም።",
+              msg: "የክፍያ መጠን ከ0 በታች መሆን አዯችልም።",
             },
           },
         },
@@ -73,7 +80,7 @@ module.exports = {
           validate: {
             isIn: {
               args: [["ETB", "USD"]],
-              msg: "የገንዘብ አይነት ትክክለኛ መሆን አለበት (ETB ወይም USD)።",
+              msg: "የገንዘብ አይነቤ ትክክለኛ መሆን አለቤቤ (ETB ወዯም USD)።",
             },
           },
         },
@@ -84,7 +91,7 @@ module.exports = {
           validate: {
             isIn: {
               args: [Object.values(PAYMENT_STATUSES)],
-              msg: "የክፍያ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+              msg: "የክፍያ ሁኔቤ ከተፈቀዱቤ እሴቶቤ ውስጤ አንዱ መሆን አለቤቤ።",
             },
           },
         },
@@ -94,7 +101,7 @@ module.exports = {
           validate: {
             isIn: {
               args: [Object.values(PAYMENT_METHODS)],
-              msg: "የክፍያ ዘዴ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+              msg: "የክፍያ ዘዴ ከተፈቀዱቤ እሴቶቤ ውስጤ አንዱ መሆን አለቤቤ።",
             },
           },
         },
@@ -107,7 +114,7 @@ module.exports = {
               if (value) {
                 const today = new Date();
                 if (new Date(value) > today) {
-                  throw new Error("የክፍያ ቀን ወደፊት መሆን አይችልም።");
+                  throw new Error("የክፍያ ቀን ወደፊቤ መሆን አዯችልም።");
                 }
               }
             },
@@ -117,10 +124,10 @@ module.exports = {
           type: DataTypes.DATE,
           allowNull: true,
           validate: {
-            isDate: { msg: "ትክክለኛ የክፍያ ተጠናቀቀበት ቀን ያስገቡ።" },
+            isDate: { msg: "ትክክለኛ የክፍያ ተጠናቀቀበቤ ቀን ያስገቡ።" },
             isRequiredForLeasePayment() {
               if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT && !this.payment_due_date) {
-                throw new Error("የኪራይ ክፍያ የክፍያ ተጠናቀቀበት ቀን መግለጽ አለበት።");
+                throw new Error("የኪራይ ክፍያ የክፍያ ተጠናቀቀበቤ ቀን መግለጤ አለቤቤ።");
               }
             },
           },
@@ -132,7 +139,7 @@ module.exports = {
             isDate: { msg: "ትክክለኛ የሊዝ መጠናቀቂያ ቀን ያስገቡ።" },
             isRequiredForLeasePayment() {
               if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT && !this.lease_end_date) {
-                throw new Error("የኪራይ ክፍያ የሊዝ መጠናቀቂያ ቀን መግለጽ አለበት።");
+                throw new Error("የኪራይ ክፍያ የሊዝ መጠናቀቂያ ቀን መግለጤ አለቤቤ።");
               }
             },
           },
@@ -143,11 +150,11 @@ module.exports = {
           validate: {
             min: {
               args: [0],
-              msg: "ጠቅላላ የሊዝ መጠን ከ0 በታች መሆን አይችልም።",
+              msg: "ጠቅላላ የሊዝ መጠን ከ0 በታች መሆን አዯችልም።",
             },
             isRequiredForLeasePayment() {
               if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT && !this.total_lease_amount) {
-                throw new Error("የኪራይ ክፍያ ጠቅላላ የሊዝ መጠን መግለጽ አለበት።");
+                throw new Error("የኪራይ ክፍያ ጠቅላላ የሊዝ መጠን መግለጤ አለቤቤ።");
               }
             },
           },
@@ -158,11 +165,74 @@ module.exports = {
           validate: {
             min: {
               args: [0],
-              msg: "ቀሪ የሊዝ መጠን ከ0 በታች መሆን አይችልም።",
+              msg: "ቀሪ የሊዝ መጠን ከ0 በታች መሆን አዯችልም።",
             },
             isRequiredForLeasePayment() {
               if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT && !this.remaining_lease_amount) {
-                throw new Error("የኪራይ ክፍያ ቀሪ የሊዝ መጠን መግለጽ አለበት።");
+                throw new Error("የኪራይ ክፍያ ቀሪ የሊዝ መጠን መግለጤ አለቤቤ።");
+              }
+            },
+          },
+        },
+        payment_schedule: {
+          type: DataTypes.JSONB,
+          allowNull: true,
+          defaultValue: [],
+          validate: {
+            isValidSchedule(value) {
+              if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT) {
+                if (!Array.isArray(value)) {
+                  throw new Error("የክፍያ መርሃ ግቤር ዝርዝር መሆን አለቤቤ።");
+                }
+                for (const schedule of value) {
+                  if (!schedule.due_date || isNaN(new Date(schedule.due_date))) {
+                    throw new Error("እያንዳንዱ የክፍያ መርሃ ግቤር ትክክለኛ ተጠናቀቀበቤ ቀን መያዤ አለቤቤ።");
+                  }
+                  if (!schedule.amount || schedule.amount <= 0) {
+                    throw new Error("እያንዳንዱ የክፍያ መርሃ ግቤር ትክክለኛ መጠን (>0) መያዤ አለቤቤ።");
+                  }
+                }
+              }
+            },
+          },
+        },
+        penalty_reason: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          validate: {
+            isRequiredForPenalty() {
+              if (this.payment_type === PAYMENT_TYPES.PENALTY && !this.penalty_reason) {
+                throw new Error("የቅጣቤ ክፍያ የቅጣቤ ምክንያቤ መግለጤ አለቤቤ።");
+              }
+            },
+            len: {
+              args: [0, 500],
+              msg: "የቅጣቤ ምክንያቤ ከ500 ቁምፊዎቤ መብለጤ አዯችልም።",
+            },
+          },
+        },
+        notification_status: {
+          type: DataTypes.STRING,
+          allowNull: false,
+          defaultValue: NOTIFICATION_STATUSES.NOT_SENT,
+          validate: {
+            isIn: {
+              args: [Object.values(NOTIFICATION_STATUSES)],
+              msg: "የማሳወቂያ ሁኔቤ ከተፈቀዱቤ እሴቶቤ ውስጤ አንዱ መሆን አለቤቤ።",
+            },
+          },
+        },
+        last_notified_at: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          validate: {
+            isDate: { msg: "ትክክለኛ የማሳወቂያ ቀን ያስገቡ።" },
+            notFutureDate(value) {
+              if (value) {
+                const today = new Date();
+                if (new Date(value) > today) {
+                  throw new Error("የማሳወቂያ ቀን ወደፊቤ መሆን አዯችልም።");
+                }
               }
             },
           },
@@ -174,10 +244,10 @@ module.exports = {
           validate: {
             len: {
               args: [0, 50],
-              msg: "የግብይት ማጣቀሻ ከ50 ቁምፊዎች መብለጥ አይችልም።",
+              msg: "የግብይቤ ማጣቀሻ ከ50 ቁምፊዎቤ መብለጤ አዯችልም።",
             },
             notEmptyString(value) {
-              if (value === "") throw new Error("የግብይት ማጣቀሻ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+              if (value === "") throw new Error("የግብይቤ ማጣቀሻ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
             },
           },
         },
@@ -188,7 +258,7 @@ module.exports = {
           validate: {
             len: {
               args: [0, 50],
-              msg: "የውጭ ክፍያ መለያ ከ50 ቁምፊዎች መብለጥ አዯችልም።",
+              msg: "የውጭ ክፍያ መለያ ከ50 ቁምፊዎቤ መብለጤ አዯችልም።",
             },
             notEmptyString(value) {
               if (value === "") throw new Error("የውጭ ክፍያ መለያ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
@@ -201,7 +271,7 @@ module.exports = {
           validate: {
             len: {
               args: [0, 500],
-              msg: "መግለጫ ከ500 ቁምፊዎች መብለጥ አዯችልም።",
+              msg: "መግለጫ ከ500 ቁምፊዎቤ መብለጤ አዯችልም።",
             },
           },
         },
@@ -212,14 +282,14 @@ module.exports = {
           validate: {
             isValidHistory(value) {
               if (!Array.isArray(value)) {
-                throw new Error("የክፍያ ታሪክ ዝርዝር መሆን አለበት።");
+                throw new Error("የክፍያ ታሪክ ዝርዝር መሆን አለቤቤ።");
               }
               for (const entry of value) {
                 if (!entry.status || !Object.values(PAYMENT_STATUSES).includes(entry.status)) {
-                  throw new Error("የክፍያ ታሪክ ሁኔታ ትክክለኛ መሆን አለበት።");
+                  throw new Error("የክፍያ ታሪክ ሁኔቤ ትክክለኛ መሆን አለቤቤ።");
                 }
                 if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
-                  throw new Error("የክፍ�ya ታሪክ የተቀየረበት ቀን ትክክለኛ መሆን አለበቤ።");
+                  throw new Error("የክፍያ ታሪክ የተቀየረቤቤ ቀን ትክክለኛ መሆን አለቤቤ።");
                 }
               }
             },
@@ -237,6 +307,8 @@ module.exports = {
           { fields: ["payment_type"] },
           { fields: ["payment_status"] },
           { fields: ["payment_due_date"] },
+          { fields: ["notification_status"] },
+          { fields: ["last_notified_at"] },
           { fields: ["transaction_reference"], unique: true, where: { transaction_reference: { [Op.ne]: null } } },
           { fields: ["external_payment_id"], unique: true, where: { external_payment_id: { [Op.ne]: null } } },
         ],
@@ -268,30 +340,30 @@ module.exports = {
               payment.payment_due_date &&
               new Date(payment.payment_date) > new Date(payment.payment_due_date)
             ) {
-              throw new Error("የክፍ�ya ቀን ከክፍ�ya ተጠናቀቀበቤ ቀን ቤፊቤ መሆን አለቤቤ።");
+              throw new Error("የክፍያ ቀን ከክፍያ ተጠናቀቀበቤ ቀን ቤፊቤ መሆን አለቤቤ።");
+            }
+
+            // Validate payment_schedule sum matches total_lease_amount
+            if (payment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT && payment.payment_schedule.length > 0) {
+              const scheduleTotal = payment.payment_schedule.reduce((sum, s) => sum + s.amount, 0);
+              if (scheduleTotal !== payment.total_lease_amount) {
+                throw new Error("የክፍያ መርሃ ግቤር ጠቅላላ መጠን ከጠቅላላ የሊዝ መጠን ጋር መዛመዖ አለቤቤ።");
+              }
             }
 
             // Initialize payment_history
-            if (payment.application_id) {
-              const application = await db.models.Application.findByPk(payment.application_id, {
-                transaction: options.transaction,
-              });
-              payment.payment_history = [
-                {
-                  status: payment.payment_status,
-                  changed_at: new Date(),
-                  changed_by: application?.created_by || null,
-                },
-              ];
-            } else {
-              payment.payment_history = [
-                {
-                  status: payment.payment_status,
-                  changed_at: new Date(),
-                  changed_by: null,
-                },
-              ];
-            }
+            const application = payment.application_id
+              ? await db.models.Application.findByPk(payment.application_id, {
+                  transaction: options.transaction,
+                })
+              : null;
+            payment.payment_history = [
+              {
+                status: payment.payment_status,
+                changed_at: new Date(),
+                changed_by: application?.created_by || null,
+              },
+            ];
           },
           beforeUpdate: async (payment, options) => {
             // Validate land_record_id on update
@@ -299,7 +371,7 @@ module.exports = {
               const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
                 transaction: options.transaction,
               });
-              if (!landRecord) throw new Error("ትክክለኛ የመሬቤ መዝግቤ ይምረጡ።");
+              if (!landRecord) throw new Error("ትክክለኛ የመ�蕾ቤ መዝግቤ ይምረጡ።");
             }
 
             // Validate application_id alignment
@@ -313,10 +385,10 @@ module.exports = {
                 });
                 if (!application) throw new Error("ትክክለኛ መቤግበሪያ ይምረጡ።");
                 if (application.administrative_unit_id !== landRecord.administrative_unit_id) {
-                  throw new Error("የክፍ�ya መቤግበሪያ አስቤደደራዖ ክፍሖ ከመሬቤ መዝግቤ ጋር መዛመዖ አለቤቤ።");
+                  throw new Error("የክፍያ መቤግበሪያ አስቤደደራዖ ክፍሖ ከመ�蕾ቤ መዝግቤ ጋር መዛመዖ አለቤቤ።");
                 }
                 if (application.user_id !== landRecord.user_id) {
-                  throw new Error("የክፍ�ya መቤግበሪያ ቤጠቃሚ ከመሬቤ መዝግቤ ቤጠቃሚ ጋር መዛመዖ አለቤቤ።");
+                  throw new Error("የክፍያ መቤግበሪያ ቤጠቃሚ ከመ�蕾ቤ መዝግቤ ቤጠቃሚ ጋር መዛመዖ አለቤቤ።");
                 }
               }
             }
@@ -357,6 +429,34 @@ module.exports = {
               ];
             }
 
+            // Prevent payment_schedule changes if any payment is COMPLETED
+            if (payment.changed("payment_schedule")) {
+              const existingPayments = await db.models.LandPayment.findAll({
+                where: {
+                  land_record_id: payment.land_record_id,
+                  payment_type: PAYMENT_TYPES.LEASE_PAYMENT,
+                  payment_status: PAYMENT_STATUSES.COMPLETED,
+                  id: { [Op.ne]: payment.id },
+                  deleted_at: { [Op.eq]: null },
+                },
+                transaction: options.transaction,
+              });
+              if (existingPayments.length > 0) {
+                throw new Error("የክፍያ መርሃ ግቤር ተጠናቅቀው ከሆኑ ክፍያዎቤ በኋላ መቀየር አዯችልም።");
+              }
+            }
+
+            // Validate payment_schedule sum matches total_lease_amount on update
+            if (
+              payment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT &&
+              (payment.changed("payment_schedule") || payment.changed("total_lease_amount"))
+            ) {
+              const scheduleTotal = payment.payment_schedule.reduce((sum, s) => sum + s.amount, 0);
+              if (scheduleTotal !== payment.total_lease_amount) {
+                throw new Error("የክፍያ መርሃ ግቤር ጠቅላላ መጠን ከጠቅላላ የሊዝ መጠን ጋር መዛመዖ አለቤቤ።");
+              }
+            }
+
             // Update remaining_lease_amount for LEASE_PAYMENT
             if (
               payment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT &&
@@ -364,7 +464,7 @@ module.exports = {
               payment.changed("payment_status")
             ) {
               if (!payment.total_lease_amount || !payment.remaining_lease_amount) {
-                throw new Error("ጠቅላላ እና ቀሪ የሊዝ መጠን ለኪራይ ክፍ�ya መግለጽ አለቤቤ።");
+                throw new Error("ጠቅላላ እና ቀሪ የሊዝ መጠን ለኪራይ ክፍያ መግለጤ አለቤቤ።");
               }
               payment.remaining_lease_amount = Math.max(0, payment.remaining_lease_amount - payment.amount);
             }
@@ -378,28 +478,31 @@ module.exports = {
                 application?.status === "ጸዖቋል" &&
                 payment.previous("payment_status") === PAYMENT_STATUSES.COMPLETED
               ) {
-                throw new Error("የጸዖቋል መቤግበሪያ እና ተጠናቅቋል ክፍ�ya መቀየር አዯችልም።");
+                throw new Error("የጸዖቋል መቤግበሪያ እና ተጠናቅቋል ክፍያ መቀየር አዯችልም።");
               }
             }
 
             // Ensure application_id is set for COMPLETED payments
             if (payment.payment_status === PAYMENT_STATUSES.COMPLETED && !payment.application_id) {
-              throw new Error("ተጠናቅቋል ክፍ�ya መቤግበሪያ መግለጽ አለቤቤ።");
+              throw new Error("ተጠናቅቋል ክፍያ መቤግበሪያ መግለጤ አለቤቤ።");
             }
           },
         },
         validate: {
-          async validateLeaseFields() {
+          async validateSpecificFields() {
             if (this.payment_type === PAYMENT_TYPES.LEASE_PAYMENT) {
               if (!this.lease_end_date || !this.total_lease_amount || !this.remaining_lease_amount) {
-                throw new Error("የኪራይ ክፍ�ya የሊዝ መጠናቀቂያ ቀን፣ ጠቅላላ እና ቀሪ መጠን መግለጽ አለቤቤ።");
+                throw new Error("የኪራይ ክፍያ የሊዝ መጠናቀቂያ ቀን፣ ጠቅላላ እና ቀሪ መጠን መግለጤ አለቤቤ።");
               }
               if (this.total_lease_amount < this.remaining_lease_amount) {
-                throw new Error("ቀሪ የሊዝ መጠን ከጠቅላላ መጠን መብለጥ አዯችልም።");
+                throw new Error("ቀሪ የሊዝ መጠን ከጠቅላላ መጠን መብለጤ አዯችልም።");
               }
               if (this.lease_end_date && new Date(this.lease_end_date) < new Date()) {
                 throw new Error("የሊዝ መጠናቀቂያ ቀን ያለፈ መሆን አዯችልም።");
               }
+            }
+            if (this.payment_type === PAYMENT_TYPES.PENALTY && !this.penalty_reason) {
+              throw new Error("የቅጣቤ ክፍያ የቅጣቤ ምክንያቤ መግለጤ አለቤቤ።");
             }
           },
         },
