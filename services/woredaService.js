@@ -1,70 +1,126 @@
 const { Op } = require("sequelize");
-const { Woreda, Zone } = require("../models");
+const { Woreda, Zone, AdministrativeUnit } = require("../models/index");
 
-exports.createWoredaService = async (data, userId, transaction) => {
-  const { name, zone_id } = data;
-  try {
+const createWoredaService = async (woredaData, createdByUserId) => {
+  const { name, zone_id } = woredaData;
+
+  const existingWoreda = await Woreda.findOne({
+    where: { name, zone_id, deleted_at: null },
+  });
+  if (existingWoreda) {
+    throw new Error("የወረዳ ስም በዚህ ዞን ውስጥ ተይዟል።");
+  }
+
+  const zone = await Zone.findByPk(zone_id);
+  if (!zone) {
+    throw new Error("ትክክለኛ ዞን ይምረጡ።");
+  }
+
+  const count = await Woreda.count({ where: { zone_id } });
+  const code = `${zone.code}-W${count + 1}`;
+
+  const woreda = await Woreda.create({
+    name,
+    zone_id,
+    code,
+    created_by: createdByUserId || null,
+  });
+
+  return Woreda.findByPk(woreda.id, {
+    include: [
+      { model: Zone, as: "zone" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+    ],
+  });
+};
+
+const getAllWoredasService = async () => {
+  return Woreda.findAll({
+    where: { deleted_at: null },
+    include: [
+      { model: Zone, as: "zone" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+};
+
+const getWoredaByIdService = async (id) => {
+  const woreda = await Woreda.findByPk(id, {
+    where: { deleted_at: null },
+    include: [
+      { model: Zone, as: "zone" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+    ],
+  });
+
+  if (!woreda) {
+    throw new Error("ወረዳ አልተገኘም።");
+  }
+
+  return woreda;
+};
+
+const updateWoredaService = async (id, woredaData, updatedByUserId) => {
+  const woreda = await Woreda.findByPk(id, { where: { deleted_at: null } });
+  if (!woreda) {
+    throw new Error("ወረዳ አልተገኘም።");
+  }
+
+  const { name, zone_id } = woredaData;
+
+  if (name || zone_id) {
     const existingWoreda = await Woreda.findOne({
-      where: { name, zone_id, deleted_at: { [Op.eq]: null } },
-      transaction,
+      where: {
+        name,
+        zone_id: zone_id || woreda.zone_id,
+        id: { [Op.ne]: id },
+        deleted_at: null,
+      },
     });
-    if (existingWoreda) throw new Error("ይህ ስም ያለው ወረዳ ተመዝግቧል።");
-    const zone = await Zone.findByPk(zone_id, { transaction });
-    if (!zone) throw new Error("ትክክለኛ ዞን ይምረጡ።");
-    return await Woreda.create({ name, zone_id, created_by: userId }, { transaction });
-  } catch (error) {
-    throw new Error(error.message || "ወረዳ መፍጠር አልተሳካም።");
-  }
-};
-
-exports.getAllWoredasService = async (zoneId) => {
-  try {
-    const where = zoneId ? { zone_id: zoneId, deleted_at: { [Op.eq]: null } } : { deleted_at: { [Op.eq]: null } };
-    return await Woreda.findAll({ where });
-  } catch (error) {
-    throw new Error(error.message || "ወረዳዎችን ማግኘት አልተሳካም።");
-  }
-};
-
-exports.getWoredaByIdService = async (id) => {
-  try {
-    const woreda = await Woreda.findByPk(id);
-    if (!woreda) throw new Error("ወረዳ አልተገኘም።");
-    return woreda;
-  } catch (error) {
-    throw new Error(error.message || "ወረዳ ማግኘት አልተሳካም።");
-  }
-};
-
-exports.updateWoredaService = async (id, data, userId, transaction) => {
-  const { name, zone_id } = data;
-  try {
-    const woreda = await Woreda.findByPk(id, { transaction });
-    if (!woreda) throw new Error("ወረዳ አልተገኘም።");
-    if (name && name !== woreda.name) {
-      const existingWoreda = await Woreda.findOne({
-        where: { name, zone_id: zone_id || woreda.zone_id, deleted_at: { [Op.eq]: null } },
-        transaction,
-      });
-      if (existingWoreda) throw new Error("ይህ ስም ያለው ወረዳ ተመዝግቧል።");
+    if (existingWoreda) {
+      throw new Error("የወረዳ ስም በዚህ ዞን ውስጥ ተይዟል።");
     }
-    if (zone_id) {
-      const zone = await Zone.findByPk(zone_id, { transaction });
-      if (!zone) throw new Error("ትክክለኛ ዞን ይምረጡ።");
-    }
-    await woreda.update({ name, zone_id, updated_by: userId }, { transaction });
-    return woreda;
-  } catch (error) {
-    throw new Error(error.message || "ወረዳ ማዘመን አልተሳካም።");
   }
+
+  let code = woreda.code;
+  if (zone_id && zone_id !== woreda.zone_id) {
+    const zone = await Zone.findByPk(zone_id);
+    if (!zone) {
+      throw new Error("ትክክለኛ ዞን ይምረጡ።");
+    }
+    const count = await Woreda.count({ where: { zone_id } });
+    code = `${zone.code}-W${count + 1}`;
+  }
+
+  await woreda.update({
+    name,
+    zone_id,
+    code,
+    updated_by: updatedByUserId || null,
+  });
+
+  return Woreda.findByPk(id, {
+    include: [
+      { model: Zone, as: "zone" },
+      { model: AdministrativeUnit, as: "administrativeUnits" },
+    ],
+  });
 };
 
-exports.deleteWoredaService = async (id, userId, transaction) => {
-  try {
-    const woreda = await Woreda.findByPk(id, { transaction });
-    if (!woreda) throw new Error("ወረዳ አልተገኘም።");
-    await woreda.destroy({ transaction });
-  } catch (error) {
-    throw new Error(error.message || "ወረዳ መሰረዝ አልተሳካም።");
+const deleteWoredaService = async (id, deletedByUserId) => {
+  const woreda = await Woreda.findByPk(id, { where: { deleted_at: null } });
+  if (!woreda) {
+    throw new Error("ወረዳ አልተገኘም።");
   }
+
+  await woreda.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
+};
+
+module.exports = {
+  createWoredaService,
+  getAllWoredasService,
+  getWoredaByIdService,
+  updateWoredaService,
+  deleteWoredaService,
 };
