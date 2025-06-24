@@ -23,10 +23,7 @@ const OWNERSHIP_TYPES = {
   DISPLACEMENT: "መፈናቀል",
 };
 
-module.exports = {
-  LAND_USE_TYPES,
-  OWNERSHIP_TYPES,
-  model: (db, DataTypes) => {
+module.exports =  (db, DataTypes) => {
     const LandRecord = db.define(
       "LandRecord",
       {
@@ -390,5 +387,5 @@ module.exports = {
     );
 
     return LandRecord;
-  },
-};
+  };
+// 

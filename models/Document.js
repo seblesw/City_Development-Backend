@@ -9,9 +9,7 @@ const DOCUMENT_TYPES = {
   OTHER: "ሌላ",
 };
 
-module.exports = {
-  DOCUMENT_TYPES,
-  model: (db, DataTypes) => {
+module.exports = (db, DataTypes) => {
     const Document = db.define(
       "Document",
       {
@@ -130,7 +128,7 @@ module.exports = {
           { fields: ["land_record_id"] },
           { fields: ["application_id"] },
           { fields: ["document_type"] },
-          { unique: true, fields: ["reference_number", "land_record_id"], where: { deleted_at: { [Op.eq]: null } } },
+          { unique: true, fields: ["reference_number", "land_record_id"], },
         ],
         hooks: {
           beforeCreate: async (document, options) => {
@@ -218,5 +216,5 @@ module.exports = {
     );
 
     return Document;
-  },
+  
 };

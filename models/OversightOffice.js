@@ -53,8 +53,8 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { unique: true, fields: ["code"], where: { deleted_at: { [Op.eq]: null } } },
-        { unique: true, fields: ["name", "region_id"], where: { deleted_at: { [Op.eq]: null } } },
+        { unique: true, fields: ["code"],},
+        { unique: true, fields: ["name", "region_id"],},
         { fields: ["region_id"] },
         { fields: ["zone_id"], where: { zone_id: { [Op.ne]: null } } },
         { fields: ["woreda_id"], where: { woreda_id: { [Op.ne]: null } } },

@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv').config();
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { sequelize } = require('./models'); 
+const db = require('./config/database'); 
 const regionRoutes = require('./routes/regionRoutes'); 
 const ZoneRoutes = require('./routes/zoneRoutes');
 const WoredaRoutes = require('./routes/woredaRoutes');
@@ -46,12 +46,12 @@ app.use('/api/v1/land-payments', landPaymentRoutes);
 // Start server
 const startServer = async () => {
   try {
-    await sequelize.authenticate();
+    await db.authenticate();
     console.log('Database connected successfully');
     // Sync models with the database
     // Set force to true only in development to drop tables={force:true}
     // set alter to true for to add new attribuete with out drop existing table {alter:true}
-    await sequelize.sync({force:true}); 
+    await db.sync({force:true}); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

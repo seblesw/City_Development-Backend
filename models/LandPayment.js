@@ -28,12 +28,7 @@ const NOTIFICATION_STATUSES = {
   FAILED: "አልተሳካም",
 };
 
-module.exports = {
-  PAYMENT_TYPES,
-  PAYMENT_STATUSES,
-  PAYMENT_METHODS,
-  NOTIFICATION_STATUSES,
-  model: (db, DataTypes) => {
+module.exports = (db, DataTypes) => {
     const LandPayment = db.define(
       "LandPayment",
       {
@@ -510,5 +505,5 @@ module.exports = {
     );
 
     return LandPayment;
-  },
+  
 };

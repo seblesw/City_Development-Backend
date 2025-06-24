@@ -1,10 +1,12 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
+
 // ሞዴሎችን በተከታታይ ቅደም ተከተል መጫን (Load models in dependency order)
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
 const Zone = require("./Zone")(db, DataTypes);
 const Woreda = require("./Woreda")(db, DataTypes);
+const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const User = require("./User")(db, DataTypes);
 const LandRecord = require("./LandRecord")(db, DataTypes);
@@ -18,6 +20,7 @@ const models = {
   Region,
   Zone,
   Woreda,
+  OversightOffice,
   AdministrativeUnit,
   User,
   LandRecord,
@@ -29,7 +32,7 @@ const models = {
 // ግንኙነቶችን መግለጽ (Define associations)
 
 // Role associations
-models.Role.hasMany(models.User, {
+Role.hasMany(User, {
   foreignKey: "role_id",
   as: "users",
   onDelete: "RESTRICT",
@@ -37,61 +40,61 @@ models.Role.hasMany(models.User, {
 });
 
 // User associations
-models.User.belongsTo(models.User, {
+User.belongsTo(User, {
   as: "primaryOwner",
   foreignKey: "primary_owner_id",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.User, {
+User.hasMany(User, {
   as: "coOwners",
   foreignKey: "primary_owner_id",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.User.belongsTo(models.Role, {
+User.belongsTo(Role, {
   foreignKey: "role_id",
   as: "role",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.User.belongsTo(models.AdministrativeUnit, {
+User.belongsTo(AdministrativeUnit, {
   foreignKey: "administrative_unit_id",
   as: "administrativeUnit",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.Application, {
+User.hasMany(Application, {
   as: "applications",
   foreignKey: "user_id",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.LandRecord, {
+User.hasMany(LandRecord, {
   as: "landRecords",
   foreignKey: "user_id",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.Application, {
+User.hasMany(Application, {
   as: "createdApplications",
   foreignKey: "created_by",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.Application, {
+User.hasMany(Application, {
   as: "updatedApplications",
   foreignKey: "updated_by",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.Application, {
+User.hasMany(Application, {
   as: "approvedApplications",
   foreignKey: "approved_by",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.User.hasMany(models.Application, {
+User.hasMany(Application, {
   as: "deletedApplications",
   foreignKey: "deleted_by",
   onDelete: "SET NULL",
@@ -99,7 +102,7 @@ models.User.hasMany(models.Application, {
 });
 
 // Region associations
-models.Region.hasMany(models.Zone, {
+Region.hasMany(Zone, {
   foreignKey: "region_id",
   as: "zones",
   onDelete: "CASCADE",
@@ -107,13 +110,13 @@ models.Region.hasMany(models.Zone, {
 });
 
 // Zone associations
-models.Zone.belongsTo(models.Region, {
+Zone.belongsTo(Region, {
   foreignKey: "region_id",
   as: "region",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-models.Zone.hasMany(models.Woreda, {
+Zone.hasMany(Woreda, {
   foreignKey: "zone_id",
   as: "woredas",
   onDelete: "CASCADE",
@@ -121,51 +124,53 @@ models.Zone.hasMany(models.Woreda, {
 });
 
 // Woreda associations
-models.Woreda.belongsTo(models.Zone, {
+Woreda.belongsTo(Zone, {
   foreignKey: "zone_id",
   as: "zone",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-models.Woreda.hasMany(models.AdministrativeUnit, {
+Woreda.hasMany(AdministrativeUnit, {
   foreignKey: "woreda_id",
   as: "administrativeUnits",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
+// OversightOffice associations
+OversightOffice.hasMany(AdministrativeUnit, {
+  foreignKey: "oversight_office_id",
+  as: "administrativeUnits",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
 // AdministrativeUnit associations
-models.AdministrativeUnit.belongsTo(models.Woreda, {
+AdministrativeUnit.belongsTo(OversightOffice, {
+  foreignKey: "oversight_office_id",
+  as: "oversightOffice",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+AdministrativeUnit.belongsTo(Woreda, {
   foreignKey: "woreda_id",
   as: "woreda",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-models.AdministrativeUnit.belongsTo(models.AdministrativeUnit, {
-  foreignKey: "parent_id",
-  as: "parent",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-models.AdministrativeUnit.hasMany(models.AdministrativeUnit, {
-  foreignKey: "parent_id",
-  as: "children",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-models.AdministrativeUnit.hasMany(models.User, {
+AdministrativeUnit.hasMany(User, {
   foreignKey: "administrative_unit_id",
   as: "users",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.AdministrativeUnit.hasMany(models.Application, {
+AdministrativeUnit.hasMany(Application, {
   foreignKey: "administrative_unit_id",
   as: "applications",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.AdministrativeUnit.hasMany(models.LandRecord, {
+AdministrativeUnit.hasMany(LandRecord, {
   foreignKey: "administrative_unit_id",
   as: "landRecords",
   onDelete: "RESTRICT",
@@ -173,19 +178,19 @@ models.AdministrativeUnit.hasMany(models.LandRecord, {
 });
 
 // LandRecord associations
-models.LandRecord.belongsTo(models.User, {
+LandRecord.belongsTo(User, {
   foreignKey: "user_id",
   as: "owner",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.LandRecord.belongsTo(models.AdministrativeUnit, {
+LandRecord.belongsTo(AdministrativeUnit, {
   foreignKey: "administrative_unit_id",
   as: "administrativeUnit",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.LandRecord.belongsTo(models.Application, {
+LandRecord.belongsTo(Application, {
   foreignKey: "application_id",
   as: "application",
   onDelete: "SET NULL",
@@ -193,61 +198,61 @@ models.LandRecord.belongsTo(models.Application, {
 });
 
 // Application associations
-models.Application.belongsTo(models.User, {
+Application.belongsTo(User, {
   foreignKey: "user_id",
   as: "owner",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.Application.belongsTo(models.User, {
+Application.belongsTo(User, {
   foreignKey: "created_by",
   as: "creator",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.Application.belongsTo(models.User, {
+Application.belongsTo(User, {
   foreignKey: "updated_by",
   as: "updater",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.Application.belongsTo(models.User, {
+Application.belongsTo(User, {
   foreignKey: "approved_by",
   as: "approver",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.Application.belongsTo(models.User, {
+Application.belongsTo(User, {
   foreignKey: "deleted_by",
   as: "deleter",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.Application.belongsTo(models.AdministrativeUnit, {
+Application.belongsTo(AdministrativeUnit, {
   foreignKey: "administrative_unit_id",
   as: "administrativeUnit",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-models.Application.hasOne(models.LandRecord, {
+Application.hasOne(LandRecord, {
   foreignKey: "application_id",
   as: "landRecord",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-models.Application.hasMany(models.Document, {
+Application.hasMany(Document, {
   foreignKey: "application_id",
   as: "documents",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-models.Application.hasMany(models.LandPayment, {
+Application.hasMany(LandPayment, {
   foreignKey: "application_id",
   as: "payments",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-models.Application.hasMany(models.Application, {
+Application.hasMany(Application, {
   foreignKey: "related_application_id",
   as: "relatedApplications",
   onDelete: "SET NULL",
@@ -255,7 +260,7 @@ models.Application.hasMany(models.Application, {
 });
 
 // LandPayment associations
-models.LandPayment.belongsTo(models.Application, {
+LandPayment.belongsTo(Application, {
   foreignKey: "application_id",
   as: "application",
   onDelete: "CASCADE",
@@ -263,23 +268,26 @@ models.LandPayment.belongsTo(models.Application, {
 });
 
 // Document associations
-models.Document.belongsTo(models.Application, {
+Document.belongsTo(Application, {
   foreignKey: "application_id",
   as: "application",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-// ሞዴሎችን ከግንኙነቶች ጋር ማዋቀር (Initialize model-specific associations)
-Object.values(models).forEach((model) => {
-  if (typeof model.associate === "function") {
-    model.associate(models);
-  }
-});
-
 // የሴኪውል እና ሞዴሎችን መላክ (Export Sequelize instance and models)
 module.exports = {
   sequelize: db,
   Sequelize,
-  ...models,
+  Role,
+  Region,
+  Zone,
+  Woreda,
+  OversightOffice,
+  AdministrativeUnit,
+  User,
+  LandRecord,
+  Application,
+  LandPayment,
+  Document,
 };

@@ -9,7 +9,7 @@ const {
 
 exports.registerUser = async (req, res) => {
   try {
-    const userId = req.user.id; // Assumes authenticated admin or encoder
+    const userId = req.user.id;
     const user = await registerUserService(req.body, userId);
     res.status(201).json({
       status: 'success',
