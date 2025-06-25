@@ -39,6 +39,7 @@ Role.hasMany(User, {
   onUpdate: "CASCADE",
 });
 
+
 // User associations
 User.belongsTo(User, {
   as: "primaryOwner",

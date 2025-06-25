@@ -4,38 +4,37 @@ const {
   getRoleByIdService,
   updateRoleService,
   deleteRoleService,
-} = require('../services/roleService');
+} = require("../services/roleService");
 
 exports.createRole = async (req, res) => {
   try {
     const { name, permissions } = req.body;
-    const userId = req.user.id; // Assumes authenticated admin
-    const role = await createRoleService({ name, permissions }, userId);
+    const role = await createRoleService({ name, permissions });
     res.status(201).json({
-      status: 'success',
+      status: "success",
       data: role,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ሚና መፍጠር አልተሳካም።',
+      status: "error",
+      message: error.message || "ሚና መፍጠር አልተሳካም።",
     });
   }
 };
 
 exports.getAllRoles = async (req, res) => {
   try {
-    const roles = await getAllRolesService();
+    const roles = await getAllRolesService(req.query);
     const numberOfRoles = roles.length;
     res.status(200).json({
-      status: 'success',
+      status: "success",
       numberOfRoles,
       data: roles,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ሚናዎችን ማግኘቤት አልተሳካም።',
+      status: "error",
+      message: error.message || "ሚናዎችን ማግኘት አልተሳካም።",
     });
   }
 };
@@ -44,13 +43,13 @@ exports.getRoleById = async (req, res) => {
   try {
     const role = await getRoleByIdService(req.params.id);
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: role,
     });
   } catch (error) {
     res.status(404).json({
-      status: 'error',
-      message: error.message || 'ሚና አልተገኘም።',
+      status: "error",
+      message: error.message || "ሚና አልተገኘም።",
     });
   }
 };
@@ -58,29 +57,27 @@ exports.getRoleById = async (req, res) => {
 exports.updateRole = async (req, res) => {
   try {
     const { name, permissions } = req.body;
-    const userId = req.user.id;
-    const role = await updateRoleService(req.params.id, { name, permissions }, userId);
+    const role = await updateRoleService(req.params.id, { name, permissions });
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: role,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message || 'ሚና ማዘመን አልተሳካም።',
+      status: "error",
+      message: error.message || "ሚና ማዘመን አልተሳካም።",
     });
   }
 };
 
 exports.deleteRole = async (req, res) => {
   try {
-    const userId = req.user.id;
-    await deleteRoleService(req.params.id, userId);
+    await deleteRoleService(req.params.id);
     res.status(204).send();
   } catch (error) {
-    res.status(404).json({
-      status: 'error',
-      message: error.message || 'ሚና መሰረዝ አልተሳካም።',
+    res.status(400).json({
+      status: "error",
+      message: error.message || "ሚና መሰረዝ አልተሳካም።",
     });
   }
 };

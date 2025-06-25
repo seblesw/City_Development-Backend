@@ -101,7 +101,7 @@ module.exports = (db, DataTypes) => {
       },
       action_log: {
         type: DataTypes.JSONB,
-        allowNull: false,
+        allowNull: true,
         defaultValue: [],
         validate: {
           isValidLog(value) {
