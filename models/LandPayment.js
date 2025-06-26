@@ -6,6 +6,7 @@ const PAYMENT_TYPES = {
   COMMERCIAL_SERVICE_FEE: "የንግድ አገልግሎት ክፍያ",
   COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
+  YENEGADA_AMETAWI_KFYA: "የንግድ አስተዋጽኦ",
 };
 
 const PAYMENT_STATUSES = {
