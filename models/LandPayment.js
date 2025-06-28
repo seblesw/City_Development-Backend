@@ -16,13 +16,6 @@ const PAYMENT_STATUSES = {
   CANCELLED: "ተሰርዟል",
 };
 
-const PAYMENT_METHODS = {
-  CASH: "ጥሬ ገንዘብ",
-  BANK_TRANSFER: "የባንክ ማስተላለፍ",
-  MOBILE_MONEY: "የሞባይል ገንዘብ",
-  ONLINE_PAYMENT: "የመስመር ላይ ክፍያ",
-};
-
 module.exports = (db, DataTypes) => {
   const LandPayment = db.define(
     "LandPayment",
@@ -61,19 +54,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      receipt_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: {
-            args: [0, 50],
-            msg: "የተቀበለ ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።",
-          },
-          notEmptyString(value) {
-            if (value === "") throw new Error("የተቀበለ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
-        },
-      },
       currency: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -92,17 +72,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(PAYMENT_STATUSES)],
-            msg: "የክፍያ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
-          },
-        },
-      },
-      payment_method: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          isIn: {
-            args: [Object.values(PAYMENT_METHODS)],
-            msg: "የክፍያ ዘዴ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: "የክፍያ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -118,32 +88,6 @@ module.exports = (db, DataTypes) => {
           len: {
             args: [0, 500],
             msg: "የቅጣት ምክንያት ከ500 ቁምፊዎች መብለጥ አይችልም።",
-          },
-        },
-      },
-      transaction_reference: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: {
-            args: [0, 50],
-            msg: "የግብይት ማጣቀሻ ከ50 ቁምፊዎች መብለጥ አይችልም።",
-          },
-          notEmptyString(value) {
-            if (value === "") throw new Error("የግብይት ማጣቀሻ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
-        },
-      },
-      external_payment_id: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: {
-            args: [0, 50],
-            msg: "የውጭ ክፍያ መለያ ከ50 ቁምፊዎች መብለጥ አይችልም።",
-          },
-          notEmptyString(value) {
-            if (value === "") throw new Error("የውጭ ክፍያ መለያ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -173,8 +117,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["payment_type"] },
         { fields: ["payment_status"] },
         { fields: ["payer_id"] },
-        { unique: true, fields: ["transaction_reference", "land_record_id"], where: { transaction_reference: { [Op.ne]: null } } },
-        { unique: true, fields: ["external_payment_id", "land_record_id"], where: { external_payment_id: { [Op.ne]: null } } },
       ],
       hooks: {
         beforeCreate: async (payment, options) => {
@@ -184,7 +126,7 @@ module.exports = (db, DataTypes) => {
             transaction: options.transaction,
           });
           if (!payer || !["መመዝገቢ", "አስተዳደር"].includes(payer.role?.name)) {
-            throw new Error("ክፍያ መፈፀም የሚችሉት መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+            throw new Error("ክፍያ መፈፀም የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
           }
 
           // Validate land_record_id
@@ -193,37 +135,11 @@ module.exports = (db, DataTypes) => {
           });
           if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
 
-          // Validate transaction_reference uniqueness within land_record_id
-          if (payment.transaction_reference) {
-            const existingRef = await db.models.LandPayment.findOne({
-              where: {
-                transaction_reference: payment.transaction_reference,
-                land_record_id: payment.land_record_id,
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingRef) throw new Error("ይህ የግብይት ማጣቀሻ ለዚህ መሬት መዝገብ ተመዝግቧል።");
-          }
-
-          // Validate external_payment_id uniqueness within land_record_id
-          if (payment.external_payment_id) {
-            const existingExt = await db.models.LandPayment.findOne({
-              where: {
-                external_payment_id: payment.external_payment_id,
-                land_record_id: payment.land_record_id,
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingExt) throw new Error("ይህ የውጭ ክፍያ መለያ ለዚህ መሬት መዝገብ ተመዝግቧል።");
-          }
-
           // Log payment creation in LandRecord.action_log
           landRecord.action_log = [
             ...(landRecord.action_log || []),
             {
-              action: `PAYMENT_CREATED_${payment.payment_type}`,
+              action: `PAYMENT_CREATED_${payment.payment_type || "UNKNOWN"}`,
               changed_by: payment.payer_id,
               changed_at: payment.createdAt || new Date(),
               payment_id: payment.id,
@@ -239,7 +155,7 @@ module.exports = (db, DataTypes) => {
               transaction: options.transaction,
             });
             if (!payer || !["መመዝገቢ", "አስተዳደር"].includes(payer.role?.name)) {
-              throw new Error("ክፍያ መፈፀም የሚችሉት መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+              throw new Error("ክፍያ መፈፀም የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
             }
           }
 
@@ -269,38 +185,6 @@ module.exports = (db, DataTypes) => {
             }
           }
 
-          // Validate transaction_reference uniqueness on update
-          if (payment.changed("transaction_reference") || payment.changed("land_record_id")) {
-            if (payment.transaction_reference) {
-              const existingRef = await db.models.LandPayment.findOne({
-                where: {
-                  transaction_reference: payment.transaction_reference,
-                  land_record_id: payment.land_record_id,
-                  id: { [Op.ne]: payment.id },
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (existingRef) throw new Error("ይህ የግብይት ማጣቀሻ ለዚህ መሬት መዝገብ ተመዝግቧል።");
-            }
-          }
-
-          // Validate external_payment_id uniqueness on update
-          if (payment.changed("external_payment_id") || payment.changed("land_record_id")) {
-            if (payment.external_payment_id) {
-              const existingExt = await db.models.LandPayment.findOne({
-                where: {
-                  external_payment_id: payment.external_payment_id,
-                  land_record_id: payment.land_record_id,
-                  id: { [Op.ne]: payment.id },
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (existingExt) throw new Error("ይህ የውጭ ክፍያ መለያ ለዚህ መሬት መዝገብ ተመዝግቧል።");
-            }
-          }
-
           // Log payment update in LandRecord.action_log
           const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
             transaction: options.transaction,
@@ -309,7 +193,7 @@ module.exports = (db, DataTypes) => {
             landRecord.action_log = [
               ...(landRecord.action_log || []),
               {
-                action: `PAYMENT_UPDATED_${payment.payment_type}`,
+                action: `PAYMENT_UPDATED_${payment.payment_type || "UNKNOWN"}`,
                 changed_by: payment.payer_id,
                 changed_at: payment.updatedAt || new Date(),
                 payment_id: payment.id,
