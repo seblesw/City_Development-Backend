@@ -127,11 +127,6 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
-      uploaded_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: "users", key: "id" },
-      },
     },
     {
       tableName: "documents",

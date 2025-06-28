@@ -40,7 +40,7 @@ module.exports = (db, DataTypes) => {
       },
       payment_type: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [Object.values(PAYMENT_TYPES)],
@@ -49,12 +49,28 @@ module.exports = (db, DataTypes) => {
         },
       },
       amount: {
-        type: DataTypes.FLOAT,
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
         validate: {
+          isDecimal: {
+            msg: "የክፍያ መጠን ትክክለኛ መሆን አለበት።",
+          },
           min: {
             args: [0],
-            msg: "የክፍያ መጠን ከ0 በታች መሆን አይችልም።",
+            msg: "የክፍያ መጠን 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      },
+      receipt_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የተቀበለ ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።",
+          },
+          notEmptyString(value) {
+            if (value === "") throw new Error("የተቀበለ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
