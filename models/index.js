@@ -12,12 +12,6 @@ const User = require("./User")(db, DataTypes);
 const LandRecord = require("./LandRecord")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
-
-// ሞዴሎች ዝርዝር (Models object)
-
-
-// ግንኙነቶችን መግለጽ (Define associations)
-
 // Role associations
 Role.hasMany(User, {
   foreignKey: "role_id",
@@ -257,6 +251,12 @@ Document.belongsTo(LandRecord, {
   foreignKey: "land_record_id",
   as: "landRecord",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Document.belongsTo(User, {
+  foreignKey: "uploaded_by",
+  as: "uploader",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 

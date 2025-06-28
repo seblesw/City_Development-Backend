@@ -33,6 +33,11 @@ const LAND_USE_TYPES = {
   RECREATION: "መዝናኛ",
   OTHER: "ሌላ",
 };
+const ZOONING_TYPES = {
+  CENTER_BUSSINESS: "የንግድ ማዕከል",
+  TRANSITION_ZONE: "የሽግግር ቀጠና",
+  EXPANSION_ZONE: "የማስፋት ቀጠና",
+};
 
 const OWNERSHIP_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
@@ -116,7 +121,7 @@ module.exports = (db, DataTypes) => {
             }
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የምሥራቅ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የምሥራቅ አዋሳኝ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -247,6 +252,30 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      plot_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 50], msg: "የመሬት ክፍል ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+          is: {
+            args: /^[A-Za-z0-9-]+$/,
+            msg: "የመሬት ክፍል ቁጥር ፊደል፣ ቁጥር ወዯም ሰረዝ ብቻ መያዝ አለበት።",
+          },
+          notEmptyString(value) {
+            if (value === "") throw new Error("የመሬት ክፍል ቁጥር ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+          },
+        },
+      },
+      zoning_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(ZOONING_TYPES)],
+            msg: "የመሬት ዝርዝር ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+          },
+        },
+      },
       status_history: {
         type: DataTypes.JSONB,
         allowNull: false,
@@ -342,58 +371,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
-      submitted_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        validate: {
-          isDate: { msg: "ትክክለኛ ቀን ያስገቡ።" },
-          notFutureDate(value) {
-            const today = new Date();
-            if (value && new Date(value) > today) {
-              throw new Error("የገባበት ቀን ወደፊት መሆን አዯችልም።");
-            }
-          },
-        },
-      },
-      approved_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        validate: {
-          isDate: { msg: "ትክክለኛ ቀን ያስገቡ።" },
-          notFutureDate(value) {
-            const today = new Date();
-            if (value && new Date(value) > today) {
-              throw new Error("የጸደቀበት ቀን ወደፊት መሆን አዯችልም።");
-            }
-          },
-        },
-      },
-      rejected_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        validate: {
-          isDate: { msg: "ትክክለኛ ቀን ያስገቡ።" },
-          notFutureDate(value) {
-            const today = new Date();
-            if (value && new Date(value) > today) {
-              throw new Error("ውድቅ የተደረገበት ቀን ወደፊት መሆን አዯችልም።");
-            }
-          },
-        },
-      },
-      last_notified_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        validate: {
-          isDate: { msg: "ትክክለኛ ቀን ያስገቡ።" },
-          notFutureDate(value) {
-            const today = new Date();
-            if (value && new Date(value) > today) {
-              throw new Error("የመጨረሻ ማሳወቂያ ቀን ወደፊት መሆን አዯችልም።");
-            }
-          },
-        },
-      },
     },
     {
       tableName: "land_records",
@@ -411,10 +388,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["priority"] },
         { fields: ["notification_status"] },
         { fields: ["created_by"] },
-        { fields: ["submitted_at"] },
-        { fields: ["approved_at"] },
-        { fields: ["rejected_at"] },
-        { fields: ["last_notified_at"] },
       ],
       hooks: {
         beforeCreate: async (landRecord, options) => {
@@ -475,19 +448,19 @@ module.exports = (db, DataTypes) => {
           });
           if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
 
-          // Initialize status_history and action_log
+          // Initialize status_history and action_log using createdAt
           landRecord.status_history = [
             {
               status: landRecord.record_status,
               changed_by: landRecord.created_by,
-              changed_at: new Date(),
+              changed_at: landRecord.createdAt || new Date(),
             },
           ];
           landRecord.action_log = [
             {
               action: "CREATED",
               changed_by: landRecord.created_by,
-              changed_at: new Date(),
+              changed_at: landRecord.createdAt || new Date(),
             },
           ];
         },
@@ -515,13 +488,13 @@ module.exports = (db, DataTypes) => {
               throw new Error("መዝገብ መቀየር የሚችሉት መመዝገቢ ወዯም አስተዳደር ብቻ ናቸው።");
             }
 
-            // Update status_history and action_log
+            // Update status_history and action_log using updatedAt
             landRecord.status_history = [
               ...(landRecord.status_history || []),
               {
                 status: landRecord.record_status,
                 changed_by: landRecord.updated_by,
-                changed_at: new Date(),
+                changed_at: landRecord.updatedAt || new Date(),
               },
             ];
             landRecord.action_log = [
@@ -529,33 +502,18 @@ module.exports = (db, DataTypes) => {
               {
                 action: `STATUS_CHANGED_TO_${landRecord.record_status}`,
                 changed_by: landRecord.updated_by,
-                changed_at: new Date(),
+                changed_at: landRecord.updatedAt || new Date(),
               },
             ];
 
             // Reset notification_status on status change
             landRecord.notification_status = NOTIFICATION_STATUSES.NOT_SENT;
 
-            // Update timestamps and approved_by
-            if (landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
-              landRecord.submitted_at = new Date();
-              const documents = await db.models.Document.findOne({
-                where: {
-                  land_record_id: landRecord.id,
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (!documents) {
-                throw new Error("ቀርቧል ሁኔታ ቢያንስ አንድ ሰነድ ይፈለጋል።");
-              }
-            }
+            // Update approved_by and handle rejection_reason
             if (landRecord.record_status === RECORD_STATUSES.APPROVED) {
-              landRecord.approved_at = new Date();
               landRecord.approved_by = landRecord.updated_by;
             }
             if (landRecord.record_status === RECORD_STATUSES.REJECTED) {
-              landRecord.rejected_at = new Date();
               if (!landRecord.rejection_reason) {
                 throw new Error("ውድቅ ሁኔታ የውድቅ ምክንያት ይፈለጋል።");
               }
@@ -567,7 +525,20 @@ module.exports = (db, DataTypes) => {
               landRecord.record_status === RECORD_STATUSES.SUBMITTED
             ) {
               landRecord.rejection_reason = null;
-              landRecord.rejected_at = null;
+            }
+
+            // Validate document requirement for SUBMITTED status
+            if (landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
+              const documents = await db.models.Document.findOne({
+                where: {
+                  land_record_id: landRecord.id,
+                  deleted_at: { [Op.eq]: null },
+                },
+                transaction: options.transaction,
+              });
+              if (!documents) {
+                throw new Error("ቀርቧል ሁኔታ ቢያንስ አንድ ሰነድ ይፈለጋል።");
+              }
             }
           }
 
@@ -638,7 +609,7 @@ module.exports = (db, DataTypes) => {
               {
                 action: "LAND_RECORD_UPDATED",
                 changed_by: landRecord.updated_by,
-                changed_at: new Date(),
+                changed_at: landRecord.updatedAt || new Date(),
               },
             ];
             await landRecord.save({ transaction: options.transaction });
