@@ -26,16 +26,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "zones", key: "id" },
       },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
       deleted_at:{
         type:DataTypes.DATE,
         allowNull:true,

@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { AdministrativeUnit, Region, Zone, Woreda, OversightOffice, User, Application, LandRecord } = require("../models/index");
+const { AdministrativeUnit, Region, Zone, Woreda, OversightOffice, User, LandRecord } = require("../models/index");
 
 const typeLevels = {
   "ሪጂኦፖሊታን": 1,
@@ -78,7 +78,6 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
-      { model: Application, as: "applications" },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -93,7 +92,6 @@ const getAllAdministrativeUnitsService = async () => {
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
-      { model: Application, as: "applications" },
       { model: LandRecord, as: "landRecords" },
     ],
     order: [["createdAt", "DESC"]],
@@ -109,7 +107,6 @@ const getAdministrativeUnitByIdService = async (id) => {
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
-      { model: Application, as: "applications" },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -197,7 +194,6 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId) =>
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
-      { model: Application, as: "applications" },
       { model: LandRecord, as: "landRecords" },
     ],
   });

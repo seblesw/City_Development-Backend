@@ -90,16 +90,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         defaultValue: null,
       },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
     },
     {
       tableName: "administrative_units",

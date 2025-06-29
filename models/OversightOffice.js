@@ -36,16 +36,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: { len: [1, 50] },
       },
-      created_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
-      updated_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
     },
     {
       tableName: "oversight_offices",

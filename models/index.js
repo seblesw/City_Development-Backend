@@ -46,12 +46,20 @@ User.belongsTo(AdministrativeUnit, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+User.hasMany(OversightOffice, {
+  foreignKey: "oversight_office_id",
+  as: "oversightOffice",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
 User.hasMany(LandRecord, {
   as: "landRecords",
   foreignKey: "user_id",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+
 User.hasMany(LandRecord, {
   as: "createdLandRecords",
   foreignKey: "created_by",
@@ -95,18 +103,8 @@ User.hasMany(LandPayment, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-User.hasMany(LandPayment, {
-  as: "createdPayments",
-  foreignKey: "created_by",
-  onDelete: "RESTRICT",
-  onUpdate: "CASCADE",
-});
-User.hasMany(LandPayment, {
-  as: "updatedPayments",
-  foreignKey: "updated_by",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
+
+
 
 // Region associations
 Region.hasMany(Zone, {
@@ -147,6 +145,13 @@ Zone.hasMany(AdministrativeUnit, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+Zone.hasMany(OversightOffice, {
+  foreignKey: "oversight_office_id",
+  as: "oversightOffices",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
 
 // Woreda associations
 Woreda.belongsTo(Zone, {
@@ -158,6 +163,12 @@ Woreda.belongsTo(Zone, {
 Woreda.hasMany(AdministrativeUnit, {
   foreignKey: "woreda_id",
   as: "administrativeUnits",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Woreda.hasMany(OversightOffice, {
+  foreignKey: "oversight_office_id",
+  as: "oversightOffices",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
@@ -181,6 +192,20 @@ OversightOffice.belongsTo(Region, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+OversightOffice.belongsTo(Zone,{
+  foreignKey:"zone_id",
+  as:"zone",
+  onDelete:"RESTRICT",
+  onUpdate:"CASCADE"
+  
+})
+OversightOffice.belongsTo(Woreda,{
+  foreignKey:"woreda_id",
+  as:"woreda",
+  onDelete:"RESTRICT",
+  onUpdate:"CASCADE"
+  
+})
 
 // AdministrativeUnit associations
 AdministrativeUnit.belongsTo(OversightOffice, {
@@ -283,18 +308,8 @@ LandPayment.belongsTo(User, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-LandPayment.belongsTo(User, {
-  foreignKey: "created_by",
-  as: "creator",
-  onDelete: "RESTRICT",
-  onUpdate: "CASCADE",
-});
-LandPayment.belongsTo(User, {
-  foreignKey: "updated_by",
-  as: "updater",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
+
+
 
 // Document associations
 Document.belongsTo(LandRecord, {

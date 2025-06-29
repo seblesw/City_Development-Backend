@@ -71,7 +71,10 @@ module.exports = (db, DataTypes) => {
         unique: { msg: "ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።" },
         validate: {
           notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [5, 50], msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+          len: {
+            args: [5, 50],
+            msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
           is: {
             args: /^[A-Za-z0-9-]+$/,
             msg: "ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።",
@@ -170,13 +173,27 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { fields: ["email"], unique: true, where: { email: { [Op.ne]: null } } },
-        { fields: ["phone_number"], unique: true, where: { phone_number: { [Op.ne]: null } } },
+        {
+          fields: ["email"],
+          unique: true,
+          where: { email: { [Op.ne]: null } },
+        },
+        {
+          fields: ["phone_number"],
+          unique: true,
+          where: { phone_number: { [Op.ne]: null } },
+        },
         { fields: ["national_id"], unique: true },
         { fields: ["role_id"], where: { role_id: { [Op.ne]: null } } },
         { fields: ["administrative_unit_id"] },
-        { fields: ["oversight_office_id"], where: { oversight_office_id: { [Op.ne]: null } } },
-        { fields: ["primary_owner_id"], where: { primary_owner_id: { [Op.ne]: null } } },
+        {
+          fields: ["oversight_office_id"],
+          where: { oversight_office_id: { [Op.ne]: null } },
+        },
+        {
+          fields: ["primary_owner_id"],
+          where: { primary_owner_id: { [Op.ne]: null } },
+        },
         { fields: ["is_active"] },
         { fields: ["created_at"] },
         { fields: ["deleted_at"], where: { deleted_at: { [Op.ne]: null } } },
@@ -184,9 +201,12 @@ module.exports = (db, DataTypes) => {
       hooks: {
         beforeCreate: async (user, options) => {
           // Validate administrative_unit_id
-          const adminUnit = await db.models.AdministrativeUnit.findByPk(user.administrative_unit_id, {
-            transaction: options.transaction,
-          });
+          const adminUnit = await db.models.AdministrativeUnit.findByPk(
+            user.administrative_unit_id,
+            {
+              transaction: options.transaction,
+            }
+          );
           if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
 
           // Validate role_id
@@ -201,7 +221,9 @@ module.exports = (db, DataTypes) => {
 
           // Validate email or phone_number for primary users
           if (!user.primary_owner_id && !user.email && !user.phone_number) {
-            throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።");
+            throw new Error(
+              "ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።"
+            );
           }
 
           // Validate marital_status and primary_owner_id
@@ -216,7 +238,9 @@ module.exports = (db, DataTypes) => {
 
           // Validate primary_owner_id
           if (user.primary_owner_id) {
-            const primaryOwner = await User.findByPk(user.primary_owner_id, { transaction: options.transaction });
+            const primaryOwner = await User.findByPk(user.primary_owner_id, {
+              transaction: options.transaction,
+            });
             if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
               throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
             }
@@ -245,9 +269,12 @@ module.exports = (db, DataTypes) => {
         beforeUpdate: async (user, options) => {
           // Validate administrative_unit_id
           if (user.changed("administrative_unit_id")) {
-            const adminUnit = await db.models.AdministrativeUnit.findByPk(user.administrative_unit_id, {
-              transaction: options.transaction,
-            });
+            const adminUnit = await db.models.AdministrativeUnit.findByPk(
+              user.administrative_unit_id,
+              {
+                transaction: options.transaction,
+              }
+            );
             if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
           }
 
@@ -262,14 +289,22 @@ module.exports = (db, DataTypes) => {
           }
 
           // Validate email or phone_number for primary users
-          if ((user.changed("email") || user.changed("phone_number")) && !user.primary_owner_id) {
+          if (
+            (user.changed("email") || user.changed("phone_number")) &&
+            !user.primary_owner_id
+          ) {
             if (!user.email && !user.phone_number) {
-              throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።");
+              throw new Error(
+                "ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።"
+              );
             }
           }
 
           // Validate marital_status and primary_owner_id
-          if (user.changed("marital_status") || user.changed("primary_owner_id")) {
+          if (
+            user.changed("marital_status") ||
+            user.changed("primary_owner_id")
+          ) {
             if (user.primary_owner_id && user.marital_status === "ነጠላ") {
               throw new Error("ነጠላ ተጠቃሚዎች የጋራ ባለቤት መኖር አይችሉም።");
             }
@@ -280,7 +315,9 @@ module.exports = (db, DataTypes) => {
 
           // Validate primary_owner_id
           if (user.changed("primary_owner_id") && user.primary_owner_id) {
-            const primaryOwner = await User.findByPk(user.primary_owner_id, { transaction: options.transaction });
+            const primaryOwner = await User.findByPk(user.primary_owner_id, {
+              transaction: options.transaction,
+            });
             if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
               throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
             }

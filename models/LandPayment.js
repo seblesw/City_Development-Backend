@@ -41,19 +41,33 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      amount: {
+      total_amount: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
         validate: {
           isDecimal: {
-            msg: "የክፍያ መጠን ትክክለኛ መሆን አለበት።",
+            msg: "የክፍያ ገንዘብ ትክክለኛ መሆን አለበት።",
           },
           min: {
             args: [0],
-            msg: "የክፍያ መጠን 0 ወይም ከዚያ መሆን አለበት።",
+            msg: "የክፍያ ገንዘብ 0 ወይም ከዚያ መሆን አለበት።",
           },
         },
       },
+      paid_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: false,
+        validate: {
+          isDecimal: {
+            msg: "የተከፈለ ገንዘብ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የተከፈለ ገንዘብ 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      },
+      
       currency: {
         type: DataTypes.STRING,
         allowNull: false,
