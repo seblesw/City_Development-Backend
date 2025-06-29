@@ -1,5 +1,5 @@
-const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
+const bcrypt = require("bcryptjs");
 
 module.exports = (db, DataTypes) => {
   const User = db.define(
@@ -97,8 +97,8 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           isIn: {
-            args: [["ነጠላ", "ባለትዳር", "ፍቺ", "ባልዋይ"]],
-            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር, ፍቺ, ባልዋይ) ውስጥ አንዱ መሆን አለበት።",
+            args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"]],
+            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር, ቤተሰብ, የጋራ ባለቤትነት) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -126,6 +126,29 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      action_log: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        validate: {
+          isValidLog(value) {
+            if (!Array.isArray(value)) {
+              throw new Error("የተግባር መዝገብ ዝርዝር መሆን አለበት።");
+            }
+            for (const entry of value) {
+              if (!entry.action || typeof entry.action !== "string") {
+                throw new Error("የተግባ�r መዝገብ ተግባር ትክክለኛ መሆን አለበት።");
+              }
+              if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
+                throw new Error("የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
+              }
+              if (!entry.changed_by) {
+                throw new Error("የተግባር መዝገብ ተቀያሪ መግለጥ አለበት።");
+              }
+            }
+          },
+        },
+      },
       deleted_at: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -139,7 +162,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
-        
       },
     },
     {
@@ -156,34 +178,72 @@ module.exports = (db, DataTypes) => {
         { fields: ["oversight_office_id"], where: { oversight_office_id: { [Op.ne]: null } } },
         { fields: ["primary_owner_id"], where: { primary_owner_id: { [Op.ne]: null } } },
         { fields: ["is_active"] },
+        { fields: ["created_at"] },
+        { fields: ["deleted_at"], where: { deleted_at: { [Op.ne]: null } } },
       ],
       hooks: {
         beforeCreate: async (user, options) => {
+          // Validate administrative_unit_id
           const adminUnit = await db.models.AdministrativeUnit.findByPk(user.administrative_unit_id, {
             transaction: options.transaction,
           });
           if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
 
-          if (!user.email && !user.phone_number) {
-            throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት።");
+          // Validate role_id
+          if (user.role_id) {
+            const role = await db.models.Role.findByPk(user.role_id, {
+              transaction: options.transaction,
+            });
+            if (!role || !["መመዝገቢ", "አስተዳደር"].includes(role.name)) {
+              throw new Error("ትክክለኛ ሚና ይምረጡ (መመዝገቢ ወይም አስተዳደር)።");
+            }
           }
 
-          if (!user.password && !user.primary_owner_id) {
-            user.password = await bcrypt.hash("12345678", 10);
+          // Validate email or phone_number for primary users
+          if (!user.primary_owner_id && !user.email && !user.phone_number) {
+            throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።");
           }
 
-          if (user.primary_owner_id && user.password) {
-            throw new Error("የጋራ ባለቤቶች የይለፍ ቃል መኖር አይችልም።");
+          // Validate marital_status and primary_owner_id
+          if (user.primary_owner_id && user.marital_status === "ነጠላ") {
+            throw new Error("ነጠላ ተጠቃሚዎች የጋራ ባለቤት መኖር አይችሉም።");
           }
 
+          // Validate relationship_type for co-owners
+          if (user.primary_owner_id && !user.relationship_type) {
+            throw new Error("የጋራ ባለቤቶች የግንኙነት አይነት መግለጥ አለባቸው።");
+          }
+
+          // Validate primary_owner_id
           if (user.primary_owner_id) {
             const primaryOwner = await User.findByPk(user.primary_owner_id, { transaction: options.transaction });
             if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
               throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
             }
+            if (primaryOwner.marital_status === "ነጠላ") {
+              throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይችልም።");
+            }
           }
+
+          // Validate password rules
+          if (!user.primary_owner_id && !user.password) {
+            user.password = await bcrypt.hash("12345678", 10);
+          }
+          if (user.primary_owner_id && user.password) {
+            throw new Error("የጋራ ባለቤቶች የይለፍ ቃል መኖር አይችልም።");
+          }
+
+          // Initialize action_log
+          user.action_log = [
+            {
+              action: "CREATED",
+              changed_by: user.id || user.primary_owner_id || null,
+              changed_at: user.created_at || new Date(),
+            },
+          ];
         },
         beforeUpdate: async (user, options) => {
+          // Validate administrative_unit_id
           if (user.changed("administrative_unit_id")) {
             const adminUnit = await db.models.AdministrativeUnit.findByPk(user.administrative_unit_id, {
               transaction: options.transaction,
@@ -191,15 +251,98 @@ module.exports = (db, DataTypes) => {
             if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
           }
 
-          if (user.changed("email") || user.changed("phone_number")) {
-            if (!user.email && !user.phone_number) {
-              throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት።");
+          // Validate role_id
+          if (user.changed("role_id") && user.role_id) {
+            const role = await db.models.Role.findByPk(user.role_id, {
+              transaction: options.transaction,
+            });
+            if (!role || !["መመዝገቢ", "አስተዳደር"].includes(role.name)) {
+              throw new Error("ትክክለኛ ሚና ይምረጡ (መመዝገቢ ወይም አስተዳደር)።");
             }
           }
 
+          // Validate email or phone_number for primary users
+          if ((user.changed("email") || user.changed("phone_number")) && !user.primary_owner_id) {
+            if (!user.email && !user.phone_number) {
+              throw new Error("ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።");
+            }
+          }
+
+          // Validate marital_status and primary_owner_id
+          if (user.changed("marital_status") || user.changed("primary_owner_id")) {
+            if (user.primary_owner_id && user.marital_status === "ነጠላ") {
+              throw new Error("ነጠላ ተጠቃሚዎች የጋራ ባለቤት መኖር አይችሉም።");
+            }
+            if (user.primary_owner_id && !user.relationship_type) {
+              throw new Error("የጋራ ባለቤቶች የግንኙነት አይነት መግለጥ አለባቸው።");
+            }
+          }
+
+          // Validate primary_owner_id
+          if (user.changed("primary_owner_id") && user.primary_owner_id) {
+            const primaryOwner = await User.findByPk(user.primary_owner_id, { transaction: options.transaction });
+            if (!primaryOwner || primaryOwner.primary_owner_id !== null) {
+              throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
+            }
+            if (primaryOwner.marital_status === "ነጠላ") {
+              throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አዯችልም።");
+            }
+          }
+
+          // Validate password rules
           if (user.changed("password") && user.password) {
+            if (user.primary_owner_id) {
+              throw new Error("የጋራ ባለቤቶች የይለፍ ቃል መኖር አዯችልም።");
+            }
             user.password = await bcrypt.hash(user.password, 10);
           }
+
+          // Log updates in action_log
+          if (user.changed()) {
+            const changedFields = user.changed();
+            user.action_log = [
+              ...(user.action_log || []),
+              {
+                action: "UPDATED",
+                changed_by: user.id || user.primary_owner_id || null,
+                changed_at: user.updated_at || new Date(),
+                changed_fields: changedFields,
+              },
+            ];
+          }
+
+          // Log deactivation in action_log
+          if (user.changed("is_active") && !user.is_active) {
+            user.action_log = [
+              ...(user.action_log || []),
+              {
+                action: "DEACTIVATED",
+                changed_by: user.id || user.primary_owner_id || null,
+                changed_at: user.updated_at || new Date(),
+              },
+            ];
+          }
+        },
+        beforeDestroy: async (user, options) => {
+          // Validate deletion role
+          const deleter = await db.models.User.findByPk(options.changed_by, {
+            include: [{ model: db.models.Role, as: "role" }],
+            transaction: options.transaction,
+          });
+          if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
+            throw new Error("ተጠቃሚ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
+          }
+
+          // Log deletion in action_log
+          user.action_log = [
+            ...(user.action_log || []),
+            {
+              action: "DELETED",
+              changed_by: options.changed_by,
+              changed_at: new Date(),
+            },
+          ];
+          await user.save({ transaction: options.transaction });
         },
       },
     }

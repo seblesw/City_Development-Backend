@@ -33,6 +33,7 @@ const LAND_USE_TYPES = {
   RECREATION: "መዝናኛ",
   OTHER: "ሌላ",
 };
+
 const ZOONING_TYPES = {
   CENTER_BUSSINESS: "የንግድ ማዕከል",
   TRANSITION_ZONE: "የሽግግር ቀጠና",
@@ -92,7 +93,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: false,
         validate: {
-          min: { args: [0.1], msg: "ስፋት ከ0.1 ካሬ ሜትር በታች መሆን አዯችልም።" },
+          min: { args: [0.1], msg: "ስፋት ከ0.1 ካሬ ሜትር በታች መሆን አይችልም።" },
         },
       },
       north_neighbor: {
@@ -132,11 +133,11 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የደቡብ አዋሳኝ ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።" },
           isValidNeighbor(value) {
             if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የደቡብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወዯም ሰረዝ ብቻ መያዝ አለበት።");
+              throw new Error("የደቡብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
             }
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የደቡብ አዋሳኝ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የደቡብ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -147,11 +148,11 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የምዕራብ አዋሳኝ ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።" },
           isValidNeighbor(value) {
             if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የምዕራብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወዯም ሰረዝ ብቻ መያዝ አለበት።");
+              throw new Error("የምዕራብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
             }
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የምዕራብ አዋሳኝ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የምዕራብ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -162,10 +163,10 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 50], msg: "የቦታ ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።" },
           is: {
             args: /^[A-Za-z0-9-]+$/,
-            msg: "የቦታ ቁጥር ፊደል፣ ቁጥር ወዯም ሰረዝ ብቻ መያዝ አለበት።",
+            msg: "የቦታ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የቦታ ቁጥር ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የቦታ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -176,10 +177,10 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የቦታ ልዩ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።" },
           is: {
             args: /^[a-zA-Z0-9\s-]+$/,
-            msg: "የቦታ ልዩ ስም ፊደል፣ ቁጥር፣ ክፍተት ወዯም ሰረዝ ብቻ መያዝ አለበት።",
+            msg: "የቦታ ልዩ ስም ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።",
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የቦታ ልዩ ስም ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የቦታ ልዩ ስም ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -189,7 +190,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(LAND_USE_TYPES)],
-            msg: "የመሬት አጠቃቀም ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+            msg: "የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
           },
         },
       },
@@ -199,7 +200,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(OWNERSHIP_TYPES)],
-            msg: "የባለቤትነት አዯነት ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+            msg: "የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
           },
         },
       },
@@ -217,13 +218,13 @@ module.exports = (db, DataTypes) => {
               if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
                 throw new Error("ኮርድኔት የተሳሳተ ነው።");
               }
-              if (typeof lon === "number" && lon.toString().split(".")[1]?.length > 6) {
-                throw new Error("ኮርድኔት ትክክለኛነት ከ6 አስርዮሽ ቦታዎች መብለጥ አዯችልም።");
+              if (typeof lon === "number" && lon.toString().split(".")[1]?.length > 8) {
+                throw new Error("ኮርድኔት ትክክለኛነት ከ8 አስርዮሽ ቦታዎች መብለጥ አይችልም።");
               }
             }
             if (value.type === "Polygon") {
               if (!Array.isArray(value.coordinates) || !value.coordinates.every((ring) => Array.isArray(ring))) {
-                throw new Error("Polygon መጋጠሚያ ትክክል አዯደለም።");
+                throw new Error("Polygon መጋጠሚያ ትክክል አይደለም።");
               }
               const [outerRing] = value.coordinates;
               if (outerRing.length < 4 || JSON.stringify(outerRing[0]) !== JSON.stringify(outerRing[outerRing.length - 1])) {
@@ -233,8 +234,8 @@ module.exports = (db, DataTypes) => {
                 if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
                   throw new Error("Polygon ኮርድኔት የተሳሳተ ነው።");
                 }
-                if (typeof lon === "number" && lon.toString().split(".")[1]?.length > 6) {
-                  throw new Error("Polygon ኮርድኔት ትክክለኛነት ከ6 አስርዮሽ ቦታዎች መብለጥ አዯችልም።");
+                if (typeof lon === "number" && lon.toString().split(".")[1]?.length > 8) {
+                  throw new Error("Polygon ኮርድኔት ትክክለኛነት ከ8 አስርዮሽ ቦታዎች መብለጥ አይችልም።");
                 }
               }
             }
@@ -248,7 +249,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(RECORD_STATUSES)],
-            msg: "የመዝገብ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: "የመዝገብ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -259,10 +260,10 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 50], msg: "የመሬት ክፍል ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።" },
           is: {
             args: /^[A-Za-z0-9-]+$/,
-            msg: "የመሬት ክፍል ቁጥር ፊደል፣ ቁጥር ወዯም ሰረዝ ብቻ መያዝ አለበት።",
+            msg: "የመሬት ክፍል ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የመሬት ክፍል ቁጥር ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የመሬት ክፍል ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -270,9 +271,10 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          isIn: {
-            args: [Object.values(ZOONING_TYPES)],
-            msg: "የመሬት ዝርዝር ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+          isValidZoningType(value) {
+            if (value !== null && !Object.values(ZOONING_TYPES).includes(value)) {
+              throw new Error("የመሬት ዞን ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።");
+            }
           },
         },
       },
@@ -329,7 +331,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(PRIORITIES)],
-            msg: "ቅድሚያ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: "ቅድሚያ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -337,7 +339,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
         validate: {
-          len: { args: [0, 500], msg: "የውድቅ ምክንያት ከ500 ቁምፊዎች መብለጥ አዯችልም።" },
+          len: { args: [0, 500], msg: "የውድቅ ምክንያት ከ500 ቁምፊዎች መብለጥ አይችልም።" },
         },
       },
       notification_status: {
@@ -347,7 +349,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(NOTIFICATION_STATUSES)],
-            msg: "የማሳወቂያ ሁኔታ ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: "የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -388,6 +390,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["priority"] },
         { fields: ["notification_status"] },
         { fields: ["created_by"] },
+        { fields: ["approved_by"] },
       ],
       hooks: {
         beforeCreate: async (landRecord, options) => {
@@ -397,18 +400,16 @@ module.exports = (db, DataTypes) => {
             transaction: options.transaction,
           });
           if (!creator || !["መመዝገቢ", "አስተዳደር"].includes(creator.role?.name)) {
-            throw new Error("መዝገብ መፍጠር የሚችሉት መመዝገቢ ወዯም አስተዳደር ብቻ ናቸው።");
+            throw new Error("መዝገብ መፍጠር የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
           }
 
-          // Validate administrative_unit_id
+          // Validate administrative_unit_id and land_level
           const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
             transaction: options.transaction,
           });
           if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
-
-          // Validate land_level against max_land_levels
           if (landRecord.land_level > adminUnit.max_land_levels) {
-            throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አዯችልም።");
+            throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
           }
 
           // Validate user_id (primary owner)
@@ -448,7 +449,7 @@ module.exports = (db, DataTypes) => {
           });
           if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
 
-          // Initialize status_history and action_log using createdAt
+          // Initialize status_history and action_log
           landRecord.status_history = [
             {
               status: landRecord.record_status,
@@ -465,6 +466,28 @@ module.exports = (db, DataTypes) => {
           ];
         },
         beforeUpdate: async (landRecord, options) => {
+          // Validate updated_by role
+          if (landRecord.changed("updated_by") && landRecord.updated_by) {
+            const updater = await db.models.User.findByPk(landRecord.updated_by, {
+              include: [{ model: db.models.Role, as: "role" }],
+              transaction: options.transaction,
+            });
+            if (!updater || !["መመዝገቢ", "አስተዳደር"].includes(updater.role?.name)) {
+              throw new Error("መዝገብ መቀየር የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+            }
+          }
+
+          // Validate approved_by role
+          if (landRecord.changed("approved_by") && landRecord.approved_by) {
+            const approver = await db.models.User.findByPk(landRecord.approved_by, {
+              include: [{ model: db.models.Role, as: "role" }],
+              transaction: options.transaction,
+            });
+            if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
+              throw new Error("መዝገብ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+            }
+          }
+
           // Validate status transitions
           const validTransitions = {
             [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
@@ -476,55 +499,7 @@ module.exports = (db, DataTypes) => {
           if (landRecord.changed("record_status")) {
             const previousStatus = landRecord.previous("record_status");
             if (!validTransitions[previousStatus]?.includes(landRecord.record_status)) {
-              throw new Error(`ከ${previousStatus} ወደ ${landRecord.record_status} መሸጋገር አዯችልም።`);
-            }
-
-            // Validate updated_by role
-            const updater = await db.models.User.findByPk(landRecord.updated_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!updater || !["መመዝገቢ", "አስተዳደር"].includes(updater.role?.name)) {
-              throw new Error("መዝገብ መቀየር የሚችሉት መመዝገቢ ወዯም አስተዳደር ብቻ ናቸው።");
-            }
-
-            // Update status_history and action_log using updatedAt
-            landRecord.status_history = [
-              ...(landRecord.status_history || []),
-              {
-                status: landRecord.record_status,
-                changed_by: landRecord.updated_by,
-                changed_at: landRecord.updatedAt || new Date(),
-              },
-            ];
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: `STATUS_CHANGED_TO_${landRecord.record_status}`,
-                changed_by: landRecord.updated_by,
-                changed_at: landRecord.updatedAt || new Date(),
-              },
-            ];
-
-            // Reset notification_status on status change
-            landRecord.notification_status = NOTIFICATION_STATUSES.NOT_SENT;
-
-            // Update approved_by and handle rejection_reason
-            if (landRecord.record_status === RECORD_STATUSES.APPROVED) {
-              landRecord.approved_by = landRecord.updated_by;
-            }
-            if (landRecord.record_status === RECORD_STATUSES.REJECTED) {
-              if (!landRecord.rejection_reason) {
-                throw new Error("ውድቅ ሁኔታ የውድቅ ምክንያት ይፈለጋል።");
-              }
-            }
-
-            // Clear rejection_reason when transitioning from REJECTED to SUBMITTED
-            if (
-              previousStatus === RECORD_STATUSES.REJECTED &&
-              landRecord.record_status === RECORD_STATUSES.SUBMITTED
-            ) {
-              landRecord.rejection_reason = null;
+              throw new Error(`ከ${previousStatus} ወደ ${landRecord.record_status} መሸጋገር አይችልም።`);
             }
 
             // Validate document requirement for SUBMITTED status
@@ -540,16 +515,55 @@ module.exports = (db, DataTypes) => {
                 throw new Error("ቀርቧል ሁኔታ ቢያንስ አንድ ሰነድ ይፈለጋል።");
               }
             }
+
+            // Handle approved_by and rejection_reason
+            if (landRecord.record_status === RECORD_STATUSES.APPROVED) {
+              if (!landRecord.updated_by) throw new Error("ጸድቋል ሁኔታ የተቀየረበት ተጠቃሚ ይፈለጋል።");
+              landRecord.approved_by = landRecord.updated_by;
+            } else {
+              landRecord.approved_by = null;
+            }
+
+            if (landRecord.record_status === RECORD_STATUSES.REJECTED) {
+              if (!landRecord.rejection_reason) {
+                throw new Error("ውድቅ ሁኔታ የውድቅ ምክንያት ይፈለጋል።");
+              }
+            } else if (previousStatus === RECORD_STATUSES.REJECTED && landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
+              landRecord.rejection_reason = null;
+            }
+
+            // Update status_history and reset notification_status
+            landRecord.status_history = [
+              ...(landRecord.status_history || []),
+              {
+                status: landRecord.record_status,
+                changed_by: landRecord.updated_by,
+                changed_at: landRecord.updatedAt || new Date(),
+              },
+            ];
+            landRecord.notification_status = NOTIFICATION_STATUSES.NOT_SENT;
           }
 
-          // Validate administrative_unit_id on update
+          // Log notification_status changes
+          if (landRecord.changed("notification_status")) {
+            landRecord.action_log = [
+              ...(landRecord.action_log || []),
+              {
+                action: `NOTIFICATION_STATUS_CHANGED_TO_${landRecord.notification_status}`,
+                changed_by: landRecord.updated_by,
+                changed_at: landRecord.updatedAt || new Date(),
+              },
+            ];
+          }
+
+          // Validate administrative_unit_id and land_level on update
           if (landRecord.changed("administrative_unit_id") || landRecord.changed("land_level")) {
             const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
               transaction: options.transaction,
             });
             if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
             if (landRecord.land_level > adminUnit.max_land_levels) {
-              throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አዯችልም።");
+              throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
             }
           }
 
@@ -596,20 +610,39 @@ module.exports = (db, DataTypes) => {
             });
             if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
           }
-        },
-        afterUpdate: async (landRecord, options) => {
-          // Log additional actions (e.g., document upload, payment update) to action_log
-          if (
-            landRecord.changed("user_id") ||
-            landRecord.changed("administrative_unit_id") ||
-            landRecord.changed("parcel_number")
-          ) {
+
+          // Log updates in action_log
+          if (landRecord.changed()) {
+            const changedFields = landRecord.changed();
             landRecord.action_log = [
               ...(landRecord.action_log || []),
               {
-                action: "LAND_RECORD_UPDATED",
+                action: `LAND_RECORD_UPDATED`,
                 changed_by: landRecord.updated_by,
                 changed_at: landRecord.updatedAt || new Date(),
+                changed_fields: changedFields,
+              },
+            ];
+          }
+        },
+        beforeDestroy: async (landRecord, options) => {
+          // Validate deleted_by role
+          if (landRecord.deleted_by) {
+            const deleter = await db.models.User.findByPk(landRecord.deleted_by, {
+              include: [{ model: db.models.Role, as: "role" }],
+              transaction: options.transaction,
+            });
+            if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
+              throw new Error("መዝገብ መሰረዝ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+            }
+
+            // Log deletion in action_log
+            landRecord.action_log = [
+              ...(landRecord.action_log || []),
+              {
+                action: "DELETED",
+                changed_by: landRecord.deleted_by,
+                changed_at: new Date(),
               },
             ];
             await landRecord.save({ transaction: options.transaction });
@@ -625,12 +658,6 @@ module.exports = (db, DataTypes) => {
             !this.west_neighbor
           ) {
             throw new Error("ቢያንስ አንድ ጎረቤት መግለጥ አለበት።");
-          }
-        },
-        async validLandLevel() {
-          const adminUnit = await db.models.AdministrativeUnit.findByPk(this.administrative_unit_id);
-          if (adminUnit && this.land_level > adminUnit.max_land_levels) {
-            throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አዯችልም።");
           }
         },
       },

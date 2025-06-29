@@ -1,7 +1,7 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
 
-// ሞዴሎችን በተከታታይ ቅደም ተከተል መጫን (Load models in dependency order)
+// ሞዴሎችን በተከታታይ ቅደም ተከተል መጫን (Load models in dependency order to ensure foreign key references are resolved)
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
 const Zone = require("./Zone")(db, DataTypes);
@@ -12,6 +12,7 @@ const User = require("./User")(db, DataTypes);
 const LandRecord = require("./LandRecord")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
+
 // Role associations
 Role.hasMany(User, {
   foreignKey: "role_id",
@@ -72,6 +73,37 @@ User.hasMany(LandRecord, {
 User.hasMany(LandRecord, {
   as: "deletedLandRecords",
   foreignKey: "deleted_by",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+User.hasMany(Document, {
+  as: "preparedDocuments",
+  foreignKey: "prepared_by",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+User.hasMany(Document, {
+  as: "approvedDocuments",
+  foreignKey: "approved_by",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+User.hasMany(LandPayment, {
+  as: "payerPayments",
+  foreignKey: "payer_id",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+User.hasMany(LandPayment, {
+  as: "createdPayments",
+  foreignKey: "created_by",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+User.hasMany(LandPayment, {
+  as: "updatedPayments",
+  foreignKey: "updated_by",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
@@ -191,7 +223,7 @@ AdministrativeUnit.hasMany(LandRecord, {
 // LandRecord associations
 LandRecord.belongsTo(User, {
   foreignKey: "user_id",
-  as: "owner",
+  as: "user",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
@@ -245,6 +277,24 @@ LandPayment.belongsTo(LandRecord, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+LandPayment.belongsTo(User, {
+  foreignKey: "payer_id",
+  as: "payer",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+LandPayment.belongsTo(User, {
+  foreignKey: "created_by",
+  as: "creator",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+LandPayment.belongsTo(User, {
+  foreignKey: "updated_by",
+  as: "updater",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
 
 // Document associations
 Document.belongsTo(LandRecord, {
@@ -254,9 +304,15 @@ Document.belongsTo(LandRecord, {
   onUpdate: "CASCADE",
 });
 Document.belongsTo(User, {
-  foreignKey: "uploaded_by",
-  as: "uploader",
+  foreignKey: "prepared_by",
+  as: "preparer",
   onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+Document.belongsTo(User, {
+  foreignKey: "approved_by",
+  as: "approver",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 

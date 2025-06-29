@@ -36,21 +36,13 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "land_records", key: "id" },
       },
-      issue_date: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        validate: {
-          isDate: { msg: "የሰነድ ቀን ትክክለኛ ቀን መሆን አለበት።" },
-          notEmpty: { msg: "የሰነድ ቀን ባዶ መሆን አይችልም።" },
-        },
-      },
       document_type: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
           isIn: {
             args: [Object.values(DOCUMENT_TYPES)],
-            msg: "የሰነድ አይነት ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+            msg: "የሰነድ አይነት ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
           },
         },
       },
@@ -73,27 +65,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
-      inactive_reason: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: { 
-          len: { args: [0, 200], msg: "የማስተካከያ ምክንያት ከ0 እስከ 200 ቁምፊዎች መሆን አለበት።" },
-          isIn: {
-            args: [["ዉል ሲቋረጥ", "ስመ ንብረት ዝውውር", "ይዞታ ሲቀላቀል", "በልማት ተነስሽ"]],
-            msg: "የማስተካከያ ምክንያት መግለጫ መሆን አለበት።",
-          },
-        },
-      },
-      prepared_by: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: { model: "users", key: "id" },
-      },
-      approved_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
       files: {
         type: DataTypes.JSONB,
         allowNull: false,
@@ -101,11 +72,11 @@ module.exports = (db, DataTypes) => {
         validate: {
           isValidFiles(value) {
             if (!Array.isArray(value) || value.length === 0) {
-              throw new Error("ቢያንስ አንድ ፋይል መግለጥ አለበት።");
+              throw new Error("ቢያንስ አንዴ ፋይል መግለጥ አለበት።");
             }
             for (const file of value) {
               if (!file.file_path || typeof file.file_path !== "string") {
-                throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገድ መያዝ አለበት።");
+                throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገዴ መያዝ አለበት።");
               }
               if (file.file_name && typeof file.file_name !== "string") {
                 throw new Error("የፋይል ስም ትክክለኛ ሕብረቁምፊ መሆን አለበት።");
@@ -114,7 +85,7 @@ module.exports = (db, DataTypes) => {
                 throw new Error("የፋይል አይነት PDF፣ JPEG ወይም PNG መሆን አለበት።");
               }
               if (!file.file_size || typeof file.file_size !== "number" || file.file_size <= 0 || file.file_size > 10 * 1024 * 1024) {
-                throw new Error("የፋዯል መጠን ከ0 ባዪት እስከ 10MB መሆን አለበት።");
+                throw new Error("የፋይል መጠን ከ0 ባይት እስከ 10MB መሆን አለበት።");
               }
             }
           },
@@ -127,6 +98,16 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
+      approved_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
+      prepared_by: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "users", key: "id" },
+      },
     },
     {
       tableName: "documents",
@@ -135,20 +116,32 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { unique: true, fields: ["map_number", "land_record_id"] },
-        { unique: true, fields: ["reference_number", "land_record_id"] },
+        { unique: true, fields: ["reference_number", "land_record_id"], where: { reference_number: { [Op.ne]: null } } },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
-        { fields: ["uploaded_by"] },
+        { fields: ["prepared_by"] },
+        { fields: ["approved_by"] },
       ],
       hooks: {
         beforeCreate: async (document, options) => {
-          // Validate uploaded_by role
-          const uploader = await db.models.User.findByPk(document.uploaded_by, {
+          // Validate prepared_by role
+          const preparer = await db.models.User.findByPk(document.prepared_by, {
             include: [{ model: db.models.Role, as: "role" }],
             transaction: options.transaction,
           });
-          if (!uploader || !["መመዝገቢ", "አስተዳደር"].includes(uploader.role?.name)) {
-            throw new Error("ሰነድ መጫን የሚችሉት መመዝገቢ ወዯም አስተዳደር ብቻ ናቸው።");
+          if (!preparer || !["መመዝገቢ", "አስተዳደር"].includes(preparer.role?.name)) {
+            throw new Error("ሰነዴ መዘጋጀት የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+          }
+
+          // Validate approved_by role if provided
+          if (document.approved_by) {
+            const approver = await db.models.User.findByPk(document.approved_by, {
+              include: [{ model: db.models.Role, as: "role" }],
+              transaction: options.transaction,
+            });
+            if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
+              throw new Error("ሰነዴ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+            }
           }
 
           // Validate land_record_id
@@ -178,7 +171,7 @@ module.exports = (db, DataTypes) => {
               },
               transaction: options.transaction,
             });
-            if (existingRef) throw new Error("ይህ የሰነድ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+            if (existingRef) throw new Error("ይህ የሰነዴ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
           }
 
           // Log document creation in LandRecord.action_log
@@ -186,7 +179,7 @@ module.exports = (db, DataTypes) => {
             ...(landRecord.action_log || []),
             {
               action: `DOCUMENT_UPLOADED_${document.document_type}`,
-              changed_by: document.uploaded_by,
+              changed_by: document.prepared_by,
               changed_at: document.createdAt || new Date(),
               document_id: document.id,
             },
@@ -194,14 +187,27 @@ module.exports = (db, DataTypes) => {
           await landRecord.save({ transaction: options.transaction });
         },
         beforeUpdate: async (document, options) => {
-          // Validate uploaded_by role on update
-          if (document.changed("uploaded_by")) {
-            const uploader = await db.models.User.findByPk(document.uploaded_by, {
+          // Validate prepared_by role on update
+          if (document.changed("prepared_by")) {
+            const preparer = await db.models.User.findByPk(document.prepared_by, {
               include: [{ model: db.models.Role, as: "role" }],
               transaction: options.transaction,
             });
-            if (!uploader || !["መመዝገቢ", "አስተዳደር"].includes(uploader.role?.name)) {
-              throw new Error("ሰነድ መጫን የሚችሉት መመዝገቢ ወዯም አስተዳደር ብቻ ናቸው።");
+            if (!preparer || !["መመዝገቢ", "አስተዳደር"].includes(preparer.role?.name)) {
+              throw new Error("ሰነዴ መዘጋጀት የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+            }
+          }
+
+          // Validate approved_by role on update
+          if (document.changed("approved_by")) {
+            if (document.approved_by) {
+              const approver = await db.models.User.findByPk(document.approved_by, {
+                include: [{ model: db.models.Role, as: "role" }],
+                transaction: options.transaction,
+              });
+              if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
+                throw new Error("ሰነዴ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+              }
             }
           }
 
@@ -235,11 +241,33 @@ module.exports = (db, DataTypes) => {
                   reference_number: document.reference_number,
                   land_record_id: document.land_record_id,
                   id: { [Op.ne]: document.id },
-                  deletedAt: { [Op.eq]: null },
+                  deleted_at: { [Op.eq]: null },
                 },
                 transaction: options.transaction,
               });
-              if (existingRef) throw new Error("ይህ የሰነድ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+              if (existingRef) throw new Error("ይህ የሰነዴ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+            }
+          }
+
+          // Log document activation or deactivation in LandRecord.action_log if isActive changes
+          if (document.changed("isActive")) {
+            const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
+              transaction: options.transaction,
+            });
+            if (landRecord) {
+              const action = document.isActive
+                ? `DOCUMENT_ACTIVATED_${document.document_type}`
+                : `DOCUMENT_DEACTIVATED_${document.document_type}`;
+              landRecord.action_log = [
+                ...(landRecord.action_log || []),
+                {
+                  action,
+                  changed_by: document.prepared_by,
+                  changed_at: document.updatedAt || new Date(),
+                  document_id: document.id,
+                },
+              ];
+              await landRecord.save({ transaction: options.transaction });
             }
           }
 
@@ -252,7 +280,7 @@ module.exports = (db, DataTypes) => {
               ...(landRecord.action_log || []),
               {
                 action: `DOCUMENT_UPDATED_${document.document_type}`,
-                changed_by: document.uploaded_by,
+                changed_by: document.prepared_by,
                 changed_at: document.updatedAt || new Date(),
                 document_id: document.id,
               },
