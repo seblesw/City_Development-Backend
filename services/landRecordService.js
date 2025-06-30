@@ -33,7 +33,7 @@ const createLandRecord = async (data, files, creator) => {
     const coOwners = [];
     if (data.co_owners && Array.isArray(data.co_owners)) {
       if (primaryUser.marital_status === "ነጠላ") {
-        throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይችልም።");
+        throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይቻልም።");
       }
       for (const coOwnerData of data.co_owners) {
         const coOwner = await registerUserService.registerUserService(
