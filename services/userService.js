@@ -15,7 +15,7 @@ exports.loginUserService = async ({ email, phone_number, password }) => {
       is_active: true,
     },
   });
-  if (!user) throw new Error("ተጠቃሚ አልተገኘም ወይም እንቅስቃሴ-አልባ ነው።");
+  if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
   const isValid = await user.validatePassword(password);
   if (!isValid) throw new Error("የተሳሳተ የይለፍ ቃል።");
   await user.update({ last_login: new Date() });

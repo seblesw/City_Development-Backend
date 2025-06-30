@@ -43,7 +43,7 @@ const ZOONING_TYPES = {
 const OWNERSHIP_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
   TRANSFER: "የባለቤትነት ማስተላለፍ",
-  LEASE: "የሊዝ ይዞታ",
+  LEASE: "የሊዝ ጨረታ-ይዞታ",
   LEASE_ALLOCATION: "የሊዝ ይዞታ-ምደባ",
   NO_PRIOR_DOCUMENT: "ቅድመ ሰነድ የሌለው",
   DISPLACEMENT: "መፈናቀል",

@@ -95,6 +95,16 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      relationship_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [["የትዳር ጓደኛ", "ልጅ", "ወላጅ", "ወንድም", "እህት", "ሌላ"]],
+            msg: "የግንኙነት አይነት ከተፈቀዱት እሴቶች (የትዳር ጓደኛ, ልጅ, ወላጅ, ወንድም/እህት, ሌላ) ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
+      },
       marital_status: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -102,16 +112,6 @@ module.exports = (db, DataTypes) => {
           isIn: {
             args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"]],
             msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር, ቤተሰብ, የጋራ ባለቤትነት) ውስጥ አንዱ መሆን አለበት።",
-          },
-        },
-      },
-      relationship_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: {
-            args: [["የትዳር ጓደኛ", "ልጅ", "ወላጅ", "ወንድም/እህት", "ሌላ"]],
-            msg: "የግንኙነት አይነት ከተፈቀዱት እሴቶች (የትዳር ጓደኛ, ልጅ, ወላጅ, ወንድም/እህት, ሌላ) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -214,28 +214,24 @@ module.exports = (db, DataTypes) => {
             const role = await db.models.Role.findByPk(user.role_id, {
               transaction: options.transaction,
             });
-            if (!role || !["መመዝገቢ", "አስተዳደር"].includes(role.name)) {
-              throw new Error("ትክክለኛ ሚና ይምረጡ (መመዝገቢ ወይም አስተዳደር)።");
+            if (!role || !["መዝጋቢ", "ማናጀር"].includes(role.name)) {
+              throw new Error("ትክክለኛ ሚና ይምረጡ (መዝጋቢ ወይም ማናጀር)።");
             }
           }
-
           // Validate email or phone_number for primary users
           if (!user.primary_owner_id && !user.email && !user.phone_number) {
             throw new Error(
               "ኢሜይል ወይም ስልክ ቁጥር ከነዚህ ውስጥ አንዱ መግባት አለበት ለዋና ተጠቃሚ።"
             );
           }
-
           // Validate marital_status and primary_owner_id
           if (user.primary_owner_id && user.marital_status === "ነጠላ") {
             throw new Error("ነጠላ ተጠቃሚዎች የጋራ ባለቤት መኖር አይችሉም።");
           }
-
           // Validate relationship_type for co-owners
           if (user.primary_owner_id && !user.relationship_type) {
             throw new Error("የጋራ ባለቤቶች የግንኙነት አይነት መግለጥ አለባቸው።");
           }
-
           // Validate primary_owner_id
           if (user.primary_owner_id) {
             const primaryOwner = await User.findByPk(user.primary_owner_id, {
@@ -248,7 +244,6 @@ module.exports = (db, DataTypes) => {
               throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይችልም።");
             }
           }
-
           // Validate password rules
           if (!user.primary_owner_id && !user.password) {
             user.password = await bcrypt.hash("12345678", 10);
@@ -333,33 +328,8 @@ module.exports = (db, DataTypes) => {
             }
             user.password = await bcrypt.hash(user.password, 10);
           }
-
-          // Log updates in action_log
-          if (user.changed()) {
-            const changedFields = user.changed();
-            user.action_log = [
-              ...(user.action_log || []),
-              {
-                action: "UPDATED",
-                changed_by: user.id || user.primary_owner_id || null,
-                changed_at: user.updated_at || new Date(),
-                changed_fields: changedFields,
-              },
-            ];
-          }
-
-          // Log deactivation in action_log
-          if (user.changed("is_active") && !user.is_active) {
-            user.action_log = [
-              ...(user.action_log || []),
-              {
-                action: "DEACTIVATED",
-                changed_by: user.id || user.primary_owner_id || null,
-                changed_at: user.updated_at || new Date(),
-              },
-            ];
-          }
         },
+
         beforeDestroy: async (user, options) => {
           // Validate deletion role
           const deleter = await db.models.User.findByPk(options.changed_by, {

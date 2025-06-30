@@ -43,7 +43,7 @@ const getAllZonesService = async () => {
       { model: Woreda, as: "woredas" },
       { model: AdministrativeUnit, as: "administrativeUnits" },
     ],
-    order: [["created_at", "DESC"]],
+    order: [["createdAt", "DESC"]],
   });
 };
 

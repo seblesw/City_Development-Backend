@@ -56,7 +56,7 @@ exports.registerUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
   try {
     const { email, phone_number, password } = req.body;
-    if (!email && !phone_number) throw new Error("ኢሜይል ወይም ስልክ ቁጥር ያስፈልጋል።");
+    if (!email || !phone_number) throw new Error("ኢሜይል ወይም ስልክ ቁጥር ያስፈልጋል።");
     if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል።");
     const { user, token } = await loginUserService({ email, phone_number, password });
     res.status(200).json({
