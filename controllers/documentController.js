@@ -1,47 +1,61 @@
-const documentService = require('../services/documentService');
+const documentService = require("../services/documentService");
 
-exports.createDocument = async (req, res) => {
-    try {
-        const document = await documentService.createDocumentService(req.body);
-        res.status(201).json({ message: 'Document created successfully.', document });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+const createDocument = async (req, res) => {
+  try {
+    const { body, files, user } = req;
+    const document = await documentService.createDocument(body, files, user.id, null);
+    res.status(201).json({
+      success: true,
+      message: "ሰነዴ በተሳካ ሁኔታ ተፈጥሯል።",
+      data: document,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ሰነዴ መፍጠር አልተሳካም።",
+    });
+  }
 };
 
-exports.getAllDocuments = async (req, res) => {
-    try {
-        const documents = await documentService.getAllDocumentsService();
-        res.status(200).json(documents);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+const getDocument = async (req, res) => {
+  try {
+    const document = await documentService.getDocument(req.params.id);
+    res.status(200).json({ success: true, data: document });
+  } catch (error) {
+    res.status(404).json({
+      success: false,
+      message: error.message || "ሰነዴ አልተገኘም።",
+    });
+  }
 };
 
-exports.getDocumentById = async (req, res) => {
-    try {
-        const document = await documentService.getDocumentByIdService(req.params.id);
-        if (!document) return res.status(404).json({ message: 'Document not found.' });
-        res.status(200).json(document);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+const updateDocument = async (req, res) => {
+  try {
+    const { body, files, user } = req;
+    const document = await documentService.updateDocument(req.params.id, body, files, user.id);
+    res.status(200).json({
+      success: true,
+      message: "ሰነዴ በተሳካ ሁኔታ ተዘምኗል።",
+      data: document,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ሰነዴ መዘመን አልተሳካም።",
+    });
+  }
 };
 
-exports.updateDocument = async (req, res) => {
-    try {
-        const document = await documentService.updateDocumentService(req.params.id, req.body);
-        res.status(200).json({ message: 'Document updated successfully.', document });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+const deleteDocument = async (req, res) => {
+  try {
+    const result = await documentService.deleteDocument(req.params.id, req.user.id);
+    res.status(200).json({ success: true, message: result.message });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ሰነዴ መሰረዝ አልተሳካም።",
+    });
+  }
 };
 
-exports.deleteDocument = async (req, res) => {
-    try {
-        await documentService.deleteDocumentService(req.params.id);
-        res.status(200).json({ message: 'Document deleted successfully.' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
+module.exports = { createDocument, getDocument, updateDocument, deleteDocument };

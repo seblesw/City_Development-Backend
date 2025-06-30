@@ -1,13 +1,11 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const documentController = require('../controllers/documentController');
-const { createDocumentValidation } = require('../validations/documentValidation');
-const validateRequest = require('../middlewares/validateRequest');
+const documentController = require("../controllers/documentController");
+const upload = require("../middlewares/fileStorage");
 
-router.post('/', createDocumentValidation, validateRequest, documentController.createDocument);
-router.get('/', documentController.getAllDocuments);
-router.get('/:id', documentController.getDocumentById);
-router.put('/:id', documentController.updateDocument);
-router.delete('/:id', documentController.deleteDocument);
+router.post("/",  upload.array("files", 5), documentController.createDocument);
+router.get("/:id",  documentController.getDocument);
+router.put("/:id",  upload.array("files", 5), documentController.updateDocument);
+router.delete("/:id",  documentController.deleteDocument);
 
 module.exports = router;

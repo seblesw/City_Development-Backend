@@ -1,10 +1,10 @@
 const { sequelize, LandRecord, User, Role } = require("../models");
 const { RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES } = require("../models/LandRecord");
-const registerUserService = require("./userService");
+const registerUserService = require("./registerUserService");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 
-const createLandRecord = async (data, files, creator) => {
+exports.createLandRecord = async (data, files, creator) => {
   const transaction = await sequelize.transaction();
   try {
     // Validate creator role and administrative unit
@@ -32,8 +32,8 @@ const createLandRecord = async (data, files, creator) => {
     // Create co-owners (if any)
     const coOwners = [];
     if (data.co_owners && Array.isArray(data.co_owners)) {
-      if (primaryUser.marital_status === "ነጠላ") {
-        throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይቻልም።");
+      if (primaryUserData.marital_status === "ነጠላ") {
+        throw new Error("ዋና ባለቤት ነጠላ ስለሆነ የጋራ ባለቤት መጨመር አይችልም።");
       }
       for (const coOwnerData of data.co_owners) {
         const coOwner = await registerUserService.registerUserService(
@@ -111,10 +111,14 @@ const createLandRecord = async (data, files, creator) => {
     if (data.land_payment) {
       landPayment = await landPaymentService.createPayment(
         {
-          ...data.land_payment,
           land_record_id: landRecord.id,
+          payment_type: data.land_payment.payment_type,
+          total_amount: data.land_payment.total_amount,
+          paid_amount: data.land_payment.paid_amount,
+          currency: data.land_payment.currency || "ETB",
+          penalty_reason: data.land_payment.penalty_reason || null,
+          description: data.land_payment.description || null,
           payer_id: primaryUser.id,
-          action_log: [{ action: "CREATED", changed_by: creator.id, changed_at: new Date() }],
         },
         creator.id,
         transaction
@@ -129,4 +133,4 @@ const createLandRecord = async (data, files, creator) => {
   }
 };
 
-module.exports = { createLandRecord };
+// module.exports = { createLandRecord };
