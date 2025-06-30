@@ -1,58 +1,60 @@
-const landPaymentService = require('../services/landPaymentService');
+const landPaymentService = require("../services/landPaymentService");
 
- exports.createLandPayment = async (req, res) => {
-    try {
-        const payment = await landPaymentService.createLandPaymentService(req.body);
-        res.status(201).json({
-            message: 'Land payment created successfully',
-            data: payment,
-        });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
+const createPayment = async (req, res) => {
+  try {
+    const { body, user } = req;
+    const payment = await landPaymentService.createPayment(body, user.id, null);
+    res.status(201).json({
+      success: true,
+      message: "ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
+      data: payment,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ክፍያ መፍጠር አልተሳካም።",
+    });
+  }
 };
 
-exports.getAllLandPayments = async (req, res) => {
-    try {
-        const payments = await landPaymentService.getAllLandPaymentsService();
-        res.status(200).json(payments);
-    } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
+const getPayment = async (req, res) => {
+  try {
+    const payment = await landPaymentService.getPayment(req.params.id);
+    res.status(200).json({ success: true, data: payment });
+  } catch (error) {
+    res.status(404).json({
+      success: false,
+      message: error.message || "ክፍያ አልተገኘም።",
+    });
+  }
 };
 
-exports.getLandPaymentById = async (req, res) => {
-    try {
-        const payment = await landPaymentService.getLandPaymentByIdService(req.params.id);
-        if (!payment) {
-            return res.status(404).json({ message: 'Payment not found' });
-        }
-        res.status(200).json(payment);
-    } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
+const updatePayment = async (req, res) => {
+  try {
+    const payment = await landPaymentService.updatePayment(req.params.id, req.body, req.user.id);
+    res.status(200).json({
+      success: true,
+      message: "ክፍያ በተሳካ ሁኔታ ተዘምኗል።",
+      data: payment,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ክፍያ መዘመን አልተሳካም።",
+    });
+  }
 };
 
-exports.updateLandPayment = async (req, res) => {
-    try {
-        const payment = await landPaymentService.updateLandPaymentService(req.params.id, req.body);
-        if (!payment) {
-            return res.status(404).json({ message: 'Payment not found' });
-        }
-        res.status(200).json({ message: 'Payment updated successfully', data: payment });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
+const deletePayment = async (req, res) => {
+  try {
+    const result = await landPaymentService.deletePayment(req.params.id, req.user.id);
+    res.status(200).json({ success: true, message: result.message });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "ክፍያ መሰረዝ አልተሳካም።",
+    });
+  }
 };
 
-exports.deleteLandPayment = async (req, res) => {
-    try {
-        const payment = await landPaymentService.deleteLandPaymentService(req.params.id);
-        if (!payment) {
-            return res.status(404).json({ message: 'Payment not found' });
-        }
-        res.status(200).json({ message: 'Payment deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
-};
+module.exports = { createPayment, getPayment, updatePayment, deletePayment };
