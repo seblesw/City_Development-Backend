@@ -3,14 +3,11 @@ const { User } = require("../models");
 const jwt = require("jsonwebtoken");
 
 exports.registerUserService = async (data) => {
-  console.log("Registering user with data:", data);
-  if (!User.create) throw new Error("User.create is undefined at runtime in registerUserService");
   const user = await User.create(data);
   return user;
 };
 
 exports.loginUserService = async ({ email, phone_number, password }) => {
-  if (!User.findOne) throw new Error("User.findOne is undefined at runtime in loginUserService");
   const user = await User.findOne({
     where: {
       [Op.or]: [{ email }, { phone_number }],
