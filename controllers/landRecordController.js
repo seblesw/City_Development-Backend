@@ -1,8 +1,6 @@
-// const landService = require('../services/landRecordService');
-const { validationResult } = require('express-validator');
 const createLandRecordService = require("../services/landRecordService");
 
-exports.createLandRecord = async (req, res) => {
+const createLandRecord = async (req, res) => {
   try {
     const { body, files, user } = req;
     const result = await createLandRecordService.createLandRecord(body, files, user);
@@ -45,15 +43,21 @@ exports.createLandRecord = async (req, res) => {
         })),
         documents: result.documents.map((doc) => ({
           id: doc.id,
+          map_number: doc.map_number,
           document_type: doc.document_type,
-          file_path: doc.file_path,
+          reference_number: doc.reference_number,
+          files: doc.files,
         })),
         land_payment: result.landPayment
           ? {
               id: result.landPayment.id,
-              amount: result.landPayment.amount,
-              payment_date: result.landPayment.payment_date,
               payment_type: result.landPayment.payment_type,
+              total_amount: result.landPayment.total_amount,
+              paid_amount: result.landPayment.paid_amount,
+              currency: result.landPayment.currency,
+              payment_status: result.landPayment.payment_status,
+              penalty_reason: result.landPayment.penalty_reason,
+              description: result.landPayment.description,
             }
           : null,
       },
@@ -66,51 +70,4 @@ exports.createLandRecord = async (req, res) => {
   }
 };
 
-
-//     try {
-//         const lands = await landService.getAllLandService();
-//         res.status(200).json({ data: lands });
-//     } catch (error) {
-//         res.status(500).json({ message: error.message });
-//     }
-// };
-
-// exports.getLandById = async (req, res) => {
-//     try {
-//         const land = await landService.getLandByIdService(req.params.id);
-//         if (!land) return res.status(404).json({ message: 'Land record not found.' });
-//         res.status(200).json({ data: land });
-//     } catch (error) {
-//         res.status(500).json({ message: error.message });
-//     }
-// };
-
-// exports.updateLand = async (req, res) => {
-//     try {
-//         const errors = validationResult(req);
-//         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-//         const updatedLand = await landService.updateLandService(req.params.id, req.body);
-//         res.status(200).json({ message: 'Land record updated successfully', data: updatedLand });
-//     } catch (error) {
-//         res.status(500).json({ message: error.message });
-//     }
-// };
-
-// exports.deleteLand = async (req, res) => {
-//     try {
-//         await landService.deleteLandService(req.params.id);
-//         res.status(200).json({ message: 'Land record deleted successfully.' });
-//     } catch (error) {
-//         res.status(500).json({ message: error.message });
-//     }
-// };
-// exports.getLandByOwner = async (req, res) => {
-//     try {
-//         const lands = await landService.getLandByOwnerService(req.params.ownerId);
-//         if (!lands || lands.length === 0) return res.status(404).json({ message: 'No land records found for this owner.' });
-//         res.status(200).json({ data: lands });
-//     } catch (error) {
-//         res.status(500).json({ message: error.message });
-//     }
-// };
+module.exports = { createLandRecord };

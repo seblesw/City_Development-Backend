@@ -1,10 +1,8 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const landController = require('../controllers/landRecordController');
-// const landValidation = require('../validations/landValidation');
+const createLandRecordController = require("../controllers/landRecordController");
+const upload = require("../middlewares/fileStorage");
 
-// CRUD Routes
-router.post('/',  landController.createLandRecord);
-
+router.post("/",  upload.array("documents", 5), createLandRecordController.createLandRecord);
 
 module.exports = router;

@@ -1,10 +1,10 @@
 const { sequelize, LandRecord, User, Role } = require("../models");
 const { RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES } = require("../models/LandRecord");
-const registerUserService = require("./registerUserService");
+const registerUserService = require("./userService");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 
-exports.createLandRecord = async (data, files, creator) => {
+const createLandRecord = async (data, files, creator) => {
   const transaction = await sequelize.transaction();
   try {
     // Validate creator role and administrative unit
@@ -90,20 +90,22 @@ exports.createLandRecord = async (data, files, creator) => {
       for (let i = 0; i < files.documents.length; i++) {
         const document = await documentService.createDocument(
           {
+            map_number: data.documents[i].map_number,
             document_type: data.documents[i].document_type,
-            metadata: data.documents[i].metadata || {},
+            reference_number: data.documents[i].reference_number || null,
+            description: data.documents[i].description || null,
             land_record_id: landRecord.id,
-            file: files.documents[i],
             prepared_by: creator.id,
-            action_log: [{ action: "CREATED", changed_by: creator.id, changed_at: new Date() }],
+            approved_by: data.documents[i].approved_by || null,
           },
+          [files.documents[i]],
           creator.id,
           transaction
         );
         documents.push(document);
       }
     } else {
-      throw new Error("ቢያንስ አንድ ሰነድ መግለጥ አለበት።");
+      throw new Error("ቢያንስ አንዴ ሰነዴ መግለጥ አለበት።");
     }
 
     // Create LandPayment (if provided)
@@ -133,4 +135,4 @@ exports.createLandRecord = async (data, files, creator) => {
   }
 };
 
-// module.exports = { createLandRecord };
+module.exports = { createLandRecord };
