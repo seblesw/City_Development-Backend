@@ -1,7 +1,7 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
 
-// ሞዴሎችን በተከታታይ ቅደም ተከተል መጫን (Load models in dependency order to ensure foreign key references are resolved)
+// Load models in dependency order to ensure foreign key references are resolved
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
 const Zone = require("./Zone")(db, DataTypes);
@@ -9,7 +9,7 @@ const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const User = require("./User")(db, DataTypes);
-const LandRecord = require("./LandRecord")(db, DataTypes);
+const { LandRecord, RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES, LAND_USE_TYPES, ZOONING_TYPES, OWNERSHIP_TYPES } = require("./LandRecord")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
 
@@ -52,14 +52,12 @@ User.hasMany(OversightOffice, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-
 User.hasMany(LandRecord, {
   as: "landRecords",
   foreignKey: "user_id",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-
 User.hasMany(LandRecord, {
   as: "createdLandRecords",
   foreignKey: "created_by",
@@ -84,7 +82,6 @@ User.hasMany(LandRecord, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-
 User.hasMany(Document, {
   as: "preparedDocuments",
   foreignKey: "prepared_by",
@@ -103,8 +100,6 @@ User.hasMany(LandPayment, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-
-
 
 // Region associations
 Region.hasMany(Zone, {
@@ -152,7 +147,6 @@ Zone.hasMany(OversightOffice, {
   onUpdate: "CASCADE",
 });
 
-
 // Woreda associations
 Woreda.belongsTo(Zone, {
   foreignKey: "zone_id",
@@ -192,20 +186,18 @@ OversightOffice.belongsTo(Region, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-OversightOffice.belongsTo(Zone,{
-  foreignKey:"zone_id",
-  as:"zone",
-  onDelete:"RESTRICT",
-  onUpdate:"CASCADE"
-  
-})
-OversightOffice.belongsTo(Woreda,{
-  foreignKey:"woreda_id",
-  as:"woreda",
-  onDelete:"RESTRICT",
-  onUpdate:"CASCADE"
-  
-})
+OversightOffice.belongsTo(Zone, {
+  foreignKey: "zone_id",
+  as: "zone",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+OversightOffice.belongsTo(Woreda, {
+  foreignKey: "woreda_id",
+  as: "woreda",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
 
 // AdministrativeUnit associations
 AdministrativeUnit.belongsTo(OversightOffice, {
@@ -309,8 +301,6 @@ LandPayment.belongsTo(User, {
   onUpdate: "CASCADE",
 });
 
-
-
 // Document associations
 Document.belongsTo(LandRecord, {
   foreignKey: "land_record_id",
@@ -331,7 +321,7 @@ Document.belongsTo(User, {
   onUpdate: "CASCADE",
 });
 
-// የሴኪውል እና ሞዴሎችን መላክ (Export Sequelize instance and models)
+// Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
   Sequelize,
@@ -345,4 +335,10 @@ module.exports = {
   LandRecord,
   LandPayment,
   Document,
+  RECORD_STATUSES,
+  NOTIFICATION_STATUSES,
+  PRIORITIES,
+  LAND_USE_TYPES,
+  ZOONING_TYPES,
+  OWNERSHIP_TYPES,
 };

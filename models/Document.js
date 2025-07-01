@@ -6,7 +6,7 @@ const DOCUMENT_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
   TRANSFER_DOCUMENT: "የማስተላለፍ ሰነድ",
   SURVEY_PLAN: "የመሬት መለኪያ ፕላን",
-  OTHER: "ሌላ",
+  RECIEPT:"የክፍያ"
 };
 
 module.exports = (db, DataTypes) => {
@@ -65,6 +65,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
+      inActived_reason:{
+        type:DataTypes.DATE,
+        allowNull:true,
+      },
       files: {
         type: DataTypes.JSONB,
         allowNull: false,
@@ -90,6 +94,10 @@ module.exports = (db, DataTypes) => {
             }
           },
         },
+      },
+      issue_date:{
+        type:DataTypes.DATE,
+        allowNull:true,
       },
       description: {
         type: DataTypes.TEXT,

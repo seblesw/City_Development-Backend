@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 
+// Defining constants for record statuses in Amharic
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ቀርቧል",
@@ -8,18 +9,21 @@ const RECORD_STATUSES = {
   REJECTED: "ውድቅ ተደርጓል",
 };
 
+// Defining constants for priorities in Amharic
 const PRIORITIES = {
   LOW: "ዝቅተኛ",
   MEDIUM: "መካከለኛ",
   HIGH: "ከፍተኛ",
 };
 
+// Defining constants for notification statuses in Amharic
 const NOTIFICATION_STATUSES = {
   NOT_SENT: "አልተላከም",
   SENT: "ተልኳል",
   FAILED: "አልተሳካም",
 };
 
+// Defining constants for land use types in Amharic
 const LAND_USE_TYPES = {
   RESIDENTIAL: "መኖሪያ",
   MIXED: "ድብልቅ",
@@ -34,12 +38,14 @@ const LAND_USE_TYPES = {
   OTHER: "ሌላ",
 };
 
-const ZOONING_TYPES = {
-  CENTER_BUSSINESS: "የንግድ ማዕከል",
+// Defining constants for zoning types in Amharic
+const ZONING_TYPES = {
+  CENTER_BUSINESS: "የንግድ ማዕከል",
   TRANSITION_ZONE: "የሽግግር ቀጠና",
   EXPANSION_ZONE: "የማስፋት ቀጠና",
 };
 
+// Defining constants for ownership types in Amharic
 const OWNERSHIP_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
   TRANSFER: "የባለቤትነት ማስተላለፍ",
@@ -51,6 +57,7 @@ const OWNERSHIP_TYPES = {
 };
 
 module.exports = (db, DataTypes) => {
+  // Defining the LandRecord model
   const LandRecord = db.define(
     "LandRecord",
     {
@@ -76,7 +83,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         validate: {
-          min: { args: [1], msg: "ማህበረ ደረጃ ከ1 በታች መሆን አይችልም።" },
+          min: { args: [1], msg: "የመሬት ደረጃ ከ1 በታች መሆን አይችልም።" },
         },
       },
       administrative_unit_id: {
@@ -122,7 +129,7 @@ module.exports = (db, DataTypes) => {
             }
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የምሥራቅ አዋሳኝ ባዶ መሆን አዯችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "") throw new Error("የምሥራቅ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -190,7 +197,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(LAND_USE_TYPES)],
-            msg: "የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
+            msg: `የመሬት አጠቃቀም ከተፈቀዱት እሴቶች (${Object.values(LAND_USE_TYPES).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
       },
@@ -200,7 +207,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(OWNERSHIP_TYPES)],
-            msg: "የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
+            msg: `የባለቤትነት አይነት ከተፈቀዱት እሴቶች (${Object.values(OWNERSHIP_TYPES).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
       },
@@ -249,7 +256,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(RECORD_STATUSES)],
-            msg: "የመዝገብ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: `የመዝገብ ሁኔታ ከተፈቀዱት እሴቶች (${Object.values(RECORD_STATUSES).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
       },
@@ -272,8 +279,8 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isValidZoningType(value) {
-            if (value !== null && !Object.values(ZOONING_TYPES).includes(value)) {
-              throw new Error("የመሬት ዞን ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።");
+            if (value !== null && !Object.values(ZONING_TYPES).includes(value)) {
+              throw new Error(`የመሬት ዞን ከተፈቀዱት እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
             }
           },
         },
@@ -289,7 +296,7 @@ module.exports = (db, DataTypes) => {
             }
             for (const entry of value) {
               if (!entry.status || !Object.values(RECORD_STATUSES).includes(entry.status)) {
-                throw new Error("የሁኔታ ታሪክ ሁኔታ ትክክለኛ መሆን አለበት።");
+                throw new Error(`የሁኔታ ታሪክ ሁኔታ ከተፈቀዱት እሴቶች (${Object.values(RECORD_STATUSES).join(", ")}) መሆን አለበት።`);
               }
               if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
                 throw new Error("የሁኔታ ታሪክ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
@@ -331,7 +338,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(PRIORITIES)],
-            msg: "ቅድሚያ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: `ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
       },
@@ -349,7 +356,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(NOTIFICATION_STATUSES)],
-            msg: "የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: `የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(NOTIFICATION_STATUSES).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
       },
@@ -394,16 +401,16 @@ module.exports = (db, DataTypes) => {
       ],
       hooks: {
         beforeCreate: async (landRecord, options) => {
-          // Validate created_by role
+          // Validating creator role
           const creator = await db.models.User.findByPk(landRecord.created_by, {
             include: [{ model: db.models.Role, as: "role" }],
             transaction: options.transaction,
           });
-          if (!creator || !["መመዝገቢ", "አስተዳደር"].includes(creator.role?.name)) {
-            throw new Error("መዝገብ መፍጠር የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+          if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
+            throw new Error("መዝገብ መፍጠር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
           }
 
-          // Validate administrative_unit_id and land_level
+          // Validating administrative unit and land level
           const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
             transaction: options.transaction,
           });
@@ -412,7 +419,7 @@ module.exports = (db, DataTypes) => {
             throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
           }
 
-          // Validate user_id (primary owner)
+          // Validating primary owner
           const user = await db.models.User.findByPk(landRecord.user_id, {
             transaction: options.transaction,
           });
@@ -420,12 +427,12 @@ module.exports = (db, DataTypes) => {
             throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
           }
 
-          // Validate administrative_unit_id consistency with user
+          // Ensuring administrative unit consistency with user
           if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
             throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
           }
 
-          // Validate block_number uniqueness within administrative_unit_id
+          // Checking block number uniqueness
           if (landRecord.block_number) {
             const existingBlock = await db.models.LandRecord.findOne({
               where: {
@@ -438,7 +445,7 @@ module.exports = (db, DataTypes) => {
             if (existingBlock) throw new Error("ይህ የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
           }
 
-          // Validate parcel_number uniqueness within administrative_unit_id
+          // Checking parcel number uniqueness
           const existingParcel = await db.models.LandRecord.findOne({
             where: {
               parcel_number: landRecord.parcel_number,
@@ -449,7 +456,7 @@ module.exports = (db, DataTypes) => {
           });
           if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
 
-          // Initialize status_history and action_log
+          // Initializing status history and action log
           landRecord.status_history = [
             {
               status: landRecord.record_status,
@@ -466,29 +473,29 @@ module.exports = (db, DataTypes) => {
           ];
         },
         beforeUpdate: async (landRecord, options) => {
-          // Validate updated_by role
+          // Validating updater role
           if (landRecord.changed("updated_by") && landRecord.updated_by) {
             const updater = await db.models.User.findByPk(landRecord.updated_by, {
               include: [{ model: db.models.Role, as: "role" }],
               transaction: options.transaction,
             });
-            if (!updater || !["መመዝገቢ", "አስተዳደር"].includes(updater.role?.name)) {
-              throw new Error("መዝገብ መቀየር የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
+            if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
+              throw new Error("መዝገብ መቀየር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
             }
           }
 
-          // Validate approved_by role
+          // Validating approver role
           if (landRecord.changed("approved_by") && landRecord.approved_by) {
             const approver = await db.models.User.findByPk(landRecord.approved_by, {
               include: [{ model: db.models.Role, as: "role" }],
               transaction: options.transaction,
             });
             if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
-              throw new Error("መዝገብ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+              throw new Error("መዝገብ ማፅደቅ የሚችሉት አስተዳደር ብቻ ናቸው።");
             }
           }
 
-          // Validate status transitions
+          // Validating status transitions
           const validTransitions = {
             [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
             [RECORD_STATUSES.SUBMITTED]: [RECORD_STATUSES.UNDER_REVIEW],
@@ -502,7 +509,7 @@ module.exports = (db, DataTypes) => {
               throw new Error(`ከ${previousStatus} ወደ ${landRecord.record_status} መሸጋገር አይችልም።`);
             }
 
-            // Validate document requirement for SUBMITTED status
+            // Ensuring document exists for SUBMITTED status
             if (landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
               const documents = await db.models.Document.findOne({
                 where: {
@@ -516,7 +523,7 @@ module.exports = (db, DataTypes) => {
               }
             }
 
-            // Handle approved_by and rejection_reason
+            // Handling approval and rejection logic
             if (landRecord.record_status === RECORD_STATUSES.APPROVED) {
               if (!landRecord.updated_by) throw new Error("ጸድቋል ሁኔታ የተቀየረበት ተጠቃሚ ይፈለጋል።");
               landRecord.approved_by = landRecord.updated_by;
@@ -532,7 +539,7 @@ module.exports = (db, DataTypes) => {
               landRecord.rejection_reason = null;
             }
 
-            // Update status_history and reset notification_status
+            // Updating status history and resetting notification status
             landRecord.status_history = [
               ...(landRecord.status_history || []),
               {
@@ -544,7 +551,7 @@ module.exports = (db, DataTypes) => {
             landRecord.notification_status = NOTIFICATION_STATUSES.NOT_SENT;
           }
 
-          // Log notification_status changes
+          // Logging notification status changes
           if (landRecord.changed("notification_status")) {
             landRecord.action_log = [
               ...(landRecord.action_log || []),
@@ -556,7 +563,7 @@ module.exports = (db, DataTypes) => {
             ];
           }
 
-          // Validate administrative_unit_id and land_level on update
+          // Validating administrative unit and land level on update
           if (landRecord.changed("administrative_unit_id") || landRecord.changed("land_level")) {
             const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
               transaction: options.transaction,
@@ -567,7 +574,7 @@ module.exports = (db, DataTypes) => {
             }
           }
 
-          // Validate user_id and administrative_unit_id alignment
+          // Validating user and administrative unit alignment
           if (landRecord.changed("user_id") || landRecord.changed("administrative_unit_id")) {
             const user = await db.models.User.findByPk(landRecord.user_id, {
               transaction: options.transaction,
@@ -581,7 +588,7 @@ module.exports = (db, DataTypes) => {
             }
           }
 
-          // Validate block_number uniqueness on update
+          // Checking block number uniqueness on update
           if (landRecord.changed("block_number") || landRecord.changed("administrative_unit_id")) {
             if (landRecord.block_number) {
               const existingBlock = await db.models.LandRecord.findOne({
@@ -597,7 +604,7 @@ module.exports = (db, DataTypes) => {
             }
           }
 
-          // Validate parcel_number uniqueness on update
+          // Checking parcel number uniqueness on update
           if (landRecord.changed("parcel_number") || landRecord.changed("administrative_unit_id")) {
             const existingParcel = await db.models.LandRecord.findOne({
               where: {
@@ -611,13 +618,13 @@ module.exports = (db, DataTypes) => {
             if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
           }
 
-          // Log updates in action_log
+          // Logging updates in action log
           if (landRecord.changed()) {
             const changedFields = landRecord.changed();
             landRecord.action_log = [
               ...(landRecord.action_log || []),
               {
-                action: `LAND_RECORD_UPDATED`,
+                action: "LAND_RECORD_UPDATED",
                 changed_by: landRecord.updated_by,
                 changed_at: landRecord.updatedAt || new Date(),
                 changed_fields: changedFields,
@@ -626,17 +633,17 @@ module.exports = (db, DataTypes) => {
           }
         },
         beforeDestroy: async (landRecord, options) => {
-          // Validate deleted_by role
+          // Validating deleter role
           if (landRecord.deleted_by) {
             const deleter = await db.models.User.findByPk(landRecord.deleted_by, {
               include: [{ model: db.models.Role, as: "role" }],
               transaction: options.transaction,
             });
             if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-              throw new Error("መዝገብ መሰረዝ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
+              throw new Error("መዝገብ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
             }
 
-            // Log deletion in action_log
+            // Logging deletion in action log
             landRecord.action_log = [
               ...(landRecord.action_log || []),
               {
@@ -664,5 +671,6 @@ module.exports = (db, DataTypes) => {
     }
   );
 
-  return LandRecord;
+  // Exporting model and constants
+  return { LandRecord, RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES, LAND_USE_TYPES, ZONING_TYPES, OWNERSHIP_TYPES };
 };

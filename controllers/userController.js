@@ -3,7 +3,7 @@ const {
   loginUserService,
   getUserByIdService,
   getAllUsersService,
-  updateUserService, 
+  updateUserService,
   deleteUserService,
 } = require("../services/userService");
 
@@ -24,7 +24,9 @@ exports.registerUser = async (req, res) => {
       relationship_type,
       primary_owner_id,
       is_active,
+      co_owners,
     } = req.body;
+
     const user = await registerUserService({
       first_name,
       last_name,
@@ -40,12 +42,15 @@ exports.registerUser = async (req, res) => {
       relationship_type,
       primary_owner_id,
       is_active,
+      co_owners,
     });
+
     res.status(201).json({
       status: "success",
       data: user,
     });
   } catch (error) {
+    console.error("Register error:", { error: error.message });
     res.status(400).json({
       status: "error",
       message: error.message || "ተጠቃሚ መመዝገብ አልተሳካም።",
@@ -56,16 +61,21 @@ exports.registerUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
   try {
     const { email, phone_number, password } = req.body;
-    if (!email || !phone_number) throw new Error("ኢሜይል ወይም ስልክ ቁጥር ያስፈልጋል።");
+    if (!email && !phone_number) throw new Error("ኢሜይል ወይም ስልክ ቁጥር ያስፈልጋል።");
     if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል።");
-    const { user, token } = await loginUserService({ email, phone_number, password });
+    const { user, token } = await loginUserService({
+      email,
+      phone_number,
+      password,
+    });
     res.status(200).json({
-      status: "success",
+      success: true,
       data: { user, token },
     });
   } catch (error) {
+    console.error("Login error:", { error: error.message });
     res.status(400).json({
-      status: "error",
+      success: false,
       message: error.message || "መግባት አልተሳካም።",
     });
   }
@@ -73,7 +83,6 @@ exports.loginUser = async (req, res) => {
 
 exports.logoutUser = async (req, res) => {
   try {
-    // Since JWT is stateless, logout is client-side (discard token)
     res.status(200).json({
       status: "success",
       message: "ተጠቃሚ በተሳካ ሁኔታ ወጥቷል።",
@@ -104,13 +113,13 @@ exports.getUserById = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await getAllUsersService(req.query);
-    const numberOfUsers = users.length;
     res.status(200).json({
       status: "success",
-      numberOfUsers,
+      numberOfUsers: users.length,
       data: users,
     });
   } catch (error) {
+    console.error("Get all users error:", { error: error.message });
     res.status(400).json({
       status: "error",
       message: error.message || "ተጠቃሚዎችን ማግኘት አልተሳካም።",
@@ -159,6 +168,7 @@ exports.updateUser = async (req, res) => {
       data: user,
     });
   } catch (error) {
+    console.error("Update error:", { error: error.message });
     res.status(400).json({
       status: "error",
       message: error.message || "ተጠቃሚ ማዘመን አልተሳካም።",
@@ -168,9 +178,10 @@ exports.updateUser = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
   try {
-    await deleteUserService(req.params.id);
+    await deleteUserService(req.params.id, req.user.id);
     res.status(204).send();
   } catch (error) {
+    console.error("Delete error:", { error: error.message });
     res.status(400).json({
       status: "error",
       message: error.message || "ተጠቃሚ መሰረዝ አልተሳካም።",
