@@ -5,6 +5,11 @@ const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 
 const createLandRecord = async (data, files, creator) => {
+  // Validate creator
+  if (!creator || !creator.id) {
+    throw new Error("የፈጣሪ መረጃ አልተገኘም። 'user-id' ራስጌ ያክሉ።");
+  }
+
   const transaction = await sequelize.transaction();
   try {
     // Validate creator role and administrative unit
@@ -12,11 +17,19 @@ const createLandRecord = async (data, files, creator) => {
       include: [{ model: Role, as: "role" }],
       transaction,
     });
-    if (!creatorRecord || creatorRecord.role?.name !== "መዝጋቢ") {
+    if (!creatorRecord) {
+      throw new Error(`ተጠቃሚ ከመለያ ቁጥር ${creator.id} ጋር አልተገኘም።`);
+    }
+    if (creatorRecord.role?.name !== "መዝጋቢ") {
       throw new Error("መዝገብ መፍጠር የሚችለው መዝጋቢ ብቻ ነው።");
     }
     if (!creatorRecord.administrative_unit_id) {
       throw new Error("የመዝጋቢ አስተዳደራዊ ክፍል መግለጽ አለበት።");
+    }
+
+    // Validate input data
+    if (!data || !data.primary_user || !data.land_record || !data.documents) {
+      throw new Error("የግዴታ መረጃዎች (primary_user, land_record, documents) መግለጽ አለባቸው።");
     }
 
     // Create primary user
@@ -28,6 +41,9 @@ const createLandRecord = async (data, files, creator) => {
       action_log: [{ action: "CREATED", changed_by: creator.id, changed_at: new Date() }],
     };
     const primaryUser = await registerUserService.registerUserService(primaryUserData, transaction);
+    if (!primaryUser) {
+      throw new Error("ዋና ተጠቃሚ መፍጠር አልተሳካም።");
+    }
 
     // Create co-owners (if any)
     const coOwners = [];
@@ -80,6 +96,9 @@ const createLandRecord = async (data, files, creator) => {
       created_at: new Date(),
     };
     const landRecord = await LandRecord.create(landRecordData, { transaction });
+    if (!landRecord) {
+      throw new Error("የመሬት መዝገብ መፍጠር አልተሳካም።");
+    }
 
     // Create Documents
     const documents = [];
@@ -131,8 +150,13 @@ const createLandRecord = async (data, files, creator) => {
     return { landRecord, primaryUser, coOwners, documents, landPayment };
   } catch (error) {
     await transaction.rollback();
-    throw error;
+    throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
 
-module.exports = { createLandRecord };
+const getAllLandRecordService = async () => {
+  const landrecords = await LandRecord.findAll();
+  return landrecords;
+};
+
+module.exports = { createLandRecord, getAllLandRecordService };

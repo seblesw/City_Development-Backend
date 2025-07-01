@@ -3,7 +3,7 @@ const {
   loginUserService,
   getUserByIdService,
   getAllUsersService,
-  updateUserService,
+  updateUserService, 
   deleteUserService,
 } = require("../services/userService");
 

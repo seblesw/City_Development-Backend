@@ -1,8 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const createLandRecordController = require("../controllers/landRecordController");
+const landRecordController = require("../controllers/landRecordController");
 const upload = require("../middlewares/fileStorage");
-
-router.post("/",  upload.array("documents", 5), createLandRecordController.createLandRecord);
+const authMiddleware= require("../middlewares/authMiddleware");
+router.post("/",  upload.array("documents", 5), authMiddleware.protect, landRecordController.createLandRecord);
+router.get("/",   landRecordController.getAllLandRecords);
 
 module.exports = router;
