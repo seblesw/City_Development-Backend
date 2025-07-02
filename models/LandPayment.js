@@ -67,7 +67,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      
       currency: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -115,10 +114,16 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      payer_id: {
-        type: DataTypes.INTEGER,
+      payer_name: {
+        type: DataTypes.STRING,
         allowNull: false,
-        references: { model: "users", key: "id" },
+        validate: {
+          notEmpty: { msg: "የክፍያ አድራጊ ስም ባዶ መሆን አይችልም።" },
+          len: {
+            args: [1, 100],
+            msg: "የክፍያ አድራጊ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
+          },
+        },
       },
     },
     {
@@ -130,93 +135,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["land_record_id"] },
         { fields: ["payment_type"] },
         { fields: ["payment_status"] },
-        { fields: ["payer_id"] },
       ],
-      hooks: {
-        beforeCreate: async (payment, options) => {
-          // Validate payer_id role
-          const payer = await db.models.User.findByPk(payment.payer_id, {
-            include: [{ model: db.models.Role, as: "role" }],
-            transaction: options.transaction,
-          });
-          if (!payer || !["መመዝገቢ", "አስተዳደር"].includes(payer.role?.name)) {
-            throw new Error("ክፍያ መፈፀም የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
-          }
-
-          // Validate land_record_id
-          const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
-            transaction: options.transaction,
-          });
-          if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-
-          // Log payment creation in LandRecord.action_log
-          landRecord.action_log = [
-            ...(landRecord.action_log || []),
-            {
-              action: `PAYMENT_CREATED_${payment.payment_type || "UNKNOWN"}`,
-              changed_by: payment.payer_id,
-              changed_at: payment.createdAt || new Date(),
-              payment_id: payment.id,
-            },
-          ];
-          await landRecord.save({ transaction: options.transaction });
-        },
-        beforeUpdate: async (payment, options) => {
-          // Validate payer_id role on update
-          if (payment.changed("payer_id")) {
-            const payer = await db.models.User.findByPk(payment.payer_id, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!payer || !["መመዝገቢ", "አስተዳደር"].includes(payer.role?.name)) {
-              throw new Error("ክፍያ መፈፀም የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
-            }
-          }
-
-          // Validate land_record_id on update
-          if (payment.changed("land_record_id")) {
-            const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
-              transaction: options.transaction,
-            });
-            if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-          }
-
-          // Validate payment_status transitions
-          const validTransitions = {
-            [PAYMENT_STATUSES.PENDING]: [
-              PAYMENT_STATUSES.COMPLETED,
-              PAYMENT_STATUSES.FAILED,
-              PAYMENT_STATUSES.CANCELLED,
-            ],
-            [PAYMENT_STATUSES.FAILED]: [PAYMENT_STATUSES.PENDING],
-            [PAYMENT_STATUSES.COMPLETED]: [],
-            [PAYMENT_STATUSES.CANCELLED]: [],
-          };
-          if (payment.changed("payment_status")) {
-            const previousStatus = payment.previous("payment_status");
-            if (!validTransitions[previousStatus]?.includes(payment.payment_status)) {
-              throw new Error(`ከ${previousStatus} ወደ ${payment.payment_status} መሸጋገር አይችልም።`);
-            }
-          }
-
-          // Log payment update in LandRecord.action_log
-          const landRecord = await db.models.LandRecord.findByPk(payment.land_record_id, {
-            transaction: options.transaction,
-          });
-          if (landRecord) {
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: `PAYMENT_UPDATED_${payment.payment_type || "UNKNOWN"}`,
-                changed_by: payment.payer_id,
-                changed_at: payment.updatedAt || new Date(),
-                payment_id: payment.id,
-              },
-            ];
-            await landRecord.save({ transaction: options.transaction });
-          }
-        },
-      },
       validate: {
         async validateLandRecord() {
           const landRecord = await db.models.LandRecord.findByPk(this.land_record_id);

@@ -9,7 +9,15 @@ const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const User = require("./User")(db, DataTypes);
-const { LandRecord, RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES, LAND_USE_TYPES, OWNERSHIP_TYPES, ZONING_TYPES } = require("./LandRecord")(db, DataTypes);
+const {
+  LandRecord,
+  RECORD_STATUSES,
+  NOTIFICATION_STATUSES,
+  PRIORITIES,
+  LAND_USE_TYPES,
+  OWNERSHIP_TYPES,
+  ZONING_TYPES,
+} = require("./LandRecord")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
 
@@ -79,18 +87,6 @@ User.hasMany(LandRecord, {
 User.hasMany(LandRecord, {
   as: "deletedLandRecords",
   foreignKey: "deleted_by",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-User.hasMany(Document, {
-  as: "preparedDocuments",
-  foreignKey: "prepared_by",
-  onDelete: "RESTRICT",
-  onUpdate: "CASCADE",
-});
-User.hasMany(Document, {
-  as: "approvedDocuments",
-  foreignKey: "approved_by",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
@@ -308,18 +304,7 @@ Document.belongsTo(LandRecord, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-Document.belongsTo(User, {
-  foreignKey: "prepared_by",
-  as: "preparer",
-  onDelete: "RESTRICT",
-  onUpdate: "CASCADE",
-});
-Document.belongsTo(User, {
-  foreignKey: "approved_by",
-  as: "approver",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
+
 
 // Export Sequelize instance, models, and constants
 module.exports = {
@@ -340,5 +325,5 @@ module.exports = {
   PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
-  ZONING_TYPES, 
+  ZONING_TYPES,
 };

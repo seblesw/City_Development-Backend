@@ -1,190 +1,114 @@
 const {
-  registerUserService,
-  loginUserService,
-  getUserByIdService,
-  getAllUsersService,
-  updateUserService,
-  deleteUserService,
+  createLandOwner,
+  getUserById,
+  updateUser,
+  deleteUser,
 } = require("../services/userService");
 
-exports.registerUser = async (req, res) => {
+const createLandOwnerController = async (req, res) => {
   try {
-    const {
-      first_name,
-      last_name,
-      email,
-      phone_number,
-      role_id,
-      administrative_unit_id,
-      oversight_office_id,
-      national_id,
-      address,
-      gender,
-      marital_status,
-      relationship_type,
-      primary_owner_id,
-      is_active,
-      co_owners,
-    } = req.body;
-
-    const user = await registerUserService({
-      first_name,
-      last_name,
-      email,
-      phone_number,
-      role_id,
-      administrative_unit_id,
-      oversight_office_id,
-      national_id,
-      address,
-      gender,
-      marital_status,
-      relationship_type,
-      primary_owner_id,
-      is_active,
-      co_owners,
+    const { body, user: authUser } = req;
+    if (!authUser) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const primaryOwnerData = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email || null,
+      phone_number: body.phone_number || null,
+      password: body.password || null,
+      role_id: body.role_id || null,
+      administrative_unit_id: body.administrative_unit_id,
+      oversight_office_id: body.oversight_office_id || null,
+      national_id: body.national_id,
+      address: body.address || null,
+      gender: body.gender,
+      relationship_type: body.relationship_type || null,
+      marital_status: body.marital_status,
+      primary_owner_id: null,
+      is_active: body.is_active !== undefined ? body.is_active : true,
+    };
+    const coOwnersData = body.co_owners || [];
+    const owner = await createLandOwner(
+      primaryOwnerData,
+      coOwnersData,
+      authUser.id
+    );
+    return res.status(201).json({
+      message: "የመሬት ባለቤት እና ተጋሪዎች በተሳካ ሁኔታ ተመዝግበዋል።",
+      data: owner,
     });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
 
-    res.status(201).json({
-      status: "success",
+const getUserByIdController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await getUserById(id);
+    return res.status(200).json({
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተገኝቷል።`,
       data: user,
     });
   } catch (error) {
-    console.error("Register error:", { error: error.message });
-    res.status(400).json({
-      status: "error",
-      message: error.message || "ተጠቃሚ መመዝገብ አልተሳካም።",
-    });
+    return res.status(400).json({ error: error.message });
   }
 };
 
-exports.loginUser = async (req, res) => {
+const updateUserController = async (req, res) => {
   try {
-    const { email, phone_number, password } = req.body;
-    if (!email && !phone_number) throw new Error("ኢሜይል ወይም ስልክ ቁጥር ያስፈልጋል።");
-    if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል።");
-    const { user, token } = await loginUserService({
-      email,
-      phone_number,
-      password,
-    });
-    res.status(200).json({
-      success: true,
-      data: { user, token },
-    });
-  } catch (error) {
-    console.error("Login error:", { error: error.message });
-    res.status(400).json({
-      success: false,
-      message: error.message || "መግባት አልተሳካም።",
-    });
-  }
-};
-
-exports.logoutUser = async (req, res) => {
-  try {
-    res.status(200).json({
-      status: "success",
-      message: "ተጠቃሚ በተሳካ ሁኔታ ወጥቷል።",
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: "error",
-      message: error.message || "መውጣት አልተሳካም።",
-    });
-  }
-};
-
-exports.getUserById = async (req, res) => {
-  try {
-    const user = await getUserByIdService(req.params.id);
-    res.status(200).json({
-      status: "success",
+    const { id } = req.params;
+    const { body, user: authUser } = req;
+    if (!authUser) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const data = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone_number: body.phone_number,
+      password: body.password,
+      role_id: body.role_id,
+      administrative_unit_id: body.administrative_unit_id,
+      oversight_office_id: body.oversight_office_id,
+      national_id: body.national_id,
+      address: body.address,
+      gender: body.gender,
+      relationship_type: body.relationship_type,
+      marital_status: body.marital_status,
+      primary_owner_id: body.primary_owner_id,
+      is_active: body.is_active,
+    };
+    const user = await updateUser(id, data, authUser.id);
+    return res.status(200).json({
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ �ሁኔታ ተቀይሯል።`,
       data: user,
     });
   } catch (error) {
-    res.status(404).json({
-      status: "error",
-      message: error.message || "ተጠቃሚ አልተገኘም።",
-    });
+    return res.status(400).json({ error: error.message });
   }
 };
 
-exports.getAllUsers = async (req, res) => {
+const deleteUserController = async (req, res) => {
   try {
-    const users = await getAllUsersService(req.query);
-    res.status(200).json({
-      status: "success",
-      numberOfUsers: users.length,
-      data: users,
+    const { id } = req.params;
+    const { user: authUser } = req;
+    if (!authUser) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const result = await deleteUser(id, authUser.id);
+    return res.status(200).json({
+      message: result.message,
     });
   } catch (error) {
-    console.error("Get all users error:", { error: error.message });
-    res.status(400).json({
-      status: "error",
-      message: error.message || "ተጠቃሚዎችን ማግኘት አልተሳካም።",
-    });
+    return res.status(400).json({ error: error.message });
   }
 };
 
-exports.updateUser = async (req, res) => {
-  try {
-    const {
-      first_name,
-      last_name,
-      email,
-      phone_number,
-      password,
-      role_id,
-      administrative_unit_id,
-      oversight_office_id,
-      national_id,
-      address,
-      gender,
-      marital_status,
-      relationship_type,
-      primary_owner_id,
-      is_active,
-    } = req.body;
-    const user = await updateUserService(req.params.id, {
-      first_name,
-      last_name,
-      email,
-      phone_number,
-      password,
-      role_id,
-      administrative_unit_id,
-      oversight_office_id,
-      national_id,
-      address,
-      gender,
-      marital_status,
-      relationship_type,
-      primary_owner_id,
-      is_active,
-    });
-    res.status(200).json({
-      status: "success",
-      data: user,
-    });
-  } catch (error) {
-    console.error("Update error:", { error: error.message });
-    res.status(400).json({
-      status: "error",
-      message: error.message || "ተጠቃሚ ማዘመን አልተሳካም።",
-    });
-  }
-};
-
-exports.deleteUser = async (req, res) => {
-  try {
-    await deleteUserService(req.params.id, req.user.id);
-    res.status(204).send();
-  } catch (error) {
-    console.error("Delete error:", { error: error.message });
-    res.status(400).json({
-      status: "error",
-      message: error.message || "ተጠቃሚ መሰረዝ አልተሳካም።",
-    });
-  }
+module.exports = {
+  createLandOwnerController,
+  getUserByIdController,
+  updateUserController,
+  deleteUserController,
 };

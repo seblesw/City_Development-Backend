@@ -1,13 +1,72 @@
-const { sequelize, Document } = require("../models");
+const { sequelize, Document, LandRecord, User, Role } = require("../models");
+const { Op } = require("sequelize");
 
-const createDocument = async (data, files, creatorId, options = {}) => {
+const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
+  let t = transaction;
   try {
-    if (!data.map_number || !data.document_type || !files || files.length === 0) {
-      throw new Error("የሰነድ መረጃዎች (map_number, document_type) እና ቢያንስ አንድ ፋይል መግለጽ አለባቸው።");
+    if (
+      !data.map_number ||
+      !data.document_type ||
+      !files ||
+      files.length === 0
+    ) {
+      throw new Error(
+        "የሰነድ መረጃዎች (map_number, document_type) እና ቢያንስ አንዴ ፋይል መግለጽ አለባቸው።"
+      );
+    }
+    if (!data.preparer_name) {
+      throw new Error("የሰነድ አዘጋጅ ስም መግለጽ አለበት።");
     }
 
-    // Validate files
+    t = t || (await sequelize.transaction());
+
+    // Validate creator role
+    const creator = await User.findByPk(creatorId, {
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
+    });
+    if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
+      throw new Error("ሰነድ መዘጋጀት የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+    }
+
+    // Validate land_record_id
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
+      transaction: t,
+    });
+    if (!landRecord) {
+      throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
+    }
+
+    // Validate map_number uniqueness
+    const existingMap = await Document.findOne({
+      where: {
+        map_number: data.map_number,
+        land_record_id: data.land_record_id,
+        deletedAt: { [Op.eq]: null },
+      },
+      transaction: t,
+    });
+    if (existingMap) {
+      throw new Error("ይህ የካርታ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+    }
+
+    // Validate reference_number uniqueness
+    if (data.reference_number) {
+      const existingRef = await Document.findOne({
+        where: {
+          reference_number: data.reference_number,
+          land_record_id: data.land_record_id,
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction: t,
+      });
+      if (existingRef) {
+        throw new Error("ይህ የሰነድ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+      }
+    }
+
+    // Prepare file metadata
     const fileMetadata = files.map((file) => ({
       file_path: file.path,
       file_name: file.originalname,
@@ -15,6 +74,7 @@ const createDocument = async (data, files, creatorId, options = {}) => {
       file_size: file.size,
     }));
 
+    // Create document
     const documentData = {
       map_number: data.map_number,
       document_type: data.document_type,
@@ -22,23 +82,55 @@ const createDocument = async (data, files, creatorId, options = {}) => {
       description: data.description || null,
       files: fileMetadata,
       land_record_id: data.land_record_id,
-      prepared_by: creatorId,
-      approved_by: data.approved_by || null,
+      preparer_name: data.preparer_name,
+      approver_name: data.approver_name || null,
       issue_date: data.issue_date || null,
-      isActive: true,
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      inActived_reason: data.inActived_reason || null,
     };
+    const document = await Document.create(documentData, { transaction: t });
 
-    const document = await Document.create(documentData, { transaction });
+    // Log document creation in LandRecord.action_log
+    landRecord.action_log = [
+      ...(landRecord.action_log || []),
+      {
+        action: `DOCUMENT_UPLOADED_${document.document_type}`,
+        changed_by: creatorId,
+        changed_at: document.createdAt || new Date(),
+        document_id: document.id,
+      },
+    ];
+    await landRecord.save({ transaction: t });
+
+    if (!transaction) await t.commit();
     return document;
   } catch (error) {
+    if (!transaction && t) await t.rollback();
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };
 
-const addFilesToDocument = async (id, files, updaterId, options = {}) => {
+const addFilesToDocumentService = async (
+  id,
+  files,
+  updaterId,
+  options = {}
+) => {
   const { transaction } = options;
+  let t = transaction;
   try {
-    const document = await Document.findByPk(id, { transaction });
+    t = t || (await sequelize.transaction());
+
+    // Validate updater role
+    const updater = await User.findByPk(updaterId, {
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
+    });
+    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
+      throw new Error("ፋይሎችን መጨመር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+    }
+
+    const document = await Document.findByPk(id, { transaction: t });
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
@@ -47,6 +139,7 @@ const addFilesToDocument = async (id, files, updaterId, options = {}) => {
       throw new Error("ቢያንስ አንዴ ፋይል መግለጥ አለበት።");
     }
 
+    // Prepare new files
     const newFiles = files.map((file) => ({
       file_path: file.path,
       file_name: file.originalname,
@@ -54,24 +147,64 @@ const addFilesToDocument = async (id, files, updaterId, options = {}) => {
       file_size: file.size,
     }));
 
+    // Update document
     document.files = [...(document.files || []), ...newFiles];
-    document.isActive = true; // Reactivate if previously deactivated
+    document.isActive = true;
     document.inActived_reason = null;
-    await document.save({ transaction });
+    await document.save({ transaction: t });
+
+    // Log file addition in LandRecord.action_log
+    const landRecord = await LandRecord.findByPk(document.land_record_id, {
+      transaction: t,
+    });
+    if (landRecord) {
+      landRecord.action_log = [
+        ...(landRecord.action_log || []),
+        {
+          action: `DOCUMENT_FILES_ADDED_${document.document_type}`,
+          changed_by: updaterId,
+          changed_at: new Date(),
+          document_id: document.id,
+        },
+      ];
+      await landRecord.save({ transaction: t });
+    }
+
+    if (!transaction) await t.commit();
     return document;
   } catch (error) {
+    if (!transaction && t) await t.rollback();
     throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
   }
 };
 
-const getDocumentById = async (id, options = {}) => {
+const getDocumentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
     const document = await Document.findByPk(id, {
       include: [
-        { model: require("../models").LandRecord, as: "landRecord", attributes: ["id", "parcel_number"] },
-        { model: require("../models").User, as: "preparer", attributes: ["id", "first_name", "last_name"] },
-        { model: require("../models").User, as: "approver", attributes: ["id", "first_name", "last_name"] },
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: ["id", "parcel_number"],
+        },
+      ],
+      attributes: [
+        "id",
+        "map_number",
+        "document_type",
+        "reference_number",
+        "description",
+        "issue_date",
+        "land_record_id",
+        "preparer_name",
+        "approver_name",
+        "isActive",
+        "inActived_reason",
+        "files",
+        "createdAt",
+        "updatedAt",
+        "deletedAt",
       ],
       transaction,
     });
@@ -84,16 +217,101 @@ const getDocumentById = async (id, options = {}) => {
   }
 };
 
-const updateDocument = async (id, data, files, updaterId, options = {}) => {
+const updateDocumentService = async (
+  id,
+  data,
+  files,
+  updaterId,
+  options = {}
+) => {
   const { transaction } = options;
+  let t = transaction;
   try {
-    const document = await Document.findByPk(id, { transaction });
+    t = t || (await sequelize.transaction());
+
+    // Validate updater role
+    const updater = await User.findByPk(updaterId, {
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
+    });
+    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
+      throw new Error("ሰነድ መቀየር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+    }
+
+    const document = await Document.findByPk(id, { transaction: t });
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
 
+    // Validate land_record_id if changed
+    if (
+      data.land_record_id &&
+      data.land_record_id !== document.land_record_id
+    ) {
+      const landRecord = await LandRecord.findByPk(data.land_record_id, {
+        transaction: t,
+      });
+      if (!landRecord) {
+        throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
+      }
+    }
+
+    // Validate map_number uniqueness if changed
+    if (
+      data.map_number &&
+      (data.map_number !== document.map_number ||
+        data.land_record_id !== document.land_record_id)
+    ) {
+      const existingMap = await Document.findOne({
+        where: {
+          map_number: data.map_number,
+          land_record_id: data.land_record_id || document.land_record_id,
+          id: { [Op.ne]: id },
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction: t,
+      });
+      if (existingMap) {
+        throw new Error("ይህ የካርታ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+      }
+    }
+
+    // Validate reference_number uniqueness if changed
+    if (
+      data.reference_number !== undefined &&
+      (data.reference_number !== document.reference_number ||
+        data.land_record_id !== document.land_record_id)
+    ) {
+      if (data.reference_number) {
+        const existingRef = await Document.findOne({
+          where: {
+            reference_number: data.reference_number,
+            land_record_id: data.land_record_id || document.land_record_id,
+            id: { [Op.ne]: id },
+            deletedAt: { [Op.eq]: null },
+          },
+          transaction: t,
+        });
+        if (existingRef) {
+          throw new Error("ይህ የሰነድ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+        }
+      }
+    }
+
+    // Prepare update data
     const updateData = {};
-    const updatableFields = ["map_number", "document_type", "reference_number", "description", "issue_date", "approved_by", "isActive", "inActived_reason"];
+    const updatableFields = [
+      "map_number",
+      "document_type",
+      "reference_number",
+      "description",
+      "issue_date",
+      "land_record_id",
+      "preparer_name",
+      "approver_name",
+      "isActive",
+      "inActived_reason",
+    ];
     for (const field of updatableFields) {
       if (data[field] !== undefined) {
         updateData[field] = data[field];
@@ -110,32 +328,102 @@ const updateDocument = async (id, data, files, updaterId, options = {}) => {
       updateData.files = [...(document.files || []), ...newFiles];
     }
 
+    // Log document update or activation/deactivation in LandRecord.action_log
+    const landRecord = await LandRecord.findByPk(document.land_record_id, {
+      transaction: t,
+    });
+    if (landRecord) {
+      if (data.isActive !== undefined && data.isActive !== document.isActive) {
+        const action = data.isActive
+          ? `DOCUMENT_ACTIVATED_${document.document_type}`
+          : `DOCUMENT_DEACTIVATED_${document.document_type}`;
+        landRecord.action_log = [
+          ...(landRecord.action_log || []),
+          {
+            action,
+            changed_by: updaterId,
+            changed_at: new Date(),
+            document_id: document.id,
+          },
+        ];
+      } else if (Object.keys(updateData).length > 0 || files?.length > 0) {
+        landRecord.action_log = [
+          ...(landRecord.action_log || []),
+          {
+            action: `DOCUMENT_UPDATED_${document.document_type}`,
+            changed_by: updaterId,
+            changed_at: new Date(),
+            document_id: document.id,
+          },
+        ];
+      }
+      await landRecord.save({ transaction: t });
+    }
+
+    // Update document
     updateData.updated_at = new Date();
-    await document.update(updateData, { transaction });
+    await document.update(updateData, { transaction: t });
+
+    if (!transaction) await t.commit();
     return document;
   } catch (error) {
+    if (!transaction && t) await t.rollback();
     throw new Error(`የሰነድ መቀየር ስህተት: ${error.message}`);
   }
 };
 
-const deleteDocument = async (id, deleterId, options = {}) => {
+const deleteDocumentService = async (id, deleterId, options = {}) => {
   const { transaction } = options;
+  let t = transaction;
   try {
-    const document = await Document.findByPk(id, { transaction });
+    t = t || (await sequelize.transaction());
+
+    // Validate deleter role
+    const deleter = await User.findByPk(deleterId, {
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
+    });
+    if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
+      throw new Error("ሰነድ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
+    }
+
+    const document = await Document.findByPk(id, { transaction: t });
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
-    await document.destroy({ transaction });
+
+    // Log deletion in LandRecord.action_log
+    const landRecord = await LandRecord.findByPk(document.land_record_id, {
+      transaction: t,
+    });
+    if (landRecord) {
+      landRecord.action_log = [
+        ...(landRecord.action_log || []),
+        {
+          action: `DOCUMENT_DELETED_${document.document_type}`,
+          changed_by: deleterId,
+          changed_at: new Date(),
+          document_id: document.id,
+        },
+      ];
+      await landRecord.save({ transaction: t });
+    }
+
+    // Soft delete document
+    await document.destroy({ transaction: t });
+
+    if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
   } catch (error) {
+    if (!transaction && t) await t.rollback();
     throw new Error(`የሰነድ መሰረዝ ስህተት: ${error.message}`);
   }
 };
 
 module.exports = {
-  createDocument,
-  addFilesToDocument,
-  getDocumentById,
-  updateDocument,
-  deleteDocument,
+  createDocumentService,
+  addFilesToDocumentService,
+  getDocumentByIdService,
+  updateDocumentService,
+  deleteDocumentService,
 };

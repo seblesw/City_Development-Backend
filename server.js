@@ -11,6 +11,7 @@ const roleRoutes = require('./routes/roleRoutes');
 const AdministrativeUnitRoutes = require('./routes/admistrativeUnitRoutes');
 const landRecordRoutes = require('./routes/landRecordRoutes');
 const userRoutes =require('./routes/userRoutes');
+const authRoutes = require('./routes/authRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
 // Initialize express app
@@ -40,6 +41,7 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/administrative-units', AdministrativeUnitRoutes);
 app.use('/api/v1/land-records', landRecordRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
 

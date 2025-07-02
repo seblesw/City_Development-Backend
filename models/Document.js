@@ -6,7 +6,7 @@ const DOCUMENT_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
   TRANSFER_DOCUMENT: "የማስተላለፍ ሰነድ",
   SURVEY_PLAN: "የመሬት መለኪያ ፕላን",
-  RECIEPT:"የክፍያ"
+  RECIEPT: "የክፍያ ደረሰኝ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -38,7 +38,7 @@ module.exports = (db, DataTypes) => {
       },
       document_type: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [Object.values(DOCUMENT_TYPES)],
@@ -56,7 +56,8 @@ module.exports = (db, DataTypes) => {
             msg: "የሰነድ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
           },
           notEmptyString(value) {
-            if (value === "") throw new Error("የሰነድ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
+            if (value === "")
+              throw new Error("የሰነድ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
           },
         },
       },
@@ -65,9 +66,9 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
-      inActived_reason:{
-        type:DataTypes.DATE,
-        allowNull:true,
+      inActived_reason: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
       files: {
         type: DataTypes.JSONB,
@@ -85,19 +86,27 @@ module.exports = (db, DataTypes) => {
               if (file.file_name && typeof file.file_name !== "string") {
                 throw new Error("የፋይል ስም ትክክለኛ ሕብረቁምፊ መሆን አለበት።");
               }
-              if (!file.mime_type || !["application/pdf", "image/jpeg", "image/png"].includes(file.mime_type)) {
+              if (
+                !file.mime_type ||
+                !["application/pdf", "image/jpeg", "image/png"].includes(file.mime_type)
+              ) {
                 throw new Error("የፋይል አይነት PDF፣ JPEG ወይም PNG መሆን አለበት።");
               }
-              if (!file.file_size || typeof file.file_size !== "number" || file.file_size <= 0 || file.file_size > 10 * 1024 * 1024) {
-                throw new Error("የፋይል መጠን ከ0 ባይት እስከ 10MB መሆን አለበት።");
+              if (
+                !file.file_size ||
+                typeof file.file_size !== "number" ||
+                file.file_size <= 0 ||
+                file.file_size > 50 * 1024 * 1024
+              ) {
+                throw new Error("የፋይል መጠን ከ0 ባይት እስከ 50MB መሆን አለበት።");
               }
             }
           },
         },
       },
-      issue_date:{
-        type:DataTypes.DATE,
-        allowNull:true,
+      issue_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
       description: {
         type: DataTypes.TEXT,
@@ -106,15 +115,30 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
-      approved_by: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
-      },
-      prepared_by: {
-        type: DataTypes.INTEGER,
+      preparer_name: {
+        type: DataTypes.STRING,
         allowNull: false,
-        references: { model: "users", key: "id" },
+        validate: {
+          notEmpty: { msg: "የሰነዴ አዘጋጅ ስም ባዶ መሆን አይችልም።" },
+          len: {
+            args: [1, 100],
+            msg: "የሰነዴ አዘጋጅ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
+      approver_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 100],
+            msg: "የሰነዴ አጽዳቂ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
+          },
+          notEmptyString(value) {
+            if (value === "")
+              throw new Error("የሰነዴ አጽዳቂ ስም ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
+          },
+        },
       },
     },
     {
@@ -124,179 +148,10 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { unique: true, fields: ["map_number", "land_record_id"] },
-        { unique: true, fields: ["reference_number", "land_record_id"], where: { reference_number: { [Op.ne]: null } } },
+        { fields: ["reference_number", "land_record_id"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
-        { fields: ["prepared_by"] },
-        { fields: ["approved_by"] },
       ],
-      hooks: {
-        beforeCreate: async (document, options) => {
-          // Validate prepared_by role
-          const preparer = await db.models.User.findByPk(document.prepared_by, {
-            include: [{ model: db.models.Role, as: "role" }],
-            transaction: options.transaction,
-          });
-          if (!preparer || !["መመዝገቢ", "አስተዳደር"].includes(preparer.role?.name)) {
-            throw new Error("ሰነዴ መዘጋጀት የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
-          }
-
-          // Validate approved_by role if provided
-          if (document.approved_by) {
-            const approver = await db.models.User.findByPk(document.approved_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
-              throw new Error("ሰነዴ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
-            }
-          }
-
-          // Validate land_record_id
-          const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
-            transaction: options.transaction,
-          });
-          if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-
-          // Validate map_number uniqueness within land_record_id
-          const existingMap = await db.models.Document.findOne({
-            where: {
-              map_number: document.map_number,
-              land_record_id: document.land_record_id,
-              deleted_at: { [Op.eq]: null },
-            },
-            transaction: options.transaction,
-          });
-          if (existingMap) throw new Error("ይህ የካርታ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
-
-          // Validate reference_number uniqueness within land_record_id
-          if (document.reference_number) {
-            const existingRef = await db.models.Document.findOne({
-              where: {
-                reference_number: document.reference_number,
-                land_record_id: document.land_record_id,
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingRef) throw new Error("ይህ የሰነዴ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
-          }
-
-          // Log document creation in LandRecord.action_log
-          landRecord.action_log = [
-            ...(landRecord.action_log || []),
-            {
-              action: `DOCUMENT_UPLOADED_${document.document_type}`,
-              changed_by: document.prepared_by,
-              changed_at: document.createdAt || new Date(),
-              document_id: document.id,
-            },
-          ];
-          await landRecord.save({ transaction: options.transaction });
-        },
-        beforeUpdate: async (document, options) => {
-          // Validate prepared_by role on update
-          if (document.changed("prepared_by")) {
-            const preparer = await db.models.User.findByPk(document.prepared_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!preparer || !["መመዝገቢ", "አስተዳደር"].includes(preparer.role?.name)) {
-              throw new Error("ሰነዴ መዘጋጀት የሚችሉቷ መመዝገቢ ወይም አስተዳደር ብቻ ናቸው።");
-            }
-          }
-
-          // Validate approved_by role on update
-          if (document.changed("approved_by")) {
-            if (document.approved_by) {
-              const approver = await db.models.User.findByPk(document.approved_by, {
-                include: [{ model: db.models.Role, as: "role" }],
-                transaction: options.transaction,
-              });
-              if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
-                throw new Error("ሰነዴ ማፅደቅ የሚችሉቷ አስተዳደር ብቻ ናቸው።");
-              }
-            }
-          }
-
-          // Validate land_record_id on update
-          if (document.changed("land_record_id")) {
-            const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
-              transaction: options.transaction,
-            });
-            if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-          }
-
-          // Validate map_number uniqueness within land_record_id on update
-          if (document.changed("map_number") || document.changed("land_record_id")) {
-            const existingMap = await db.models.Document.findOne({
-              where: {
-                map_number: document.map_number,
-                land_record_id: document.land_record_id,
-                id: { [Op.ne]: document.id },
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingMap) throw new Error("ይህ የካርታ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
-          }
-
-          // Validate reference_number uniqueness within land_record_id on update
-          if (document.changed("reference_number") || document.changed("land_record_id")) {
-            if (document.reference_number) {
-              const existingRef = await db.models.Document.findOne({
-                where: {
-                  reference_number: document.reference_number,
-                  land_record_id: document.land_record_id,
-                  id: { [Op.ne]: document.id },
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (existingRef) throw new Error("ይህ የሰነዴ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
-            }
-          }
-
-          // Log document activation or deactivation in LandRecord.action_log if isActive changes
-          if (document.changed("isActive")) {
-            const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
-              transaction: options.transaction,
-            });
-            if (landRecord) {
-              const action = document.isActive
-                ? `DOCUMENT_ACTIVATED_${document.document_type}`
-                : `DOCUMENT_DEACTIVATED_${document.document_type}`;
-              landRecord.action_log = [
-                ...(landRecord.action_log || []),
-                {
-                  action,
-                  changed_by: document.prepared_by,
-                  changed_at: document.updatedAt || new Date(),
-                  document_id: document.id,
-                },
-              ];
-              await landRecord.save({ transaction: options.transaction });
-            }
-          }
-
-          // Log document update in LandRecord.action_log
-          const landRecord = await db.models.LandRecord.findByPk(document.land_record_id, {
-            transaction: options.transaction,
-          });
-          if (landRecord) {
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: `DOCUMENT_UPDATED_${document.document_type}`,
-                changed_by: document.prepared_by,
-                changed_at: document.updatedAt || new Date(),
-                document_id: document.id,
-              },
-            ];
-            await landRecord.save({ transaction: options.transaction });
-          }
-        },
-      },
       validate: {
         async validLandRecord() {
           const landRecord = await db.models.LandRecord.findByPk(this.land_record_id);
