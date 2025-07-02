@@ -11,224 +11,256 @@ const {
   ZONING_TYPES,
   OWNERSHIP_TYPES,
 } = require("../models");
-const { registerUserService } = require("./userService");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
+const { Op } = require("sequelize");
+const userService = require("./userService");
 
-const createLandRecordService = async (data, files, creator) => {
+const createLandRecordService = async (data, files, userId) => {
   console.log("Input data:", JSON.stringify(data, null, 2));
   console.log("Files received:", files);
-  // Validate creator
-  if (!creator || !creator.id) {
-    throw new Error("የመዝጋቢ መረጃ አልተገኘም። ትክክለኛ ቶክን ያክሉ።");
-  }
 
-  const transaction = await sequelize.transaction();
+  let transaction;
   try {
+    transaction = await sequelize.transaction();
+
+    // Parse JSON strings
+    const primaryUserData =
+      typeof data.primary_user === "string"
+        ? JSON.parse(data.primary_user)
+        : data.primary_user;
+    const coOwnersData =
+      typeof data.co_owners === "string"
+        ? JSON.parse(data.co_owners)
+        : data.co_owners || [];
+    const landRecordData =
+      typeof data.land_record === "string"
+        ? JSON.parse(data.land_record)
+        : data.land_record;
+    const documentsData =
+      typeof data.documents === "string"
+        ? JSON.parse(data.documents)
+        : data.documents || [];
+    const landPaymentData =
+      typeof data.land_payment === "string"
+        ? JSON.parse(data.land_payment)
+        : data.land_payment || {};
+
+    console.log("Parsed fields:", {
+      primary_user: primaryUserData,
+      co_owners: coOwnersData,
+      land_record: landRecordData,
+      documents: documentsData,
+      land_payment: landPaymentData,
+    });
+
+    // Validate enum values
+    console.log("Enum values:", {
+      LAND_USE_TYPES,
+      OWNERSHIP_TYPES,
+      ZONING_TYPES,
+    });
+    if (
+      !LAND_USE_TYPES ||
+      !Object.values(LAND_USE_TYPES).includes(landRecordData.land_use)
+    ) {
+      throw new Error(
+        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${
+          Object.values(LAND_USE_TYPES || {}).join(", ") || "አልተገለጸም"
+        }) ውስጥ መሆን አለበት።`
+      );
+    }
+    if (
+      !OWNERSHIP_TYPES ||
+      !Object.values(OWNERSHIP_TYPES).includes(landRecordData.ownership_type)
+    ) {
+      throw new Error(
+        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${
+          Object.values(OWNERSHIP_TYPES || {}).join(", ") || "አልተገለጸም"
+        }) ውስጥ መሆን አለበት።`
+      );
+    }
+    if (
+      landRecordData.zoning_type &&
+      !Object.values(ZONING_TYPES).includes(landRecordData.zoning_type)
+    ) {
+      throw new Error(
+        `የዞን አይነት ከተፈቀዱቷ እሴቶች (${
+          Object.values(ZONING_TYPES || {}).join(", ") || "አልተገለጸም"
+        }) ውስጥ መሆን አለበት።`
+      );
+    }
+
+
+
     // Validate creator role
-    const creatorRecord = await User.findByPk(creator.id, {
+    const creator = await User.findByPk(userId, {
       include: [{ model: Role, as: "role" }],
       transaction,
     });
-    if (!creatorRecord) {
-      throw new Error(`መለያ ቁጥር ${creator.id} ያለው መዝጋቢ አልተገኘም።`);
-    }
-    if (!["መዝጋቢ", "አስተዳደር"].includes(creatorRecord.role?.name)) {
-      throw new Error("መዝገብ መፍጠር የሚችለው መዝጋቢ ወይም አስተዳደር ብቻ ነው።");
-    }
-    if (!creatorRecord.administrative_unit_id) {
-      throw new Error("የመዝጋቢ አስተዳደራዊ ክፍል መግለጽ አለበት።");
+    if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
+      throw new Error("መዝገብ መፍጠር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
     }
 
-    // Initialize fields to prevent undefined errors
-    data.primary_user = data.primary_user || {};
-    data.land_record = data.land_record || {};
-    data.documents = data.documents || [];
-    data.co_owners = data.co_owners || [];
-    data.land_payment = data.land_payment || {};
+    // Validate administrative unit and land level
+    const adminUnit = await AdministrativeUnit.findByPk(
+      landRecordData.administrative_unit_id ||
+        primaryUserData.administrative_unit_id,
+      { transaction }
+    );
+    if (!adminUnit) {
+      throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
+    }
+    if (landRecordData.land_level > adminUnit.max_land_levels) {
+      throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
+    }
 
-    console.log("Parsed fields:", {
-      primary_user: data.primary_user,
-      co_owners: data.co_owners,
-      land_record: data.land_record,
-      documents: data.documents,
-      land_payment: data.land_payment,
+    // Check for existing land record
+    const existingRecord = await LandRecord.findOne({
+      where: {
+        [Op.or]: [
+          {
+            parcel_number: landRecordData.parcel_number,
+            administrative_unit_id: landRecordData.administrative_unit_id,
+          },
+          landRecordData.block_number
+            ? {
+                block_number: landRecordData.block_number,
+                administrative_unit_id: landRecordData.administrative_unit_id,
+              }
+            : null,
+        ].filter(Boolean),
+        deletedAt: null,
+      },
+      transaction,
+    });
+    if (existingRecord) {
+      throw new Error("የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
+    }
+
+    // Create primary user
+    console.log("Creating primary user and co-owners...");
+    const primaryUser = await userService.registerUserService(
+      primaryUserData,
+      false,
+      transaction
+    );
+    console.log("Primary user created:", {
+      id: primaryUser.id,
+      national_id: primaryUser.national_id,
     });
 
-    // Validate primary user
+    // Validate primary owner
+    if (!primaryUser.id || typeof primaryUser.id !== "number") {
+      throw new Error("ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።");
+    }
+    if (primaryUser.primary_owner_id !== null) {
+      throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
+    }
     if (
-      !data.primary_user.first_name ||
-      !data.primary_user.last_name ||
-      !data.primary_user.national_id ||
-      !data.primary_user.gender ||
-      !data.primary_user.marital_status
+      primaryUser.administrative_unit_id !==
+      (landRecordData.administrative_unit_id ||
+        primaryUserData.administrative_unit_id)
     ) {
-      throw new Error("የዋና ተጠቃሚ መረጃዎች (ስም, የአባት ስም, ብሔራዊ መታወቂያ, ጾታ, የጋብቻ ሁኔታ) መግለጽ አለባቸው።");
+      throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
     }
 
-    // Validate marital status and co-owners
-    const validMaritalStatuses = ["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"];
-    if (!validMaritalStatuses.includes(data.primary_user.marital_status)) {
-      throw new Error(`የጋብቻ ሁኔታ ከተፈቀዱቷ እሴቶች (${validMaritalStatuses.join(", ")}) ውስጥ መሆን አለበት።`);
-    }
-    if (data.primary_user.marital_status !== "ነጠላ" && !Array.isArray(data.co_owners)) {
-      throw new Error("ለነጠላ ያልሆኑ ተጠቃሚዎች የጋራ ባለቤት መረጃ ዝርዝር መግለጽ አለበት።");
-    }
-
-    // Validate land record
-    if (
-      !data.land_record.parcel_number ||
-      !data.land_record.land_level ||
-      !data.land_record.area ||
-      !data.land_record.land_use ||
-      !data.land_record.ownership_type
+    // Only process co-owners if primary user's marital_status is not "ነጠላ"
+    let coOwners = [];
+    if (primaryUserData.marital_status !== "ነጠላ" && coOwnersData.length > 0) {
+      for (const coOwnerData of coOwnersData) {
+        coOwnerData.primary_owner_id = primaryUser.id;
+        const coOwner = await userService.registerUserService(
+          coOwnerData,
+          true,
+          transaction
+        );
+        coOwners.push(coOwner);
+      }
+    } else if (
+      primaryUserData.marital_status === "ነጠላ" &&
+      coOwnersData.length > 0
     ) {
-      throw new Error("የመሬት መዝገብ መረጃዎች (parcel_number, land_level, area, land_use, ownership_type) መግለጽ አለባቸው።");
-    }
-    if (!Object.values(LAND_USE_TYPES).includes(data.land_record.land_use)) {
-      throw new Error(`የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
-    }
-    if (!Object.values(OWNERSHIP_TYPES).includes(data.land_record.ownership_type)) {
-      throw new Error(`የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(OWNERSHIP_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
-    }
-    if (data.land_record.zoning_type && !Object.values(ZONING_TYPES).includes(data.land_record.zoning_type)) {
-      throw new Error(`የመሬት ዞን ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
-    }
-    if (data.land_record.priority && !Object.values(PRIORITIES).includes(data.land_record.priority)) {
-      throw new Error(`ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(", ")}) ውስጥ መሆን አለበት።`);
+      throw new Error("የጋራ ባለቤቶች ለነጠላ ተጠቃሚ አያስፈልጉም።");
     }
 
-    // Create primary user and co-owners
-    console.log("Creating primary user and co-owners...");
-    const primaryUserData = {
-      first_name: data.primary_user.first_name,
-      last_name: data.primary_user.last_name,
-      national_id: data.primary_user.national_id,
-      email: data.primary_user.email || null,
-      phone_number: data.primary_user.phone_number || null,
-      gender: data.primary_user.gender,
-      marital_status: data.primary_user.marital_status,
-      address: data.primary_user.address || null,
-      administrative_unit_id: data.primary_user.administrative_unit_id || creatorRecord.administrative_unit_id,
-      role_id: null,
-      is_active: true,
-      co_owners: data.co_owners,
-    };
-    const { primaryUser, coOwners } = await registerUserService(primaryUserData, { transaction });
-    console.log("Primary user created:", primaryUser?.id, "Co-owners:", coOwners);
-    if (!primaryUser) {
-      throw new Error("ዋና ተጠቃሚ መፍጠር አልተሳካም።");
-    }
+    // Initialize status_history and action_log
+    const now = new Date();
+    const status_history = [
+      {
+        status: RECORD_STATUSES.DRAFT,
+        changed_by: userId,
+        changed_at: now,
+      },
+    ];
+    const action_log = [
+      {
+        action: "CREATED",
+        changed_by: userId,
+        changed_at: now,
+      },
+    ];
 
     // Create land record
-    console.log("Creating land record...");
-    const landRecordData = {
-      parcel_number: data.land_record.parcel_number,
-      land_level: data.land_record.land_level,
-      administrative_unit_id: creatorRecord.administrative_unit_id,
-      user_id: primaryUser.id,
-      area: data.land_record.area,
-      north_neighbor: data.land_record.north_neighbor || null,
-      east_neighbor: data.land_record.east_neighbor || null,
-      south_neighbor: data.land_record.south_neighbor || null,
-      west_neighbor: data.land_record.west_neighbor || null,
-      block_number: data.land_record.block_number || null,
-      block_special_name: data.land_record.block_special_name || null,
-      land_use: data.land_record.land_use,
-      ownership_type: data.land_record.ownership_type,
-      coordinates: data.land_record.coordinates || null,
-      plot_number: data.land_record.plot_number || null,
-      zoning_type: data.land_record.zoning_type || null,
-      priority: data.land_record.priority || PRIORITIES.MEDIUM,
-      record_status: RECORD_STATUSES.DRAFT,
-      notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-      created_by: creator.id,
-      status_history: [
-        {
-          status: RECORD_STATUSES.DRAFT,
-          changed_by: creator.id,
-          changed_at: new Date(),
-        },
-      ],
-      action_log: [
-        {
-          action: "CREATED",
-          changed_by: creator.id,
-          changed_at: new Date(),
-        },
-      ],
-    };
-    const landRecord = await LandRecord.create(landRecordData, { transaction });
-    console.log("Land record created:", landRecord?.id);
-    if (!landRecord) {
-      throw new Error("የመሬት መዝገብ መፍጠር አልተሳካም።");
-    }
+    console.log("Creating land record with user_id:", primaryUser.id);
+    const landRecord = await LandRecord.create(
+      {
+        ...landRecordData,
+        user_id: primaryUser.id,
+        administrative_unit_id:
+          landRecordData.administrative_unit_id ||
+          primaryUserData.administrative_unit_id,
+        created_by: userId,
+        status: RECORD_STATUSES.DRAFT,
+        notification_status: NOTIFICATION_STATUSES.NOT_SENT,
+        priority: PRIORITIES.LOW,
+        status_history,
+        action_log,
+      },
+      { transaction }
+    );
 
     // Create documents
-    console.log("Creating documents...");
-    const documents = [];
-    if (files && Array.isArray(data.documents) && data.documents.length > 0) {
-      const fileArray = Array.isArray(files) ? files : [files];
-      if (data.documents.length !== fileArray.length) {
-        throw new Error("የሰነዶች መረጃ እና ፋይሎች ቁጥር መመሳሰል አለበት።");
-      }
-      for (let i = 0; i < data.documents.length; i++) {
-        if (!data.documents[i].map_number || !data.documents[i].document_type) {
-          throw new Error("የሰነዴ መረጃዎች (map_number, document_type) መግለጽ አለባቸው።");
-        }
-        const document = await documentService.createDocument(
+    const documentPromises = documentsData.map(async (doc, index) => {
+      if (files && files[index]) {
+        return documentService.createDocument(
           {
-            map_number: data.documents[i].map_number,
-            document_type: data.documents[i].document_type,
-            reference_number: data.documents[i].reference_number || null,
-            description: data.documents[i].description || null,
-            issue_date: data.documents[i].issue_date || null,
+            ...doc,
             land_record_id: landRecord.id,
-            prepared_by: creator.id,
-            approved_by: null,
+            file_path: files[index].path,
+            prepared_by: userId,
           },
-          [fileArray[i]], // Pass single file as array
-          creator.id,
-          { transaction }
+          transaction
         );
-        console.log("Document created:", document?.id);
-        documents.push(document);
       }
-    } else {
-      throw new Error("ቢያንስ አንዴ ሰነዴ እና ፋይል መግለጥ አለበት።");
-    }
+    });
+    await Promise.all(documentPromises.filter(Boolean));
 
     // Create land payment
-    console.log("Creating land payment...");
     let landPayment = null;
-    if (data.land_payment && typeof data.land_payment === "object" && Object.keys(data.land_payment).length > 0) {
-      if (!data.land_payment.payment_type || !data.land_payment.total_amount || !data.land_payment.paid_amount) {
-        throw new Error("የክፍያ መረጃዎች (payment_type, total_amount, paid_amount) መግለጽ አለባቸው።");
-      }
+    if (Object.keys(landPaymentData).length > 0) {
       landPayment = await landPaymentService.createPayment(
         {
+          ...landPaymentData,
           land_record_id: landRecord.id,
-          payment_type: data.land_payment.payment_type,
-          total_amount: data.land_payment.total_amount,
-          paid_amount: data.land_payment.paid_amount,
-          currency: data.land_payment.currency || "ETB",
-          payment_status: data.land_payment.payment_status || "በመጠባበቅ ላይ",
-          penalty_reason: data.land_payment.penalty_reason || null,
-          description: data.land_payment.description || null,
           payer_id: primaryUser.id,
         },
-        creator.id,
-        { transaction }
+        transaction
       );
-      console.log("Land payment created:", landPayment?.id);
     }
 
     await transaction.commit();
-    console.log("Transaction committed successfully.");
-    return { landRecord, primaryUser, coOwners, documents, landPayment };
+
+    return {
+      landRecord,
+      primaryUser,
+      coOwners,
+      documents: documentsData,
+      landPayment,
+    };
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error("Service error:", error.message, error.stack);
-    await transaction.rollback();
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };

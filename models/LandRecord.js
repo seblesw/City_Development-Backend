@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { DataTypes, Op } = require("sequelize");
 
 // Defining constants for record statuses in Amharic
 const RECORD_STATUSES = {
@@ -184,7 +184,7 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የቦታ ልዩ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።" },
           is: {
             args: /^[a-zA-Z0-9\s-]+$/,
-            msg: "የቦታ ልዩ ስም ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።",
+            msg: "የቦታ ልዩ ስም ፊደል፣ ቁጥር፣ ክፍተት ወዯም ሰረዝ ብቻ መያዝ አለበት።",
           },
           notEmptyString(value) {
             if (value === "") throw new Error("የቦታ ልዩ ስም ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
@@ -280,7 +280,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isValidZoningType(value) {
             if (value !== null && !Object.values(ZONING_TYPES).includes(value)) {
-              throw new Error(`የመሬት ዞን ከተፈቀዱት እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
+              throw new Error(`የመሬት ዞን ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`);
             }
           },
         },
@@ -296,7 +296,7 @@ module.exports = (db, DataTypes) => {
             }
             for (const entry of value) {
               if (!entry.status || !Object.values(RECORD_STATUSES).includes(entry.status)) {
-                throw new Error(`የሁኔታ ታሪክ ሁኔታ ከተፈቀዱት እሴቶች (${Object.values(RECORD_STATUSES).join(", ")}) መሆን አለበት።`);
+                throw new Error(`የሁኔታ ታሪክ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(RECORD_STATUSES).join(", ")}) መሆን አለበት።`);
               }
               if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
                 throw new Error("የሁኔታ ታሪክ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
@@ -399,263 +399,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["created_by"] },
         { fields: ["approved_by"] },
       ],
-      hooks: {
-        beforeCreate: async (landRecord, options) => {
-          // Validating creator role
-          const creator = await db.models.User.findByPk(landRecord.created_by, {
-            include: [{ model: db.models.Role, as: "role" }],
-            transaction: options.transaction,
-          });
-          if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
-            throw new Error("መዝገብ መፍጠር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
-          }
-
-          // Validating administrative unit and land level
-          const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
-            transaction: options.transaction,
-          });
-          if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
-          if (landRecord.land_level > adminUnit.max_land_levels) {
-            throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
-          }
-
-          // Validating primary owner
-          const user = await db.models.User.findByPk(landRecord.user_id, {
-            transaction: options.transaction,
-          });
-          if (!user || user.primary_owner_id !== null) {
-            throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
-          }
-
-          // Ensuring administrative unit consistency with user
-          if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-            throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
-          }
-
-          // Checking block number uniqueness
-          if (landRecord.block_number) {
-            const existingBlock = await db.models.LandRecord.findOne({
-              where: {
-                block_number: landRecord.block_number,
-                administrative_unit_id: landRecord.administrative_unit_id,
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingBlock) throw new Error("ይህ የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
-          }
-
-          // Checking parcel number uniqueness
-          const existingParcel = await db.models.LandRecord.findOne({
-            where: {
-              parcel_number: landRecord.parcel_number,
-              administrative_unit_id: landRecord.administrative_unit_id,
-              deleted_at: { [Op.eq]: null },
-            },
-            transaction: options.transaction,
-          });
-          if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
-
-          // Initializing status history and action log
-          landRecord.status_history = [
-            {
-              status: landRecord.record_status,
-              changed_by: landRecord.created_by,
-              changed_at: landRecord.createdAt || new Date(),
-            },
-          ];
-          landRecord.action_log = [
-            {
-              action: "CREATED",
-              changed_by: landRecord.created_by,
-              changed_at: landRecord.createdAt || new Date(),
-            },
-          ];
-        },
-        beforeUpdate: async (landRecord, options) => {
-          // Validating updater role
-          if (landRecord.changed("updated_by") && landRecord.updated_by) {
-            const updater = await db.models.User.findByPk(landRecord.updated_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-              throw new Error("መዝገብ መቀየር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
-            }
-          }
-
-          // Validating approver role
-          if (landRecord.changed("approved_by") && landRecord.approved_by) {
-            const approver = await db.models.User.findByPk(landRecord.approved_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!approver || !["አስተዳደር"].includes(approver.role?.name)) {
-              throw new Error("መዝገብ ማፅደቅ የሚችሉት አስተዳደር ብቻ ናቸው።");
-            }
-          }
-
-          // Validating status transitions
-          const validTransitions = {
-            [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
-            [RECORD_STATUSES.SUBMITTED]: [RECORD_STATUSES.UNDER_REVIEW],
-            [RECORD_STATUSES.UNDER_REVIEW]: [RECORD_STATUSES.APPROVED, RECORD_STATUSES.REJECTED],
-            [RECORD_STATUSES.REJECTED]: [RECORD_STATUSES.SUBMITTED],
-            [RECORD_STATUSES.APPROVED]: [],
-          };
-          if (landRecord.changed("record_status")) {
-            const previousStatus = landRecord.previous("record_status");
-            if (!validTransitions[previousStatus]?.includes(landRecord.record_status)) {
-              throw new Error(`ከ${previousStatus} ወደ ${landRecord.record_status} መሸጋገር አይችልም።`);
-            }
-
-            // Ensuring document exists for SUBMITTED status
-            if (landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
-              const documents = await db.models.Document.findOne({
-                where: {
-                  land_record_id: landRecord.id,
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (!documents) {
-                throw new Error("ቀርቧል ሁኔታ ቢያንስ አንድ ሰነድ ይፈለጋል።");
-              }
-            }
-
-            // Handling approval and rejection logic
-            if (landRecord.record_status === RECORD_STATUSES.APPROVED) {
-              if (!landRecord.updated_by) throw new Error("ጸድቋል ሁኔታ የተቀየረበት ተጠቃሚ ይፈለጋል።");
-              landRecord.approved_by = landRecord.updated_by;
-            } else {
-              landRecord.approved_by = null;
-            }
-
-            if (landRecord.record_status === RECORD_STATUSES.REJECTED) {
-              if (!landRecord.rejection_reason) {
-                throw new Error("ውድቅ ሁኔታ የውድቅ ምክንያት ይፈለጋል።");
-              }
-            } else if (previousStatus === RECORD_STATUSES.REJECTED && landRecord.record_status === RECORD_STATUSES.SUBMITTED) {
-              landRecord.rejection_reason = null;
-            }
-
-            // Updating status history and resetting notification status
-            landRecord.status_history = [
-              ...(landRecord.status_history || []),
-              {
-                status: landRecord.record_status,
-                changed_by: landRecord.updated_by,
-                changed_at: landRecord.updatedAt || new Date(),
-              },
-            ];
-            landRecord.notification_status = NOTIFICATION_STATUSES.NOT_SENT;
-          }
-
-          // Logging notification status changes
-          if (landRecord.changed("notification_status")) {
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: `NOTIFICATION_STATUS_CHANGED_TO_${landRecord.notification_status}`,
-                changed_by: landRecord.updated_by,
-                changed_at: landRecord.updatedAt || new Date(),
-              },
-            ];
-          }
-
-          // Validating administrative unit and land level on update
-          if (landRecord.changed("administrative_unit_id") || landRecord.changed("land_level")) {
-            const adminUnit = await db.models.AdministrativeUnit.findByPk(landRecord.administrative_unit_id, {
-              transaction: options.transaction,
-            });
-            if (!adminUnit) throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
-            if (landRecord.land_level > adminUnit.max_land_levels) {
-              throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
-            }
-          }
-
-          // Validating user and administrative unit alignment
-          if (landRecord.changed("user_id") || landRecord.changed("administrative_unit_id")) {
-            const user = await db.models.User.findByPk(landRecord.user_id, {
-              transaction: options.transaction,
-            });
-            if (!user) throw new Error("ተጠቃሚ አልተገኘም።");
-            if (user.primary_owner_id !== null) {
-              throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
-            }
-            if (user.administrative_unit_id !== landRecord.administrative_unit_id) {
-              throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
-            }
-          }
-
-          // Checking block number uniqueness on update
-          if (landRecord.changed("block_number") || landRecord.changed("administrative_unit_id")) {
-            if (landRecord.block_number) {
-              const existingBlock = await db.models.LandRecord.findOne({
-                where: {
-                  block_number: landRecord.block_number,
-                  administrative_unit_id: landRecord.administrative_unit_id,
-                  id: { [Op.ne]: landRecord.id },
-                  deleted_at: { [Op.eq]: null },
-                },
-                transaction: options.transaction,
-              });
-              if (existingBlock) throw new Error("ይህ የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
-            }
-          }
-
-          // Checking parcel number uniqueness on update
-          if (landRecord.changed("parcel_number") || landRecord.changed("administrative_unit_id")) {
-            const existingParcel = await db.models.LandRecord.findOne({
-              where: {
-                parcel_number: landRecord.parcel_number,
-                administrative_unit_id: landRecord.administrative_unit_id,
-                id: { [Op.ne]: landRecord.id },
-                deleted_at: { [Op.eq]: null },
-              },
-              transaction: options.transaction,
-            });
-            if (existingParcel) throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
-          }
-
-          // Logging updates in action log
-          if (landRecord.changed()) {
-            const changedFields = landRecord.changed();
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: "LAND_RECORD_UPDATED",
-                changed_by: landRecord.updated_by,
-                changed_at: landRecord.updatedAt || new Date(),
-                changed_fields: changedFields,
-              },
-            ];
-          }
-        },
-        beforeDestroy: async (landRecord, options) => {
-          // Validating deleter role
-          if (landRecord.deleted_by) {
-            const deleter = await db.models.User.findByPk(landRecord.deleted_by, {
-              include: [{ model: db.models.Role, as: "role" }],
-              transaction: options.transaction,
-            });
-            if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-              throw new Error("መዝገብ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
-            }
-
-            // Logging deletion in action log
-            landRecord.action_log = [
-              ...(landRecord.action_log || []),
-              {
-                action: "DELETED",
-                changed_by: landRecord.deleted_by,
-                changed_at: new Date(),
-              },
-            ];
-            await landRecord.save({ transaction: options.transaction });
-          }
-        },
-      },
       validate: {
         atLeastOneNeighbor() {
           if (

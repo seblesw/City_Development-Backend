@@ -9,7 +9,7 @@ const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const User = require("./User")(db, DataTypes);
-const { LandRecord, RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES, LAND_USE_TYPES, ZOONING_TYPES, OWNERSHIP_TYPES } = require("./LandRecord")(db, DataTypes);
+const { LandRecord, RECORD_STATUSES, NOTIFICATION_STATUSES, PRIORITIES, LAND_USE_TYPES, OWNERSHIP_TYPES, ZONING_TYPES } = require("./LandRecord")(db, DataTypes);
 const LandPayment = require("./LandPayment")(db, DataTypes);
 const Document = require("./Document")(db, DataTypes);
 
@@ -339,6 +339,6 @@ module.exports = {
   NOTIFICATION_STATUSES,
   PRIORITIES,
   LAND_USE_TYPES,
-  ZOONING_TYPES,
   OWNERSHIP_TYPES,
+  ZONING_TYPES, 
 };
