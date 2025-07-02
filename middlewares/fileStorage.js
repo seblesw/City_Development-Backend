@@ -1,9 +1,16 @@
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
+
+// Ensure uploads/documents/ directory exists
+const uploadDir = path.join(__dirname, "..", "uploads", "documents");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/documents/");
+    cb(null, uploadDir); // Use resolved path
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -23,9 +30,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 module.exports = upload;

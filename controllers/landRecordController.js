@@ -56,8 +56,8 @@ const createLandRecord = async (req, res, next) => {
     }
 
     // Validate file uploads
-    if (!files || !files.documents) {
-      return res.status(400).json({ error: "ቢያንስ አንድ ሰነድ ፋይል መግለጥ አለበት።" });
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: "ቢያንስ አንዴ ሰነዴ ፋይል መግለጥ አለበት።" });
     }
 
     const result = await createLandRecordService(data, files, user);

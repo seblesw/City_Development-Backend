@@ -14,8 +14,9 @@ const userRoutes =require('./routes/userRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
 // Initialize express app
+
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT ;
 
 // Middleware
 app.use(cors());
