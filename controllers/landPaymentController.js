@@ -1,60 +1,92 @@
-const landPaymentService = require("../services/landPaymentService");
+const { createPayment, getPaymentById, updatePayment, deletePayment } = require("../services/landPaymentService");
 
-const createPayment = async (req, res) => {
+const createPaymentController = async (req, res) => {
   try {
     const { body, user } = req;
-    const payment = await landPaymentService.createPayment(body, user.id, null);
-    res.status(201).json({
-      success: true,
+    if (!user) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const data = {
+      land_record_id: body.land_record_id,
+      payment_type: body.payment_type,
+      total_amount: body.total_amount,
+      paid_amount: body.paid_amount,
+      currency: body.currency,
+      payment_status: body.payment_status,
+      penalty_reason: body.penalty_reason,
+      description: body.description,
+      payer_id: body.payer_id || user.id,
+    };
+    const payment = await createPayment(data, user.id);
+    return res.status(201).json({
       message: "ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
       data: payment,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message || "ክፍያ መፍጠር አልተሳካም።",
-    });
+    return res.status(400).json({ error: error.message });
   }
 };
 
-const getPayment = async (req, res) => {
+const getPaymentByIdController = async (req, res) => {
   try {
-    const payment = await landPaymentService.getPayment(req.params.id);
-    res.status(200).json({ success: true, data: payment });
-  } catch (error) {
-    res.status(404).json({
-      success: false,
-      message: error.message || "ክፍያ አልተገኘም።",
-    });
-  }
-};
-
-const updatePayment = async (req, res) => {
-  try {
-    const payment = await landPaymentService.updatePayment(req.params.id, req.body, req.user.id);
-    res.status(200).json({
-      success: true,
-      message: "ክፍያ በተሳካ ሁኔታ ተዘምኗል።",
+    const { id } = req.params;
+    const payment = await getPaymentById(id);
+    return res.status(200).json({
+      message: `መለያ ቁጥር ${id} ያለው ክፍያ በተሳካ ሁኔታ ተገኝቷል።`,
       data: payment,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message || "ክፍያ መዘመን አልተሳካም።",
-    });
+    return res.status(400).json({ error: error.message });
   }
 };
 
-const deletePayment = async (req, res) => {
+const updatePaymentController = async (req, res) => {
   try {
-    const result = await landPaymentService.deletePayment(req.params.id, req.user.id);
-    res.status(200).json({ success: true, message: result.message });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message || "ክፍያ መሰረዝ አልተሳካም።",
+    const { id } = req.params;
+    const { body, user } = req;
+    if (!user) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const data = {
+      land_record_id: body.land_record_id,
+      payment_type: body.payment_type,
+      total_amount: body.total_amount,
+      paid_amount: body.paid_amount,
+      currency: body.currency,
+      payment_status: body.payment_status,
+      penalty_reason: body.penalty_reason,
+      description: body.description,
+      payer_id: body.payer_id,
+    };
+    const payment = await updatePayment(id, data, user.id);
+    return res.status(200).json({
+      message: `መለያ ቁጥር ${id} ያለው ክፍያ በተሳካ ሁኔታ ተቀይሯል።`,
+      data: payment,
     });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
   }
 };
 
-module.exports = { createPayment, getPayment, updatePayment, deletePayment };
+const deletePaymentController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user } = req;
+    if (!user) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    const result = await deletePayment(id, user.id);
+    return res.status(200).json({
+      message: result.message,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
+module.exports = {
+  createPaymentController,
+  getPaymentByIdController,
+  updatePaymentController,
+  deletePaymentController,
+};

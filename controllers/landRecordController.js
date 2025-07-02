@@ -1,28 +1,75 @@
-const { createLandRecordService, getAllLandRecordService, updateLandRecordService, deleteLandRecordService } = require("../services/landRecordService");
+const {
+  createLandRecordService,
+  getAllLandRecordService,
+  updateLandRecordService,
+  deleteLandRecordService,
+} = require("../services/landRecordService");
 
 // Creating a new land record
 const createLandRecord = async (req, res, next) => {
+  console.log("req.body:", JSON.stringify(req.body, null, 2)); 
+  console.log("req.files:", req.files); 
   try {
     const { body, files, user } = req;
     if (!user) {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
     }
-    const data = {
-      primary_user: body.primary_user ,
-      land_record: body.land_record ,
-      documents: body.documents ,
-      land_payment: body.land_payment
+
+    // Handle both string and object inputs
+    const parseField = (field, fieldName) => {
+      if (!field) {
+        return fieldName === "co_owners" || fieldName === "documents" ? [] : {};
+      }
+      if (typeof field === "object") {
+        return field; // Already an object, no parsing needed
+      }
+      if (typeof field !== "string") {
+        throw new Error(
+          `የ${fieldName} መረጃ ሕብረቁምፊ ወይም ነገር መሆን አለበት። የተገኘው: ${typeof field}`
+        );
+      }
+      try {
+        return JSON.parse(field);
+      } catch (error) {
+        throw new Error(
+          `የ${fieldName} መረጃ ትክክለኛ JSON መሆን አለበት።: ${field} ልክ ያልሆነ JSON ነው።`
+        );
+      }
     };
+
+    const data = {
+      primary_user: parseField(body.primary_user, "primary_user"),
+      co_owners: parseField(body.co_owners, "co_owners"),
+      land_record: parseField(body.land_record, "land_record"),
+      documents: parseField(body.documents, "documents"),
+      land_payment: parseField(body.land_payment, "land_payment"),
+    };
+
+    // Validate required fields
+    if (!data.primary_user || !data.land_record || !data.documents) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "የግዴታ መረጃዎች (primary_user, land_record, documents) መግለጽ አለባቸው።",
+        });
+    }
+
+    // Validate file uploads
+    if (!files || !files.documents) {
+      return res.status(400).json({ error: "ቢያንስ አንድ ሰነድ ፋይል መግለጥ አለበት።" });
+    }
+
     const result = await createLandRecordService(data, files, user);
     return res.status(201).json({
       message: "የመሬት መዝገብ በተሳካ ሁኔታ ተፈጥሯል።",
       data: result,
     });
   } catch (error) {
+    console.error("Controller error:", error.message); // Log error for debugging
     return res.status(400).json({ error: error.message });
   }
 };
-
 // Retrieving all land records
 const getAllLandRecords = async (req, res, next) => {
   try {
@@ -47,10 +94,26 @@ const getLandRecordById = async (req, res, next) => {
     }
     const landRecord = await require("../models").LandRecord.findByPk(id, {
       include: [
-        { model: require("../models").User, as: "user", attributes: ["id", "first_name", "last_name", "national_id"] },
-        { model: require("../models").AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: require("../models").User, as: "creator", attributes: ["id", "first_name", "last_name"] },
-        { model: require("../models").User, as: "approver", attributes: ["id", "first_name", "last_name"] },
+        {
+          model: require("../models").User,
+          as: "user",
+          attributes: ["id", "first_name", "last_name", "national_id"],
+        },
+        {
+          model: require("../models").AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: require("../models").User,
+          as: "creator",
+          attributes: ["id", "first_name", "last_name"],
+        },
+        {
+          model: require("../models").User,
+          as: "approver",
+          attributes: ["id", "first_name", "last_name"],
+        },
       ],
       attributes: [
         "id",

@@ -3,18 +3,17 @@ const { registerUserService } = require("./userService");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 
-// Creating a new land record with associated user, documents, and payment
 const createLandRecordService = async (data, files, creator) => {
-  console.log("Input data:", JSON.stringify(data, null, 2)); // Detailed debug
-  console.log("co_owners received:", data.co_owners); // Specific co_owners debug
-  // Validating creator input
+  console.log("Input data:", JSON.stringify(data, null, 2));
+  console.log("Files received:", files);
+  // Validate creator
   if (!creator || !creator.id) {
     throw new Error("የመዝጋቢ መረጃ አልተገኘም። ትክክለኛ ቶክን ያክሉ።");
   }
 
   const transaction = await sequelize.transaction();
   try {
-    // Validating creator role and administrative unit
+    // Validate creator role
     const creatorRecord = await User.findByPk(creator.id, {
       include: [{ model: Role, as: "role" }],
       transaction,
@@ -29,12 +28,22 @@ const createLandRecordService = async (data, files, creator) => {
       throw new Error("የመዝጋቢ አስተዳደራዊ ክፍል መግለጽ አለበት።");
     }
 
-    // Validating input data structure
-    if (!data || !data.primary_user || !data.land_record || !data.documents) {
-      throw new Error("የግዴታ መረጃዎች (primary_user, land_record, documents) መግለጽ አለባቸው።");
-    }
+    // Initialize fields to prevent undefined errors
+    data.primary_user = data.primary_user || {};
+    data.land_record = data.land_record || {};
+    data.documents = data.documents || [];
+    data.co_owners = data.co_owners || [];
+    data.land_payment = data.land_payment || null;
 
-    // Validating primary user fields
+    console.log("Parsed fields:", {
+      primary_user: data.primary_user,
+      co_owners: data.co_owners,
+      land_record: data.land_record,
+      documents: data.documents,
+      land_payment: data.land_payment,
+    });
+
+    // Validate primary user
     if (
       !data.primary_user.first_name ||
       !data.primary_user.last_name ||
@@ -45,19 +54,16 @@ const createLandRecordService = async (data, files, creator) => {
       throw new Error("የዋና ተጠቃሚ መረጃዎች (ስም, የአባት ስም, ብሔራዊ መታወቂያ, ጾታ, የጋብቻ ሁኔታ) መግለጽ አለባቸው።");
     }
 
-    // Validating marital status and co-owners
+    // Validate marital status and co-owners
     const validMaritalStatuses = ["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"];
     if (!validMaritalStatuses.includes(data.primary_user.marital_status)) {
-      throw new Error(`የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (${validMaritalStatuses.join(", ")}) ውስጥ መሆን አለበት።`);
+      throw new Error(`የጋብቻ ሁኔታ ከተፈቀዱቷ እሴቶች (${validMaritalStatuses.join(", ")}) ውስጥ መሆን አለበት።`);
     }
     if (data.primary_user.marital_status !== "ነጠላ" && !Array.isArray(data.co_owners)) {
       throw new Error("ለነጠላ ያልሆኑ ተጠቃሚዎች የጋራ ባለቤት መረጃ ዝርዝር መግለጽ አለበት።");
     }
 
-    // Set default empty co_owners if undefined
-    data.co_owners = data.co_owners || [];
-
-    // Validating land record fields
+    // Validate land record
     if (
       !data.land_record.parcel_number ||
       !data.land_record.land_level ||
@@ -79,16 +85,8 @@ const createLandRecordService = async (data, files, creator) => {
     if (data.land_record.priority && !Object.values(PRIORITIES).includes(data.land_record.priority)) {
       throw new Error(`ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(", ")}) ውስጥ መሆን አለበት።`);
     }
-    if (
-      !data.land_record.north_neighbor &&
-      !data.land_record.east_neighbor &&
-      !data.land_record.south_neighbor &&
-      !data.land_record.west_neighbor
-    ) {
-      throw new Error("ቢያንስ አንድ ጎረቤት መግለጥ አለበት።");
-    }
 
-    // Creating primary user and co-owners
+    // Create primary user and co-owners
     const primaryUserData = {
       first_name: data.primary_user.first_name,
       last_name: data.primary_user.last_name,
@@ -108,7 +106,7 @@ const createLandRecordService = async (data, files, creator) => {
       throw new Error("ዋና ተጠቃሚ መፍጠር አልተሳካም።");
     }
 
-    // Creating land record
+    // Create land record
     const landRecordData = {
       parcel_number: data.land_record.parcel_number,
       land_level: data.land_record.land_level,
@@ -150,12 +148,9 @@ const createLandRecordService = async (data, files, creator) => {
       throw new Error("የመሬት መዝገብ መፍጠር አልተሳካም።");
     }
 
-    // Creating documents
+    // Create documents
     const documents = [];
-    if (files && files.documents && data.documents && Array.isArray(data.documents)) {
-      if (data.documents.length === 0) {
-        throw new Error("ቢያንስ አንድ ሰነድ መግለጥ አለበት።");
-      }
+    if (files && files.documents && Array.isArray(data.documents) && data.documents.length > 0) {
       const fileArray = Array.isArray(files.documents) ? files.documents : [files.documents];
       if (data.documents.length !== fileArray.length) {
         throw new Error("የሰነዶች መረጃ እና ፋይሎች ቁጥር መመሳሰል አለበት።");
@@ -170,23 +165,24 @@ const createLandRecordService = async (data, files, creator) => {
             document_type: data.documents[i].document_type,
             reference_number: data.documents[i].reference_number || null,
             description: data.documents[i].description || null,
+            issue_date: data.documents[i].issue_date || null,
             land_record_id: landRecord.id,
             prepared_by: creator.id,
             approved_by: null,
           },
-          [fileArray[i]],
+          [fileArray[i]], // Pass single file as array
           creator.id,
           { transaction }
         );
         documents.push(document);
       }
     } else {
-      throw new Error("ቢያንስ አንዴ ሰነድ እና ፋይል መግለጥ አለበት።");
+      throw new Error("ቢያንስ አንድ ሰነድ እና ፋይል መግለጥ አለበት።");
     }
 
-    // Creating land payment
+    // Create land payment
     let landPayment = null;
-    if (data.land_payment) {
+    if (data.land_payment && Object.keys(data.land_payment).length > 0) {
       if (!data.land_payment.payment_type || !data.land_payment.total_amount || !data.land_payment.paid_amount) {
         throw new Error("የክፍያ መረጃዎች (payment_type, total_amount, paid_amount) መግለጽ አለባቸው።");
       }
@@ -197,6 +193,8 @@ const createLandRecordService = async (data, files, creator) => {
           total_amount: data.land_payment.total_amount,
           paid_amount: data.land_payment.paid_amount,
           currency: data.land_payment.currency || "ETB",
+          payment_status: data.land_payment.payment_status || "በመጠባበቅ ላይ",
+          penalty_reason: data.land_payment.penalty_reason || null,
           description: data.land_payment.description || null,
           payer_id: primaryUser.id,
         },
