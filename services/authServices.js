@@ -3,7 +3,7 @@ const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const registerOfficial = async (data, creatorId, options = {}) => {
+const registerOfficial = async (data,  options = {}) => {
   const { transaction } = options;
   let t = transaction;
   try {
@@ -14,13 +14,13 @@ const registerOfficial = async (data, creatorId, options = {}) => {
     t = t || (await sequelize.transaction());
 
     // Validate creator role
-    const creator = await User.findByPk(creatorId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!creator || !["አስተዳደር"].includes(creator.role?.name)) {
-      throw new Error("ባለሥልጣን መመዝገብ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    }
+    // const creator = await User.findByPk(creatorId, {
+    //   include: [{ model: Role, as: "role" }],
+    //   transaction: t,
+    // });
+    // if (!creator || !["አስተዳደር"].includes(creator.role?.name)) {
+    //   throw new Error("ባለሥልጣን መመዝገብ የሚችሉት አስተዳደር ብቻ ናቸው።");
+    // }
 
     // Validate administrative_unit_id
     const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });

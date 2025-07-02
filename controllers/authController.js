@@ -2,10 +2,10 @@ const { registerOfficial, login } = require("../services/authServices");
 
 const registerOfficialController = async (req, res) => {
   try {
-    const { body, user: authUser } = req;
-    if (!authUser) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    }
+    const { body, } = req;
+    // if (!authUser) {
+    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    // }
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
@@ -19,11 +19,11 @@ const registerOfficialController = async (req, res) => {
       address: body.address || null,
       gender: body.gender,
       relationship_type: null,
-      marital_status: null,
+      marital_status: body.marital_status ,
       primary_owner_id: null,
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
-    const official = await registerOfficial(data, authUser.id);
+    const official = await registerOfficial(data,);
     return res.status(201).json({
       message: "ባለሥልጣን በተሳካ ሁኔታ ተመዝግቧል።",
       data: official,
