@@ -5,50 +5,30 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
   try {
-    if (
-      !data.map_number ||
-      !data.document_type ||
-      !files ||
-      files.length === 0
-    ) {
+    if (!data.map_number || !data.document_type) {
       throw new Error(
-        "የሰነድ መረጃዎች (map_number, document_type) እና ቢያንስ አንዴ ፋይል መግለጽ አለባቸው።"
+        "የሰነድ መረጃዎች (map_number, document_type) መግለጽ አለባቸው።"
       );
     }
-    if (!data.preparer_name) {
-      throw new Error("የሰነድ አዘጋጅ ስም መግለጽ አለበት።");
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      throw new Error("ቢያንስ አንዴ ፋይል መግለጽ አለበት።");
+    }
+    if (!data.land_record_id || typeof data.land_record_id !== "number") {
+      throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
 
     t = t || (await sequelize.transaction());
-
-    // Validate creator role
-    const creator = await User.findByPk(creatorId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
-      throw new Error("ሰነድ መዘጋጀት የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
-    }
-
-    // Validate land_record_id
-    const landRecord = await LandRecord.findByPk(data.land_record_id, {
-      transaction: t,
-    });
-    if (!landRecord) {
-      throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-    }
 
     // Validate map_number uniqueness
     const existingMap = await Document.findOne({
       where: {
         map_number: data.map_number,
-        land_record_id: data.land_record_id,
         deletedAt: { [Op.eq]: null },
       },
       transaction: t,
     });
     if (existingMap) {
-      throw new Error("ይህ የካርታ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+      throw new Error("ይህ የካርታ ቁጥር ተመዝግቧል።");
     }
 
     // Validate reference_number uniqueness
@@ -56,13 +36,12 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       const existingRef = await Document.findOne({
         where: {
           reference_number: data.reference_number,
-          land_record_id: data.land_record_id,
           deletedAt: { [Op.eq]: null },
         },
         transaction: t,
       });
       if (existingRef) {
-        throw new Error("ይህ የሰነድ ቁጥር ለዚህ መሬት መዝገብ ተመዝግቧል።");
+        throw new Error("ይህ የሰነድ ቁጥር ተመዝግቧል።");
       }
     }
 
@@ -74,7 +53,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       file_size: file.size,
     }));
 
-    // Create document
+    // Create document with land_record_id
     const documentData = {
       map_number: data.map_number,
       document_type: data.document_type,
@@ -82,25 +61,14 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       description: data.description || null,
       files: fileMetadata,
       land_record_id: data.land_record_id,
-      preparer_name: data.preparer_name,
+      preparer_name: data.preparer_name || null,
       approver_name: data.approver_name || null,
       issue_date: data.issue_date || null,
       isActive: data.isActive !== undefined ? data.isActive : true,
       inActived_reason: data.inActived_reason || null,
+      uploaded_by: creatorId,
     };
     const document = await Document.create(documentData, { transaction: t });
-
-    // Log document creation in LandRecord.action_log
-    landRecord.action_log = [
-      ...(landRecord.action_log || []),
-      {
-        action: `DOCUMENT_UPLOADED_${document.document_type}`,
-        changed_by: creatorId,
-        changed_at: document.createdAt || new Date(),
-        document_id: document.id,
-      },
-    ];
-    await landRecord.save({ transaction: t });
 
     if (!transaction) await t.commit();
     return document;

@@ -16,19 +16,20 @@ const landPaymentService = require("./landPaymentService");
 const { Op } = require("sequelize");
 const userService = require("./userService");
 
-const createLandRecordService = async (data, files, userId) => {
+const createLandRecordService = async (data, files, user, options = {}) => {
   console.log("Input data:", JSON.stringify(data, null, 2));
   console.log("Files received:", files);
 
-  let transaction;
+  const { transaction } = options;
+  let t = transaction;
   try {
-    transaction = await sequelize.transaction();
+    t = t || (await sequelize.transaction());
 
     // Parse JSON strings
     const primaryUserData =
       typeof data.primary_user === "string"
         ? JSON.parse(data.primary_user)
-        : data.primary_user;
+        : data.primary_user || {};
     const coOwnersData =
       typeof data.co_owners === "string"
         ? JSON.parse(data.co_owners)
@@ -36,7 +37,7 @@ const createLandRecordService = async (data, files, userId) => {
     const landRecordData =
       typeof data.land_record === "string"
         ? JSON.parse(data.land_record)
-        : data.land_record;
+        : data.land_record || {};
     const documentsData =
       typeof data.documents === "string"
         ? JSON.parse(data.documents)
@@ -54,30 +55,37 @@ const createLandRecordService = async (data, files, userId) => {
       land_payment: landPaymentData,
     });
 
-    // Validate enum values
-    console.log("Enum values:", {
-      LAND_USE_TYPES,
-      OWNERSHIP_TYPES,
-      ZONING_TYPES,
-    });
-    if (
-      !LAND_USE_TYPES ||
-      !Object.values(LAND_USE_TYPES).includes(landRecordData.land_use)
-    ) {
+    // Validate required land record fields
+    const requiredFields = [
+      "parcel_number",
+      "land_level",
+      "area",
+      "land_use",
+      "ownership_type",
+      "administrative_unit_id",
+    ];
+    const missingFields = requiredFields.filter(
+      (field) => !landRecordData[field]
+    );
+    if (missingFields.length > 0) {
       throw new Error(
-        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${
-          Object.values(LAND_USE_TYPES || {}).join(", ") || "አልተገለጸም"
-        }) ውስጥ መሆን አለበት።`
+        `የሚከተሉቷ መስኮች መግለጽ አለባቸው፡ ${missingFields.join(", ")}`
       );
     }
-    if (
-      !OWNERSHIP_TYPES ||
-      !Object.values(OWNERSHIP_TYPES).includes(landRecordData.ownership_type)
-    ) {
+
+    // Validate enum values
+    if (!Object.values(LAND_USE_TYPES).includes(landRecordData.land_use)) {
       throw new Error(
-        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${
-          Object.values(OWNERSHIP_TYPES || {}).join(", ") || "አልተገለጸም"
-        }) ውስጥ መሆን አለበት።`
+        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(
+          ", "
+        )}) ውስጥ መሆን አለበት።`
+      );
+    }
+    if (!Object.values(OWNERSHIP_TYPES).includes(landRecordData.ownership_type)) {
+      throw new Error(
+        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(
+          OWNERSHIP_TYPES
+        ).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
     if (
@@ -85,34 +93,24 @@ const createLandRecordService = async (data, files, userId) => {
       !Object.values(ZONING_TYPES).includes(landRecordData.zoning_type)
     ) {
       throw new Error(
-        `የዞን አይነት ከተፈቀዱቷ እሴቶች (${
-          Object.values(ZONING_TYPES || {}).join(", ") || "አልተገለጸም"
-        }) ውስጥ መሆን አለበት።`
+        `የዞን አይነት ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(
+          ", "
+        )}) ውስጥ መሆን አለበት።`
       );
-    }
-
-
-
-    // Validate creator role
-    const creator = await User.findByPk(userId, {
-      include: [{ model: Role, as: "role" }],
-      transaction,
-    });
-    if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
-      throw new Error("መዝገብ መፍጠር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
     }
 
     // Validate administrative unit and land level
     const adminUnit = await AdministrativeUnit.findByPk(
-      landRecordData.administrative_unit_id ||
-        primaryUserData.administrative_unit_id,
-      { transaction }
+      landRecordData.administrative_unit_id,
+      { transaction: t }
     );
     if (!adminUnit) {
       throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
     }
     if (landRecordData.land_level > adminUnit.max_land_levels) {
-      throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
+      throw new Error(
+        "የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።"
+      );
     }
 
     // Check for existing land record
@@ -130,57 +128,44 @@ const createLandRecordService = async (data, files, userId) => {
               }
             : null,
         ].filter(Boolean),
-        deletedAt: null,
+        deletedAt: { [Op.eq]: null },
       },
-      transaction,
+      transaction: t,
     });
     if (existingRecord) {
-      throw new Error("የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
+      throw new Error(
+        "የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።"
+      );
     }
 
-    // Create primary user
-    console.log("Creating primary user and co-owners...");
-    const primaryUser = await userService.registerUserService(
+    // Create primary user and co-owners
+    console.log("Creating primary user and co-owners with created_by:", user.id);
+    const { primaryOwner, coOwners } = await userService.createLandOwner(
       primaryUserData,
-      false,
-      transaction
+      coOwnersData,
+      user.id,
+      { transaction: t }
     );
     console.log("Primary user created:", {
-      id: primaryUser.id,
-      national_id: primaryUser.national_id,
+      id: primaryOwner.id,
+      national_id: primaryOwner.national_id,
     });
 
     // Validate primary owner
-    if (!primaryUser.id || typeof primaryUser.id !== "number") {
+    if (!primaryOwner.id || typeof primaryOwner.id !== "number") {
       throw new Error("ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።");
     }
-    if (primaryUser.primary_owner_id !== null) {
+    if (primaryOwner.primary_owner_id !== null) {
       throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
     }
     if (
-      primaryUser.administrative_unit_id !==
-      (landRecordData.administrative_unit_id ||
-        primaryUserData.administrative_unit_id)
+      primaryOwner.administrative_unit_id !== landRecordData.administrative_unit_id
     ) {
       throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
     }
 
-    // Only process co-owners if primary user's marital_status is not "ነጠላ"
-    let coOwners = [];
-    if (primaryUserData.marital_status !== "ነጠላ" && coOwnersData.length > 0) {
-      for (const coOwnerData of coOwnersData) {
-        coOwnerData.primary_owner_id = primaryUser.id;
-        const coOwner = await userService.registerUserService(
-          coOwnerData,
-          true,
-          transaction
-        );
-        coOwners.push(coOwner);
-      }
-    } else if (
-      primaryUserData.marital_status === "ነጠላ" &&
-      coOwnersData.length > 0
-    ) {
+    // Validate co-owners based on marital_status
+    if (primaryUserData.marital_status === "ነጠላ" && coOwnersData.length > 0) {
       throw new Error("የጋራ ባለቤቶች ለነጠላ ተጠቃሚ አያስፈልጉም።");
     }
 
@@ -189,77 +174,114 @@ const createLandRecordService = async (data, files, userId) => {
     const status_history = [
       {
         status: RECORD_STATUSES.DRAFT,
-        changed_by: userId,
+        changed_by: user.id,
         changed_at: now,
       },
     ];
     const action_log = [
       {
         action: "CREATED",
-        changed_by: userId,
+        changed_by: user.id,
         changed_at: now,
       },
     ];
 
-    // Create land record
-    console.log("Creating land record with user_id:", primaryUser.id);
+    // Create land record with user_id
+    console.log("Creating land record with user_id:", primaryOwner.id, "created_by:", user.id);
     const landRecord = await LandRecord.create(
       {
         ...landRecordData,
-        user_id: primaryUser.id,
-        administrative_unit_id:
-          landRecordData.administrative_unit_id ||
-          primaryUserData.administrative_unit_id,
-        created_by: userId,
+        user_id: primaryOwner.id,
+        administrative_unit_id: landRecordData.administrative_unit_id,
+        created_by: user.id,
         status: RECORD_STATUSES.DRAFT,
         notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-        priority: PRIORITIES.LOW,
+        priority: landRecordData.priority || PRIORITIES.LOW,
         status_history,
         action_log,
+        north_neighbor: landRecordData.north_neighbor || null,
+        east_neighbor: landRecordData.east_neighbor || null,
+        south_neighbor: landRecordData.south_neighbor || null,
+        west_neighbor: landRecordData.west_neighbor || null,
+        block_number: landRecordData.block_number || null,
+        block_special_name: landRecordData.block_special_name || null,
+        coordinates: landRecordData.coordinates
+          ? JSON.stringify(landRecordData.coordinates)
+          : null,
+        plot_number: landRecordData.plot_number || null,
+        rejection_reason: null,
+        approver_id: null,
       },
-      { transaction }
+      { transaction: t }
     );
 
-    // Create documents
-    const documentPromises = documentsData.map(async (doc, index) => {
-      if (files && files[index]) {
-        return documentService.createDocument(
-          {
-            ...doc,
-            land_record_id: landRecord.id,
-            file_path: files[index].path,
-            prepared_by: userId,
-          },
-          transaction
-        );
-      }
-    });
-    await Promise.all(documentPromises.filter(Boolean));
+    // Create documents with land_record_id and uploaded_by, only if corresponding files exist
+    console.log("Creating documents with land_record_id:", landRecord.id, "uploaded_by:", user.id);
+    const documentPromises = documentsData
+      .map((doc, index) => {
+        if (files && Array.isArray(files) && files[index]) {
+          return documentService.createDocumentService(
+            {
+              ...doc,
+              land_record_id: landRecord.id,
+              preparer_name: doc.preparer_name || user.full_name || "Unknown Preparer",
+              approver_name: doc.approver_name || null,
+            },
+            [files[index]],
+            user.id,
+            { transaction: t }
+          );
+        }
+        return null; // Skip if no file for this document
+      })
+      .filter(Boolean); // Remove null entries
+    const documents = await Promise.all(documentPromises);
 
-    // Create land payment
+    // Update land record action_log for document uploads
+    landRecord.action_log = [
+      ...landRecord.action_log,
+      ...documents.map((doc) => ({
+        action: `DOCUMENT_UPLOADED_${doc.document_type}`,
+        changed_by: user.id,
+        changed_at: doc.createdAt || new Date(),
+        document_id: doc.id,
+      })),
+    ];
+    await landRecord.save({ transaction: t });
+
+    // Create land payment with land_record_id, payer_id, and created_by
     let landPayment = null;
     if (Object.keys(landPaymentData).length > 0) {
-      landPayment = await landPaymentService.createPayment(
+      console.log(
+        "Creating land payment with land_record_id:",
+        landRecord.id,
+        "payer_id:",
+        primaryOwner.id,
+        "created_by:",
+        user.id
+      );
+      landPayment = await landPaymentService.createLandPaymentService(
         {
           ...landPaymentData,
           land_record_id: landRecord.id,
-          payer_id: primaryUser.id,
+          payer_id: primaryOwner.id,
+          created_by: user.id,
         },
-        transaction
+        { transaction: t }
       );
     }
 
-    await transaction.commit();
+    await t.commit();
 
     return {
       landRecord,
-      primaryUser,
+      primaryOwner,
       coOwners,
-      documents: documentsData,
+      documents,
       landPayment,
     };
   } catch (error) {
-    if (transaction) await transaction.rollback();
+    if (t) await t.rollback();
     console.error("Service error:", error.message, error.stack);
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }

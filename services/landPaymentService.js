@@ -12,50 +12,51 @@ const createLandPaymentService = async (data, options = {}) => {
   const { transaction } = options;
   let t = transaction;
   try {
-    if (!data.land_record_id || !data.total_amount || !data.paid_amount || !data.payer_name) {
-      throw new Error("የመሬት መዝገብ፣ ጠቅላላ ገንዘብ፣ የተከፈለ ገንዘብ፣ እና የክፍያ አድራጊ ስም መግለጽ አለባቸው።");
+    if (
+      !data.payment_type ||
+      !data.total_amount ||
+      !data.paid_amount ||
+      !data.currency
+    ) {
+      throw new Error(
+        "የክፍያ መረጃዎች (payment_type, total_amount, paid_amount, currency) መግለጽ አለባቸው።"
+      );
+    }
+    if (!data.land_record_id || typeof data.land_record_id !== "number") {
+      throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
+    }
+    if (!data.payer_id || typeof data.payer_id !== "number") {
+      throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
     }
 
     t = t || (await sequelize.transaction());
 
-  
-
-    // Validate land_record_id
-    const landRecord = await LandRecord.findByPk(data.land_record_id, { transaction: t });
-    if (!landRecord) {
-      throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
+    // Validate payment_type enum
+    const validPaymentTypes = ["የኪራይ ክፍያ", "የባለቤትነት ክፍያ"];
+    if (!validPaymentTypes.includes(data.payment_type)) {
+      throw new Error(
+        `የክፍያ አይነት ከተፈቀዱቷ እሴቶች (${validPaymentTypes.join(", ")}) ውስጥ መሆን አለበት።`
+      );
     }
 
     // Create payment
     const paymentData = {
-      land_record_id: data.land_record_id,
-      payment_type: data.payment_type || null,
+      payment_type: data.payment_type,
       total_amount: data.total_amount,
       paid_amount: data.paid_amount,
-      currency: data.currency || "ETB",
-      payment_status: data.payment_status || PAYMENT_STATUSES.PENDING,
-      penalty_reason: data.penalty_reason || null,
+      currency: data.currency,
       description: data.description || null,
-      payer_name: data.payer_name,
+      land_record_id: data.land_record_id,
+      payer_id: data.payer_id,
+      created_by: data.created_by,
     };
     const payment = await LandPayment.create(paymentData, { transaction: t });
-
-    // Log payment creation in LandRecord.action_log
-    landRecord.action_log = [
-      ...(landRecord.action_log || []),
-      {
-        action: `PAYMENT_CREATED_${payment.payment_type || "UNKNOWN"}`,
-        changed_at: payment.createdAt || new Date(),
-        payment_id: payment.id,
-      },
-    ];
-    await landRecord.save({ transaction: t });
 
     if (!transaction) await t.commit();
     return payment;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የመሬት ክፍያ መፍጠር ስህተት: ${error.message}`);
+    throw new Error(`የክፍያ መፍጠር ስህተት: ${error.message}`);
   }
 };
 

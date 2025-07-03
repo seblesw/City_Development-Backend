@@ -17,7 +17,7 @@ router.post(
   "/",
   authMiddleware.protect,
   authMiddleware.restrictTo("መዝጋቢ"),
-  upload.array("documents", 10), // Expect files under 'documents' field
+  upload.array("documents", 10),
   landRecordController.createLandRecord
 );
 

@@ -13,15 +13,6 @@ const registerOfficial = async (data,  options = {}) => {
 
     t = t || (await sequelize.transaction());
 
-    // Validate creator role
-    // const creator = await User.findByPk(creatorId, {
-    //   include: [{ model: Role, as: "role" }],
-    //   transaction: t,
-    // });
-    // if (!creator || !["አስተዳደር"].includes(creator.role?.name)) {
-    //   throw new Error("ባለሥልጣን መመዝገብ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    // }
-
     // Validate administrative_unit_id
     const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });
     if (!adminUnit) {
@@ -38,7 +29,7 @@ const registerOfficial = async (data,  options = {}) => {
 
     // Validate role_id
     const role = await Role.findByPk(data.role_id, { transaction: t });
-    if (!role || !["መዝጋቢ", "አስተዳደር"].includes(role.name)) {
+    if (!role || !["መዝጋቢ", "አስተዳደር", "ዳታ ኢንኮደር"].includes(role.name)) {
       throw new Error("ትክክለኛ ሚና ይምረጡ (መዝጋቢ ወይም አስተዳደር)።");
     }
 

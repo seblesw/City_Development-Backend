@@ -12,12 +12,14 @@ const createLandRecord = async (req, res) => {
     console.log("Request files:", req.files);
     console.log("Authenticated user:", req.user);
 
-    const userId = req.user?.id;
-    if (!userId || typeof userId !== "number") {
-      throw new Error("ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።");
+    const user = req.user;
+    if (!user?.id || typeof user.id !== "number") {
+      return res.status(401).json({
+        message: "ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።",
+      });
     }
 
-    const result = await createLandRecordService(req.body, req.files, userId);
+    const result = await createLandRecordService(req.body, req.files, user);
     return res.status(201).json({
       message: "የመሬት መዝገብ በተሳካ ሁኔታ ተፈጥሯል።",
       data: result,

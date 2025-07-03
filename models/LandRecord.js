@@ -250,55 +250,6 @@ module.exports = (db, DataTypes) => {
       coordinates: {
         type: DataTypes.JSONB,
         allowNull: true,
-        validate: {
-          isValidCoordinates(value) {
-            if (!value) return;
-            if (!["Point", "Polygon"].includes(value.type)) {
-              throw new Error("ትክክለኛ GeoJSON መሆን አለበት።");
-            }
-            if (value.type === "Point") {
-              const [lon, lat] = value.coordinates;
-              if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-                throw new Error("ኮርድኔት የተሳሳተ ነው።");
-              }
-              if (
-                typeof lon === "number" &&
-                lon.toString().split(".")[1]?.length > 8
-              ) {
-                throw new Error("ኮርድኔት ትክክለኛነት ከ8 አስርዮሽ ቦታዎች መብለጥ አይችልም።");
-              }
-            }
-            if (value.type === "Polygon") {
-              if (
-                !Array.isArray(value.coordinates) ||
-                !value.coordinates.every((ring) => Array.isArray(ring))
-              ) {
-                throw new Error("Polygon መጋጠሚያ ትክክል አይደለም።");
-              }
-              const [outerRing] = value.coordinates;
-              if (
-                outerRing.length < 4 ||
-                JSON.stringify(outerRing[0]) !==
-                  JSON.stringify(outerRing[outerRing.length - 1])
-              ) {
-                throw new Error("Polygon ውጫዊ ቀለበት መዘጋት አለበት።");
-              }
-              for (const [lon, lat] of outerRing) {
-                if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-                  throw new Error("Polygon ኮርድኔት የተሳሳተ ነው።");
-                }
-                if (
-                  typeof lon === "number" &&
-                  lon.toString().split(".")[1]?.length > 8
-                ) {
-                  throw new Error(
-                    "Polygon ኮርድኔት ትክክለኛነት ከ8 አስርዮሽ ቦታዎች መብለጥ አይችልም።"
-                  );
-                }
-              }
-            }
-          },
-        },
       },
       record_status: {
         type: DataTypes.STRING,

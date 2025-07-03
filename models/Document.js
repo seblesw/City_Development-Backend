@@ -33,7 +33,7 @@ module.exports = (db, DataTypes) => {
       },
       land_record_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "land_records", key: "id" },
       },
       document_type: {
@@ -152,12 +152,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
       ],
-      validate: {
-        async validLandRecord() {
-          const landRecord = await db.models.LandRecord.findByPk(this.land_record_id);
-          if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-        },
-      },
+      
     }
   );
 

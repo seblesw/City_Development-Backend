@@ -114,16 +114,10 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      payer_name: {
-        type: DataTypes.STRING,
+      payer_id: {
+        type: DataTypes.INTEGER,
         allowNull: false,
-        validate: {
-          notEmpty: { msg: "የክፍያ አድራጊ ስም ባዶ መሆን አይችልም።" },
-          len: {
-            args: [1, 100],
-            msg: "የክፍያ አድራጊ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
-          },
-        },
+        references: { model: "users", key: "id" },
       },
     },
     {
@@ -136,12 +130,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["payment_type"] },
         { fields: ["payment_status"] },
       ],
-      validate: {
-        async validateLandRecord() {
-          const landRecord = await db.models.LandRecord.findByPk(this.land_record_id);
-          if (!landRecord) throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
-        },
-      },
     }
   );
 

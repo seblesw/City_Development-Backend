@@ -17,11 +17,11 @@ const createDocumentController = async (req, res) => {
     }
     const data = {
       map_number: body.map_number,
-      document_type: body.document_type,
+      document_type: body.document_type || null,
       reference_number: body.reference_number || null,
       description: body.description || null,
       issue_date: body.issue_date || null,
-      land_record_id: body.land_record_id,
+      land_record_id: body.land_record_id || null,
       preparer_name: body.preparer_name,
       approver_name: body.approver_name || null,
       isActive: body.isActive !== undefined ? body.isActive : true,
