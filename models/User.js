@@ -16,23 +16,26 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: { msg: "ስም ባዶ መሆን አይችልም።" },
-          len: { args: [2, 50], msg: "ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+          len: { args: [2, 50], msg: "ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
+        },
+      },
+
+      middle_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 50], msg: "የ አባት  ስም ከ0 እስከ 50 ፊደል መሆን አለበት።" },
         },
       },
       last_name: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          notEmpty: { msg: "የአባት ስም ባዶ መሆን አይችልም።" },
-          len: { args: [2, 50], msg: "የአባት ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+          notEmpty: { msg: "የ አያት ስም ባዶ መሆን አይችልም።" },
+          len: { args: [2, 50], msg: "የ አያት ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
         },
       },
-      full_name: {
-        type: DataTypes.VIRTUAL,
-        get() {
-          return `${this.first_name} ${this.last_name}`;
-        },
-      },
+
       email: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -63,7 +66,7 @@ module.exports = (db, DataTypes) => {
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "administrative_units", key: "id" },
       },
       oversight_office_id: {
@@ -113,7 +116,7 @@ module.exports = (db, DataTypes) => {
       },
       marital_status: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"]],
@@ -128,7 +131,7 @@ module.exports = (db, DataTypes) => {
       },
       is_active: {
         type: DataTypes.BOOLEAN,
-        allowNull: false,
+        allowNull: true,
         defaultValue: true,
       },
       last_login: {

@@ -4,43 +4,21 @@ const bcrypt = require("bcryptjs");
 
 const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, options = {}) => {
   const { transaction } = options;
-  let t = transaction;
+  let t = transaction || (await sequelize.transaction());
   try {
-    if (!primaryOwnerData.first_name || !primaryOwnerData.last_name || !primaryOwnerData.national_id || !primaryOwnerData.administrative_unit_id || !primaryOwnerData.gender || !primaryOwnerData.marital_status) {
-      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ጾታ፣ እና የጋብቻ ሁኔታ መግለጽ አለባቸው።");
-    }
-
-    t = t || (await sequelize.transaction());
-
-    // Validate creator role
-    const creator = await User.findByPk(creatorId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!creator || !["መዝጋቢ", "አስተዳደር"].includes(creator.role?.name)) {
-      throw new Error("ተጠቃሚ መመዝገብ የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
-    }
-
-    // Validate administrative_unit_id
-    const adminUnit = await AdministrativeUnit.findByPk(primaryOwnerData.administrative_unit_id, { transaction: t });
-    if (!adminUnit) {
-      throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
-    }
-
-    // Validate oversight_office_id if provided
-    if (primaryOwnerData.oversight_office_id) {
-      const office = await OversightOffice.findByPk(primaryOwnerData.oversight_office_id, { transaction: t });
-      if (!office) {
-        throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
-      }
-    }
-
-    // Validate role_id if provided
-    if (primaryOwnerData.role_id) {
-      const role = await Role.findByPk(primaryOwnerData.role_id, { transaction: t });
-      if (!role) {
-        throw new Error("ትክክለኛ ሚና ይምረጡ።");
-      }
+    // Validate required fields for primary owner
+    if (
+      !primaryOwnerData.first_name ||
+      !primaryOwnerData.middle_name ||
+      !primaryOwnerData.last_name ||
+      !primaryOwnerData.national_id ||
+      !primaryOwnerData.email ||
+      !primaryOwnerData.phone_number ||
+      !primaryOwnerData.administrative_unit_id ||
+      !primaryOwnerData.gender ||
+      !primaryOwnerData.marital_status
+    ) {
+      throw new Error("ስም፣ የአባት ስም፣ የአያት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ጾታ፣ እና የጋብቻ ሁኔታ መግለጽ አለባቸው።");
     }
 
     // Validate email uniqueness if provided
@@ -49,9 +27,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
         where: { email: primaryOwnerData.email, deletedAt: { [Op.eq]: null } },
         transaction: t,
       });
-      if (existingEmail) {
-        throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
-      }
+      if (existingEmail) throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
     }
 
     // Validate phone_number uniqueness if provided
@@ -60,9 +36,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
         where: { phone_number: primaryOwnerData.phone_number, deletedAt: { [Op.eq]: null } },
         transaction: t,
       });
-      if (existingPhone) {
-        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
-      }
+      if (existingPhone) throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
     }
 
     // Validate national_id uniqueness
@@ -70,26 +44,38 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
       where: { national_id: primaryOwnerData.national_id, deletedAt: { [Op.eq]: null } },
       transaction: t,
     });
-    if (existingNationalId) {
-      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
-    }
+    if (existingNationalId) throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
 
     // Create primary owner
     const primaryOwner = await User.create(
       {
         ...primaryOwnerData,
         password: primaryOwnerData.password ? await bcrypt.hash(primaryOwnerData.password, 10) : null,
+        role_id: null,
+        oversight_office_id: null,
+        relationship_type: null,
+        primary_owner_id: null,
+        created_by: creatorId,
       },
       { transaction: t }
     );
 
     const result = { primaryOwner, coOwners: [] };
 
-    // Handle co-owners if marital_status is not single
-    if (primaryOwnerData.marital_status !== "ነጠላ" && coOwnersData.length > 0) {
+    // Handle co-owners based on marital_status
+    if (primaryOwnerData.marital_status !== "ነጠላ") {
+      if (!coOwnersData.length) {
+        throw new Error("የጋብቻ ሁኔታ ነጠላ ካልሆነ ተጋሪ ባለቤቶች መግለጽ አለባቸው።");
+      }
       for (const coOwnerData of coOwnersData) {
-        if (!coOwnerData.first_name || !coOwnerData.last_name || !coOwnerData.national_id || !coOwnerData.administrative_unit_id || !coOwnerData.gender || !coOwnerData.marital_status) {
-          throw new Error("ለተጋሪ ባለቤት ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ጾታ፣ እና የጋብቻ ሁኔታ መግለጽ አለባቸው።");
+        if (
+          !coOwnerData.first_name ||
+          !coOwnerData.middle_name ||
+          !coOwnerData.last_name ||
+          !coOwnerData.national_id ||
+          !coOwnerData.relationship_type
+        ) {
+          throw new Error("ለተጋሪ ባለቤት ስም፣ የአባት ስም፣ የአያት ስም፣ ብሔራዊ መታወቂያ፣ እና የግንኙነት አይነት መግለጽ አለባቸው።");
         }
 
         // Validate co-owner fields
@@ -98,68 +84,43 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
             where: { email: coOwnerData.email, deletedAt: { [Op.eq]: null } },
             transaction: t,
           });
-          if (existingEmail) {
-            throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
-          }
+          if (existingEmail) throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
         }
         if (coOwnerData.phone_number) {
           const existingPhone = await User.findOne({
             where: { phone_number: coOwnerData.phone_number, deletedAt: { [Op.eq]: null } },
             transaction: t,
           });
-          if (existingPhone) {
-            throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
-          }
+          if (existingPhone) throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
         }
         const existingNationalId = await User.findOne({
           where: { national_id: coOwnerData.national_id, deletedAt: { [Op.eq]: null } },
           transaction: t,
         });
-        if (existingNationalId) {
-          throw new Error("ይህ ብሔራዊ መታወቂዪ ቁጥር ቀደም ሲል ተመዝግቧል።");
-        }
-        const coOwnerAdminUnit = await AdministrativeUnit.findByPk(coOwnerData.administrative_unit_id, { transaction: t });
-        if (!coOwnerAdminUnit) {
-          throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ ለተጋሪ ባለቤት።");
-        }
-        if (coOwnerData.oversight_office_id) {
-          const office = await OversightOffice.findByPk(coOwnerData.oversight_office_id, { transaction: t });
-          if (!office) {
-            throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ ለተጋሪ ባለቤት።");
-          }
-        }
-        if (coOwnerData.role_id) {
-          const role = await Role.findByPk(coOwnerData.role_id, { transaction: t });
-          if (!role) {
-            throw new Error("ትክክለኛ ሚና ይምረጡ ለተጋሪ ባለቤት።");
-          }
-        }
+        if (existingNationalId) throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
 
         // Create co-owner
         const coOwner = await User.create(
           {
             first_name: coOwnerData.first_name,
+            middle_name: coOwnerData.middle_name,
             last_name: coOwnerData.last_name,
             email: coOwnerData.email || null,
-            phone_number: coOwnerData.phone_number || null,
-            password: coOwnerData.password ? await bcrypt.hash(coOwnerData.password, 10) : null,
-            role_id: coOwnerData.role_id || null,
-            administrative_unit_id: coOwnerData.administrative_unit_id,
-            oversight_office_id: coOwnerData.oversight_office_id || null,
-            national_id: coOwnerData.national_id,
-            address: coOwnerData.address || null,
             gender: coOwnerData.gender,
-            relationship_type: coOwnerData.relationship_type || null,
-            marital_status: coOwnerData.marital_status,
+            phone_number: coOwnerData.phone_number || null,
+            national_id: coOwnerData.national_id,
+            relationship_type: coOwnerData.relationship_type,
+            administrative_unit_id: primaryOwnerData.administrative_unit_id,
             primary_owner_id: primaryOwner.id,
-            is_active: coOwnerData.is_active !== undefined ? coOwnerData.is_active : true,
+            created_by: creatorId,
+            is_active: true,
           },
           { transaction: t }
         );
         result.coOwners.push(coOwner);
       }
-    } else if (primaryOwnerData.marital_status !== "ነጠላ" && coOwnersData.length === 0) {
-      throw new Error("የጋብቻ ሁኔታ ነጠላ ካልሆነ ተጋሪ ባለቤቶች መግለጽ አለባቸው።");
+    } else if (coOwnersData.length) {
+      throw new Error("ነጠላ የጋብቻ ሁኔታ ላላቸው ተጋሪ ባለቤቶች መግለጽ አይቻልም።");
     }
 
     if (!transaction) await t.commit();

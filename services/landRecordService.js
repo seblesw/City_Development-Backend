@@ -17,15 +17,10 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
-  console.log("Input data:", JSON.stringify(data, null, 2));
-  console.log("Files received:", files);
-
   const { transaction } = options;
   let t = transaction;
   try {
     t = t || (await sequelize.transaction());
-
-    // Parse JSON strings
     const primaryUserData =
       typeof data.primary_user === "string"
         ? JSON.parse(data.primary_user)
@@ -46,16 +41,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       typeof data.land_payment === "string"
         ? JSON.parse(data.land_payment)
         : data.land_payment || {};
-
-    console.log("Parsed fields:", {
-      primary_user: primaryUserData,
-      co_owners: coOwnersData,
-      land_record: landRecordData,
-      documents: documentsData,
-      land_payment: landPaymentData,
-    });
-
-    // Validate required land record fields
     const requiredFields = [
       "parcel_number",
       "land_level",
@@ -68,24 +53,16 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       (field) => !landRecordData[field]
     );
     if (missingFields.length > 0) {
-      throw new Error(
-        `የሚከተሉቷ መስኮች መግለጽ አለባቸው፡ ${missingFields.join(", ")}`
-      );
+      throw new Error(`የሚከተሉት መገለጽ አለባቸው፡ ${missingFields.join(", ")}`);
     }
-
-    // Validate enum values
     if (!Object.values(LAND_USE_TYPES).includes(landRecordData.land_use)) {
       throw new Error(
-        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
     if (!Object.values(OWNERSHIP_TYPES).includes(landRecordData.ownership_type)) {
       throw new Error(
-        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(
-          OWNERSHIP_TYPES
-        ).join(", ")}) ውስጥ መሆን አለበት።`
+        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(OWNERSHIP_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
     if (
@@ -93,13 +70,9 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       !Object.values(ZONING_TYPES).includes(landRecordData.zoning_type)
     ) {
       throw new Error(
-        `የዞን አይነት ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የዞን አይነት ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
-
-    // Validate administrative unit and land level
     const adminUnit = await AdministrativeUnit.findByPk(
       landRecordData.administrative_unit_id,
       { transaction: t }
@@ -108,12 +81,8 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
     }
     if (landRecordData.land_level > adminUnit.max_land_levels) {
-      throw new Error(
-        "የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።"
-      );
+      throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
     }
-
-    // Check for existing land record
     const existingRecord = await LandRecord.findOne({
       where: {
         [Op.or]: [
@@ -133,27 +102,16 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       transaction: t,
     });
     if (existingRecord) {
-      throw new Error(
-        "የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።"
-      );
+      throw new Error("የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
     }
-
-    // Create primary user and co-owners
-    console.log("Creating primary user and co-owners with created_by:", user.id);
     const { primaryOwner, coOwners } = await userService.createLandOwner(
       primaryUserData,
       coOwnersData,
       user.id,
       { transaction: t }
     );
-    console.log("Primary user created:", {
-      id: primaryOwner.id,
-      national_id: primaryOwner.national_id,
-    });
-
-    // Validate primary owner
     if (!primaryOwner.id || typeof primaryOwner.id !== "number") {
-      throw new Error("ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።");
+      throw new Error("የዋና ባለቤት መለያ ትክክለኛ ቁጥር መሆን አለበት።");
     }
     if (primaryOwner.primary_owner_id !== null) {
       throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
@@ -161,15 +119,11 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     if (
       primaryOwner.administrative_unit_id !== landRecordData.administrative_unit_id
     ) {
-      throw new Error("አስተዳደራዊ ክፍል ከተጠቃሚው ጋር መመሳሰል አለበት።");
+      throw new Error("የዋና ባለቤት አስተዳደራዊ ክፍል ከመሬቱ አስተዳደራዊ ክፍል ጋር መመሳሰል አለበት።");
     }
-
-    // Validate co-owners based on marital_status
     if (primaryUserData.marital_status === "ነጠላ" && coOwnersData.length > 0) {
-      throw new Error("የጋራ ባለቤቶች ለነጠላ ተጠቃሚ አያስፈልጉም።");
+      throw new Error("የጋራ ባለቤቶች ላላገባ ባለይዞታ አያስፈልጉም።");
     }
-
-    // Initialize status_history and action_log
     const now = new Date();
     const status_history = [
       {
@@ -185,9 +139,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         changed_at: now,
       },
     ];
-
-    // Create land record with user_id
-    console.log("Creating land record with user_id:", primaryOwner.id, "created_by:", user.id);
     const landRecord = await LandRecord.create(
       {
         ...landRecordData,
@@ -214,9 +165,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       },
       { transaction: t }
     );
-
-    // Create documents with land_record_id and uploaded_by, only if corresponding files exist
-    console.log("Creating documents with land_record_id:", landRecord.id, "uploaded_by:", user.id);
     const documentPromises = documentsData
       .map((doc, index) => {
         if (files && Array.isArray(files) && files[index]) {
@@ -224,7 +172,8 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             {
               ...doc,
               land_record_id: landRecord.id,
-              preparer_name: doc.preparer_name || user.full_name || "Unknown Preparer",
+              preparer_name:
+                doc.preparer_name || user.full_name || "Unknown Preparer",
               approver_name: doc.approver_name || null,
             },
             [files[index]],
@@ -232,12 +181,10 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             { transaction: t }
           );
         }
-        return null; // Skip if no file for this document
+        return null;
       })
-      .filter(Boolean); // Remove null entries
+      .filter(Boolean);
     const documents = await Promise.all(documentPromises);
-
-    // Update land record action_log for document uploads
     landRecord.action_log = [
       ...landRecord.action_log,
       ...documents.map((doc) => ({
@@ -248,18 +195,8 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       })),
     ];
     await landRecord.save({ transaction: t });
-
-    // Create land payment with land_record_id, payer_id, and created_by
     let landPayment = null;
     if (Object.keys(landPaymentData).length > 0) {
-      console.log(
-        "Creating land payment with land_record_id:",
-        landRecord.id,
-        "payer_id:",
-        primaryOwner.id,
-        "created_by:",
-        user.id
-      );
       landPayment = await landPaymentService.createLandPaymentService(
         {
           ...landPaymentData,
@@ -270,9 +207,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         { transaction: t }
       );
     }
-
     await t.commit();
-
     return {
       landRecord,
       primaryOwner,
@@ -282,71 +217,88 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     };
   } catch (error) {
     if (t) await t.rollback();
-    console.error("Service error:", error.message, error.stack);
-    throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
+    throw new Error(`የመዝገብ መፍጠር �ስህተት: ${error.message}`);
   }
 };
-// Retrieving all land records with filtering and pagination
+
+// Enhanced: Retrieving all land records with advanced filtering, sorting, and aggregated stats
 const getAllLandRecordService = async (query) => {
-  const where = {};
+  const where = { deletedAt: { [Op.eq]: null } }; // Only non-deleted records
   const page = parseInt(query.page) || 1;
   const limit = parseInt(query.limit) || 10;
   const offset = (page - 1) * limit;
+  const order = [];
 
-  if (query.administrative_unit_id)
+  // Enhanced filtering
+  if (query.administrative_unit_id) {
     where.administrative_unit_id = parseInt(query.administrative_unit_id);
-  if (
-    query.record_status &&
-    Object.values(RECORD_STATUSES).includes(query.record_status)
-  ) {
+  }
+  if (query.record_status && Object.values(RECORD_STATUSES).includes(query.record_status)) {
     where.record_status = query.record_status;
   }
   if (query.priority && Object.values(PRIORITIES).includes(query.priority)) {
     where.priority = query.priority;
   }
-  if (
-    query.land_use &&
-    Object.values(LAND_USE_TYPES).includes(query.land_use)
-  ) {
+  if (query.land_use && Object.values(LAND_USE_TYPES).includes(query.land_use)) {
     where.land_use = query.land_use;
   }
-  if (
-    query.ownership_type &&
-    Object.values(OWNERSHIP_TYPES).includes(query.ownership_type)
-  ) {
+  if (query.ownership_type && Object.values(OWNERSHIP_TYPES).includes(query.ownership_type)) {
     where.ownership_type = query.ownership_type;
   }
-  if (
-    query.zoning_type &&
-    Object.values(ZONING_TYPES).includes(query.zoning_type)
-  ) {
+  if (query.zoning_type && Object.values(ZONING_TYPES).includes(query.zoning_type)) {
     where.zoning_type = query.zoning_type;
   }
-  if (query.parcel_number) where.parcel_number = query.parcel_number;
+  if (query.parcel_number) {
+    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` }; // Partial match
+  }
+  if (query.start_date && query.end_date) {
+    where.createdAt = {
+      [Op.between]: [new Date(query.start_date), new Date(query.end_date)],
+    };
+  }
+
+  // Sorting options
+  if (query.sort_by) {
+    const sortField = query.sort_by === 'created_at' ? 'createdAt' :
+                     query.sort_by === 'area' ? 'area' :
+                     query.sort_by === 'priority' ? 'priority' : 'createdAt';
+    const sortOrder = query.sort_order === 'desc' ? 'DESC' : 'ASC';
+    order.push([sortField, sortOrder]);
+  } else {
+    order.push(['createdAt', 'DESC']); // Default sort
+  }
 
   try {
+    // Fetch records with associated data
     const { count, rows } = await LandRecord.findAndCountAll({
       where,
       include: [
         {
           model: User,
           as: "user",
-          attributes: ["id", "first_name", "last_name", "national_id"],
+          attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "email"],
+          include: [
+            {
+              model: User,
+              as: "coOwners",
+              attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "relationship_type"],
+            },
+          ],
         },
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "max_land_levels"],
         },
         {
           model: User,
           as: "creator",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name"],
         },
         {
           model: User,
           as: "approver",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name"],
         },
       ],
       attributes: [
@@ -360,35 +312,154 @@ const getAllLandRecordService = async (query) => {
         "record_status",
         "priority",
         "notification_status",
+        "status_history",
+        "action_log",
+        "north_neighbor",
+        "east_neighbor",
+        "south_neighbor",
+        "west_neighbor",
+        "block_number",
+        "block_special_name",
+        "plot_number",
+        "coordinates",
+        "rejection_reason",
         "createdAt",
         "updatedAt",
       ],
       limit,
       offset,
+      order,
     });
+
+    // Fetch associated documents and payments
+    const enrichedRows = await Promise.all(
+      rows.map(async (record) => {
+        const documents = await documentService.getDocumentsByLandRecordId(record.id);
+        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id);
+        return {
+          ...record.toJSON(),
+          documents,
+          payments,
+        };
+      })
+    );
+
+    // Aggregate statistics (avoid anything related to status, use record_status instead)
+    const stats = await LandRecord.findAll({
+      where,
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('id')), 'total_records'],
+        [sequelize.fn('SUM', sequelize.col('area')), 'total_area'],
+        [sequelize.literal(`COUNT(CASE WHEN record_status = '${RECORD_STATUSES.DRAFT}' THEN 1 END)`), 'draft_count'],
+        [sequelize.literal(`COUNT(CASE WHEN record_status = '${RECORD_STATUSES.APPROVED}' THEN 1 END)`), 'approved_count'],
+        [sequelize.literal(`COUNT(CASE WHEN record_status = '${RECORD_STATUSES.REJECTED}' THEN 1 END)`), 'rejected_count'],
+      ],
+      raw: true,
+    });
+
     return {
       total: count,
       page,
       limit,
-      data: rows,
+      stats: stats[0],
+      data: enrichedRows,
     };
   } catch (error) {
     throw new Error(`የመዝገቦች መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
 
-// Updating an existing land record
-const updateLandRecordService = async (id, data, updater) => {
+// New: Retrieving a single land record by ID with full details
+const getLandRecordByIdService = async (id) => {
+  try {
+    const landRecord = await LandRecord.findOne({
+      where: { id, deletedAt: { [Op.eq]: null } },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "email", "phone_number", "address"],
+          include: [
+            {
+              model: User,
+              as: "coOwners",
+              attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "relationship_type", "email", "phone_number"],
+            },
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name", "max_land_levels"],
+        },
+        {
+          model: User,
+          as: "creator",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
+        {
+          model: User,
+          as: "approver",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "land_level",
+        "area",
+        "land_use",
+        "ownership_type",
+        "zoning_type",
+        "status",
+        "priority",
+        "notification_status",
+        "status_history",
+        "action_log",
+        "north_neighbor",
+        "east_neighbor",
+        "south_neighbor",
+        "west_neighbor",
+        "block_number",
+        "block_special_name",
+        "plot_number",
+        "coordinates",
+        "rejection_reason",
+        "createdAt",
+        "updatedAt",
+      ],
+    });
+
+    if (!landRecord) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
+    }
+
+    // Fetch associated documents and payments
+    const documents = await documentService.getDocumentsByLandRecordId(id);
+    const payments = await landPaymentService.getPaymentsByLandRecordId(id);
+
+    return {
+      ...landRecord.toJSON(),
+      documents,
+      payments,
+    };
+  } catch (error) {
+    throw new Error(`የመዝገብ መልሶ ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
+// Enhanced: Updating an existing land record
+const updateLandRecordService = async (id, data, updater, options = {}) => {
   if (!updater || !updater.id) {
     throw new Error("የመቀየሪ መረጃ አልተገኘም። ትክክለኛ ማስመሰያ ያክሉ።");
   }
 
-  const transaction = await sequelize.transaction();
+  const { transaction } = options;
+  let t = transaction || await sequelize.transaction();
   try {
-    // Validating updater role
     const updaterRecord = await User.findByPk(updater.id, {
       include: [{ model: Role, as: "role" }],
-      transaction,
+      transaction: t,
     });
     if (!updaterRecord) {
       throw new Error(`መለያ ቁጥር ${updater.id} ያለው መቀየሪ አልተገኘም።`);
@@ -397,13 +468,33 @@ const updateLandRecordService = async (id, data, updater) => {
       throw new Error("መዝገብ መቀየር የሚችለው መዝጋቢ ወይም አስተዳደር ብቻ ነው።");
     }
 
-    // Finding the land record
-    const landRecord = await LandRecord.findByPk(id, { transaction });
+    const landRecord = await LandRecord.findByPk(id, { transaction: t });
     if (!landRecord) {
-      throw new Error(`መለያ ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
+      throw new Error(`መለ�YA ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
     }
 
-    // Validating updatable fields
+    // Validate administrative unit and land level if provided
+    if (data.administrative_unit_id) {
+      const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });
+      if (!adminUnit) {
+        throw new Error("ትክክለኛ አስተዳደራዊ ክፍል ይምረጡ።");
+      }
+      if (data.land_level && data.land_level > adminUnit.max_land_levels) {
+        throw new Error("የመሬት ደረጃ ከአስተዳደራዊ ክፍል ከፍተኛ ደረጃ መብለጥ አይችልም።");
+      }
+    }
+
+    // Validate user_id if provided
+    if (data.user_id) {
+      const user = await User.findByPk(data.user_id, { transaction: t });
+      if (!user || user.primary_owner_id !== null) {
+        throw new Error("ትክክለኛ ዋና ባለቤት ይምረጡ።");
+      }
+      if (data.administrative_unit_id && user.administrative_unit_id !== data.administrative_unit_id) {
+        throw new Error("የባለቤት አስተዳደራዊ ክፍል ከመሬቱ አስተዳደራዊ ክፍል ጋር መመሳሰል አለበት።");
+      }
+    }
+
     const updatableFields = [
       "parcel_number",
       "land_level",
@@ -422,105 +513,121 @@ const updateLandRecordService = async (id, data, updater) => {
       "plot_number",
       "zoning_type",
       "priority",
-      "record_status",
+      "status",
       "rejection_reason",
       "notification_status",
     ];
     const updateData = {};
     for (const field of updatableFields) {
       if (data[field] !== undefined) {
-        updateData[field] = data[field];
+        updateData[field] = field === 'coordinates' && data[field] ? JSON.stringify(data[field]) : data[field];
       }
     }
     updateData.updated_by = updater.id;
+    updateData.updatedAt = new Date();
 
-    // Validating specific fields
-    if (
-      updateData.land_use &&
-      !Object.values(LAND_USE_TYPES).includes(updateData.land_use)
-    ) {
+    // Validate enum fields
+    if (updateData.land_use && !Object.values(LAND_USE_TYPES).includes(updateData.land_use)) {
       throw new Error(
-        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የመሬት አጠቃቀም ከተፈቀዱቷ እሴቶች (${Object.values(LAND_USE_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
-    if (
-      updateData.ownership_type &&
-      !Object.values(OWNERSHIP_TYPES).includes(updateData.ownership_type)
-    ) {
+    if (updateData.ownership_type && !Object.values(OWNERSHIP_TYPES).includes(updateData.ownership_type)) {
       throw new Error(
-        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(OWNERSHIP_TYPES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የባለቤትነት አይነት ከተፈቀዱቷ እሴቶች (${Object.values(OWNERSHIP_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
-    if (
-      updateData.zoning_type &&
-      !Object.values(ZONING_TYPES).includes(updateData.zoning_type)
-    ) {
+    if (updateData.zoning_type && !Object.values(ZONING_TYPES).includes(updateData.zoning_type)) {
       throw new Error(
-        `የመሬት ዞን ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የመሬት ዞን ከተፈቀዱቷ እሴቶች (${Object.values(ZONING_TYPES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
-    if (
-      updateData.priority &&
-      !Object.values(PRIORITIES).includes(updateData.priority)
-    ) {
+    if (updateData.priority && !Object.values(PRIORITIES).includes(updateData.priority)) {
       throw new Error(
-        `ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
-    if (
-      updateData.record_status &&
-      !Object.values(RECORD_STATUSES).includes(updateData.record_status)
-    ) {
+    if (updateData.status && !Object.values(RECORD_STATUSES).includes(updateData.status)) {
       throw new Error(
-        `የመዝገብ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(RECORD_STATUSES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የመዝገብ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(RECORD_STATUSES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
     if (
       updateData.notification_status &&
-      !Object.values(NOTIFICATION_STATUSES).includes(
-        updateData.notification_status
-      )
+      !Object.values(NOTIFICATION_STATUSES).includes(updateData.notification_status)
     ) {
       throw new Error(
-        `የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(NOTIFICATION_STATUSES).join(
-          ", "
-        )}) ውስጥ መሆን አለበት።`
+        `የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(NOTIFICATION_STATUSES).join(", ")}) ውስጥ መሆን አለበት።`
       );
     }
 
-    // Updating the land record
-    await landRecord.update(updateData, { transaction });
+    // Check for duplicate parcel_number or block_number
+    if (updateData.parcel_number || updateData.block_number) {
+      const existingRecord = await LandRecord.findOne({
+        where: {
+          id: { [Op.ne]: id },
+          [Op.or]: [
+            updateData.parcel_number ? { parcel_number: updateData.parcel_number } : null,
+            updateData.block_number ? { block_number: updateData.block_number } : null,
+          ].filter(Boolean),
+          administrative_unit_id: updateData.administrative_unit_id || landRecord.administrative_unit_id,
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction: t,
+      });
+      if (existingRecord) {
+        throw new Error("የመሬት ቁጥር ወይም የቦታ ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
+      }
+    }
 
-    await transaction.commit();
-    return landRecord;
+    // Update status_history and action_log
+    const now = new Date();
+    if (updateData.status && updateData.status !== landRecord.status) {
+      landRecord.status_history = [
+        ...(landRecord.status_history || []),
+        {
+          status: updateData.status,
+          changed_by: updater.id,
+          changed_at: now,
+        },
+      ];
+    }
+    landRecord.action_log = [
+      ...(landRecord.action_log || []),
+      {
+        action: "UPDATED",
+        changed_by: updater.id,
+        changed_at: now,
+        changes: Object.keys(updateData).filter(key => key !== 'updated_by' && key !== 'updatedAt'),
+      },
+    ];
+
+    // Update the land record
+    await landRecord.update({ ...updateData, status_history: landRecord.status_history, action_log: landRecord.action_log }, { transaction: t });
+
+    // Fetch associated data for response
+    const updatedRecord = await getLandRecordByIdService(id);
+
+    if (!transaction) await t.commit();
+    return updatedRecord;
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction) await t.rollback();
     throw new Error(`የመዝገብ መቀየር ስህተት: ${error.message}`);
   }
 };
 
-// Deleting a land record
-const deleteLandRecordService = async (id, deleter) => {
+// Enhanced: Deleting a land record
+const deleteLandRecordService = async (id, deleter, options = {}) => {
   if (!deleter || !deleter.id) {
     throw new Error("የመሰሪ መረጃ አልተገኘም። ትክክለኛ ማስመሰያ ያክሉ።");
   }
 
-  const transaction = await sequelize.transaction();
+  const { transaction } = options;
+  let t = transaction || await sequelize.transaction();
   try {
-    // Validating deleter role
     const deleterRecord = await User.findByPk(deleter.id, {
       include: [{ model: Role, as: "role" }],
-      transaction,
+      transaction: t,
     });
     if (!deleterRecord) {
       throw new Error(`መለያ ቁጥር ${deleter.id} ያለው መሰሪ አልተገኘም።`);
@@ -529,30 +636,36 @@ const deleteLandRecordService = async (id, deleter) => {
       throw new Error("መዝገብ መሰረዝ የሚችለው አስተዳደር ብቻ ነው።");
     }
 
-    // Finding the land record
-    const landRecord = await LandRecord.findByPk(id, { transaction });
+    const landRecord = await LandRecord.findByPk(id, { transaction: t });
     if (!landRecord) {
       throw new Error(`መለያ ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
     }
 
-    // Updating action log before deletion
+    // Fetch record details before deletion
+    const recordDetails = await getLandRecordByIdService(id);
+
+    // Update action log
+    const now = new Date();
     landRecord.action_log = [
       ...(landRecord.action_log || []),
       {
         action: "DELETED",
         changed_by: deleter.id,
-        changed_at: new Date(),
+        changed_at: now,
       },
     ];
-    await landRecord.update({ deleted_by: deleter.id }, { transaction });
 
-    // Performing soft delete
-    await landRecord.destroy({ transaction });
+    // Perform soft delete
+    await landRecord.update({ deleted_by: deleter.id, deletedAt: now }, { transaction: t });
+    await landRecord.destroy({ transaction: t });
 
-    await transaction.commit();
-    return { message: `መለያ ቁጥር ${id} ያለው መዝገብ በተሳካ ሁኔታ ተሰርዟል።` };
+    if (!transaction) await t.commit();
+    return {
+      message: `መለያ ቁጥር ${id} ያለው መዝገብ በተሳካ ሁኔታ ተሰርዟል።`,
+      deletedRecord: recordDetails,
+    };
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction) await t.rollback();
     throw new Error(`የመዝገብ መሰረዝ ስህተት: ${error.message}`);
   }
 };
@@ -560,6 +673,7 @@ const deleteLandRecordService = async (id, deleter) => {
 module.exports = {
   createLandRecordService,
   getAllLandRecordService,
+  getLandRecordByIdService,
   updateLandRecordService,
   deleteLandRecordService,
 };

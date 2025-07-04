@@ -16,7 +16,7 @@ const getLimiter = rateLimit({
 router.post(
   "/",
   authMiddleware.protect,
-  authMiddleware.restrictTo("መዝጋቢ"),
+  // authMiddleware.restrictTo("መዝጋቢ"),
   upload.array("documents", 10),
   landRecordController.createLandRecord
 );
@@ -24,8 +24,8 @@ router.post(
 // Get all land records (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 router.get(
   "/",
-  authMiddleware.protect,
-  authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  // authMiddleware.protect,
+  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getAllLandRecords
 );

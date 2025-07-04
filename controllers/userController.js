@@ -9,7 +9,7 @@ const createLandOwnerController = async (req, res) => {
   try {
     const { body, user: authUser } = req;
     if (!authUser) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+      return res.status(401).json({ error: "የመዝጋቢ ማረጋገጫ ያስፈልጋል እባክዎ ሎጊን ያድርጉ።" });
     }
     const primaryOwnerData = {
       first_name: body.first_name,
@@ -23,17 +23,21 @@ const createLandOwnerController = async (req, res) => {
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
-      relationship_type: body.relationship_type || null,
       marital_status: body.marital_status,
-      primary_owner_id: null,
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
-    const coOwnersData = body.co_owners || [];
-    const owner = await createLandOwner(
-      primaryOwnerData,
-      coOwnersData,
-      authUser.id
-    );
+    const coOwnersData = Array.isArray(body.co_owners) ? body.co_owners.map(co => ({
+      first_name: co.first_name,
+      middle_name: co.middle_name,
+      last_name: co.last_name,
+      email: co.email || null,
+      gender:co.gender,
+      address: co.address || null,
+      phone_number: co.phone_number || null,
+      national_id: co.national_id,
+      relationship_type: co.relationship_type,
+    })) : [];
+    const owner = await createLandOwner(primaryOwnerData, coOwnersData, authUser.id);
     return res.status(201).json({
       message: "የመሬት ባለቤት እና ተጋሪዎች በተሳካ ሁኔታ ተመዝግበዋል።",
       data: owner,
@@ -42,6 +46,7 @@ const createLandOwnerController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+
 
 const getUserByIdController = async (req, res) => {
   try {

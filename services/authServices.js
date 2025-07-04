@@ -3,23 +3,35 @@ const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const registerOfficial = async (data,  options = {}) => {
+
+const registerOfficial = async (data, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+
   try {
-    if (!data.first_name || !data.last_name || !data.national_id || !data.administrative_unit_id || !data.role_id || !data.gender) {
-      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ሚና፣ እና ጾታ መግለጽ አለባቸው።");
+    // Basic required fields check
+    if (
+      !data.first_name ||
+      !data.last_name ||
+      !data.national_id ||
+      !data.administrative_unit_id ||
+      !data.role_id ||
+      !data.gender
+    ) {
+      throw new Error(
+        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ሚና፣ እና ጾታ መግለጽ አለባቸው።"
+      );
     }
 
     t = t || (await sequelize.transaction());
 
-    // Validate administrative_unit_id
+    // Validate Administrative Unit
     const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });
     if (!adminUnit) {
       throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
     }
 
-    // Validate oversight_office_id if provided
+    // Validate Oversight Office (optional)
     if (data.oversight_office_id) {
       const office = await OversightOffice.findByPk(data.oversight_office_id, { transaction: t });
       if (!office) {
@@ -27,13 +39,13 @@ const registerOfficial = async (data,  options = {}) => {
       }
     }
 
-    // Validate role_id
+    // Validate Role
     const role = await Role.findByPk(data.role_id, { transaction: t });
     if (!role || !["መዝጋቢ", "አስተዳደር", "ዳታ ኢንኮደር"].includes(role.name)) {
       throw new Error("ትክክለኛ ሚና ይምረጡ (መዝጋቢ ወይም አስተዳደር)።");
     }
 
-    // Validate email uniqueness if provided
+    // Check for unique email (if provided)
     if (data.email) {
       const existingEmail = await User.findOne({
         where: { email: data.email, deletedAt: { [Op.eq]: null } },
@@ -44,7 +56,7 @@ const registerOfficial = async (data,  options = {}) => {
       }
     }
 
-    // Validate phone_number uniqueness if provided
+    // Check for unique phone_number (if provided)
     if (data.phone_number) {
       const existingPhone = await User.findOne({
         where: { phone_number: data.phone_number, deletedAt: { [Op.eq]: null } },
@@ -55,7 +67,7 @@ const registerOfficial = async (data,  options = {}) => {
       }
     }
 
-    // Validate national_id uniqueness
+    // Check for unique national_id
     const existingNationalId = await User.findOne({
       where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
       transaction: t,
@@ -64,16 +76,21 @@ const registerOfficial = async (data,  options = {}) => {
       throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
     }
 
-    // Create official
+    //  Default password if not provided
+    const rawPassword = data.password || "12345678";
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    // Create user
     const official = await User.create(
       {
         ...data,
-        password: await bcrypt.hash(data.password, 10),
+        password: hashedPassword,
       },
       { transaction: t }
     );
 
     if (!transaction) await t.commit();
+
     return official;
   } catch (error) {
     if (!transaction && t) await t.rollback();
@@ -109,7 +126,7 @@ const login = async ({ email, phone_number, password }, options = {}) => {
     const token = jwt.sign(
       { id: user.id, role: user.role?.name },
       process.env.JWT_SECRET || "your_jwt_secret",
-      { expiresIn: "1h" }
+      { expiresIn: "1d" }
     );
 
     return {

@@ -1,68 +1,67 @@
 const jwt = require("jsonwebtoken");
-const { User, Role } = require("../models");
+
+// Lazy-load models to avoid circular dependency
+const getModels = () => require("../models");
 
 const protect = async (req, res, next) => {
   try {
     // Check for Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      const error = new Error("የተጠቃሚ መረጃ አልተገኘም። እባክዎ ትክክለኛ የJWT ማስመሰያ ያክሉ።");
-      error.status = 401;
-      throw error;
+      throw Object.assign(new Error("የተጠቃሚ መረጃ አልተገኘም። እባክዎ ትክክለኛ የJWT ማስመሰያ ያክሉ።"), { status: 401 });
     }
 
     // Extract and verify token
     const token = authHeader.split(" ")[1];
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (err) {
-      console.error("JWT verification error:", { error: err.message, token });
-      const error = new Error("የማስመሰያ መረጃ ልክ አይደለም። ማስመሰያ ልክ ያልሆነ ወይም ጊዜው ያለፈበት ነው።");
-      error.status = 401;
-      throw error;
-    }
-
-    // Validate decoded token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your_jwt_secret");
     if (!decoded.id) {
-      const error = new Error("የማስመሰያ መረጃ ልክ አይደለም። የተጠቃሚ መለያ ቁጥር ይጎድላል።");
-      error.status = 401;
-      throw error;
+      throw Object.assign(new Error("የማስመሰያ መረጃ ልክ አይደለም። የተጠቃሚ መለያ ቁጥር ይጎድላል።"), { status: 401 });
     }
 
-    // Fetch user with role and administrative unit
+    // Fetch user with role
+    const { User, Role } = getModels();
     const user = await User.findByPk(decoded.id, {
-      attributes: ["id", "email", "phone_number", "full_name", "role_id", "is_active", "administrative_unit_id", "primary_owner_id"],
+      attributes: [
+        "id",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "email",
+        "phone_number",
+        "role_id",
+        "is_active",
+        "administrative_unit_id",
+        "primary_owner_id",
+      ],
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
     });
 
     if (!user || !user.is_active) {
-      const error = new Error(`ተጠቃሚ ከመለያ ቁጥር ${decoded.id} ጋር አልተገኘም ወይም እንቅስቃሴ-አልባ ነው።`);
-      error.status = 401;
-      throw error;
-    }
-
-    // Allow co-owners (landowners without roles) to bypass admin unit check
-    if (!user.role_id && !user.administrative_unit_id) {
-      const error = new Error("ተጠቃሚው አስተዳደራዊ ክፍል መግለጽ አለበት።");
-      error.status = 403;
-      throw error;
+      throw Object.assign(new Error(`ተጠቃሚ ከመለያ ቁጥር ${decoded.id} ጋር አልተገኘም ወይም እንቅስቃሴ-አልባ ነው።`), { status: 401 });
     }
 
     // Attach user data to request
     req.user = {
       id: user.id,
+      first_name: user.first_name,
+      middle_name: user.middle_name || null,
+      last_name: user.last_name,
       email: user.email,
       phone_number: user.phone_number,
-      full_name: user.full_name,
-      role: user.role ? user.role.name : null,
+      role_id: user.role_id,
+      role_name: user.role ? user.role.name : null,
       administrative_unit_id: user.administrative_unit_id,
       is_co_owner: !!user.primary_owner_id,
     };
 
+    // Ensure officials have administrative_unit_id
+    if (!req.user.is_co_owner && !req.user.administrative_unit_id) {
+      throw Object.assign(new Error("ተጠቃሚው አስተዳደራዊ ክፍል መግለጽ አለበት።"), { status: 403 });
+    }
+
     next();
   } catch (error) {
-    console.error("Auth middleware error:", { error: error.message, stack: error.stack });
+    console.error("Auth middleware error:", { error: error.message });
     res.status(error.status || 401).json({
       success: false,
       message: error.message || "የማስመሰያ ስህተት። እባክዎ ትክክለኛ ማስመሰያ ያክሉ።",
@@ -79,13 +78,13 @@ const restrictTo = (...allowedRoles) => {
       });
     }
 
-    // Allow co-owners limited access if explicitly permitted
+    // Allow co-owners if explicitly permitted
     if (req.user.is_co_owner && allowedRoles.includes("co_owner")) {
       return next();
     }
 
     // Check role-based access for officials
-    if (!req.user.role || !allowedRoles.includes(req.user.role)) {
+    if (!req.user.role_name || !allowedRoles.includes(req.user.role_name)) {
       return res.status(403).json({
         success: false,
         message: `የተከለከለ መዳረሻ። የ${allowedRoles.join(" ወይም ")} ሚና ብቻ ይህን እርምጃ መፈጸም ይችላል።`,
