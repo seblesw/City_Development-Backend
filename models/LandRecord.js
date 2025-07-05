@@ -407,18 +407,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["created_by"] },
         { fields: ["approved_by"] },
       ],
-      validate: {
-        atLeastOneNeighbor() {
-          if (
-            !this.north_neighbor &&
-            !this.east_neighbor &&
-            !this.south_neighbor &&
-            !this.west_neighbor
-          ) {
-            throw new Error("ቢያንስ አንድ ጎረቤት መግለጥ አለበት።");
-          }
-        },
-      },
     }
   );
   return {

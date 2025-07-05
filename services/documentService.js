@@ -184,6 +184,47 @@ const getDocumentByIdService = async (id, options = {}) => {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
+const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
+  const { transaction } = options;
+  try {
+    const documents = await Document.findAll({  
+      where: { land_record_id: landRecordId, deletedAt: { [Op.eq]: null } },
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: ["id", "parcel_number"],
+        },
+      ],
+      attributes: [
+        "id",
+        "map_number",
+        "document_type",
+        "reference_number",
+        "description",
+        "issue_date",
+        "land_record_id",
+        "preparer_name",
+        "approver_name",
+        "isActive",
+        "inActived_reason",
+        "files",
+        "createdAt",
+        "updatedAt",
+        "deletedAt",
+      ],
+      transaction,
+    });
+    if (!documents || documents.length === 0) {
+      throw new Error(`መለያ ቁጥር ${landRecordId} ያለው መሬት መዝገብ ላይ ሰነድ አልተገኘም።`);
+    }
+    return documents;
+  } catch (error) {
+    throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
+
 
 const updateDocumentService = async (
   id,
@@ -394,4 +435,5 @@ module.exports = {
   getDocumentByIdService,
   updateDocumentService,
   deleteDocumentService,
+  getDocumentsByLandRecordId,
 };

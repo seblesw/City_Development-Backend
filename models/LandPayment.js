@@ -1,4 +1,3 @@
-const { Op } = require("sequelize");
 
 const PAYMENT_TYPES = {
   LEASE_PAYMENT: "የኪራይ ክፍያ",
@@ -85,7 +84,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(PAYMENT_STATUSES)],
-            msg: "የክፍያ ሁኔታ ከተፈቀዱቷ እሴቶች ውስጥ አንዱ መሆን አለበት።",
+            msg: "የክፍያ ሁኔታ ከተፈቀዱት ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -97,10 +96,6 @@ module.exports = (db, DataTypes) => {
             if (this.payment_type === PAYMENT_TYPES.PENALTY && !this.penalty_reason) {
               throw new Error("የቅጣት ክፍያ የቅጣት ምክንያት መግለፅ አለበት።");
             }
-          },
-          len: {
-            args: [0, 500],
-            msg: "የቅጣት ምክንያት ከ500 ቁምፊዎች መብለጥ አይችልም።",
           },
         },
       },

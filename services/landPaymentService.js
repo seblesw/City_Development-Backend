@@ -91,6 +91,33 @@ const getLandPaymentByIdService = async (id, options = {}) => {
   }
 };
 
+const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
+  const { transaction } = options;
+  try {
+    const payments = await LandPayment.findAll({
+      where: { land_record_id: landRecordId, deletedAt: null },
+      include: [{ model: LandRecord, as: "landRecord", attributes: ["id", "parcel_number"] }],
+      attributes: [
+        "id",
+        "land_record_id",
+        "payment_type",
+        "total_amount",
+        "paid_amount",
+        "currency",
+        "payment_status",
+        "penalty_reason",
+        "description",
+        "createdAt",
+        "updatedAt",
+      ],
+      transaction,
+    });
+    return payments;
+  } catch (error) {
+    throw new Error(`የመሬት ክፍያ መልሶ ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
 const updateLandPaymentService = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -234,4 +261,5 @@ module.exports = {
   getLandPaymentByIdService,
   updateLandPaymentService,
   deleteLandPaymentService,
+  getPaymentsByLandRecordId,
 };

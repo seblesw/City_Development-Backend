@@ -411,7 +411,7 @@ const getLandRecordByIdService = async (id) => {
         "land_use",
         "ownership_type",
         "zoning_type",
-        "status",
+        "record_status",
         "priority",
         "notification_status",
         "status_history",
@@ -470,7 +470,7 @@ const updateLandRecordService = async (id, data, updater, options = {}) => {
 
     const landRecord = await LandRecord.findByPk(id, { transaction: t });
     if (!landRecord) {
-      throw new Error(`መለ�YA ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
+      throw new Error(`መለያ ቁጥር ${id} ያለው መዝገብ አልተገኘም።`);
     }
 
     // Validate administrative unit and land level if provided
