@@ -197,7 +197,7 @@ const getAllLandRecordService = async (query) => {
     where.zoning_type = query.zoning_type;
   }
   if (query.parcel_number) {
-    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` }; // Partial match
+    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` }; 
   }
   if (query.start_date && query.end_date) {
     where.createdAt = {
@@ -320,10 +320,9 @@ const getAllLandRecordService = async (query) => {
       where,
       attributes: [
         [sequelize.fn("COUNT", sequelize.col("id")), "total_records"],
-        [sequelize.fn("SUM", sequelize.col("area")), "total_area"],
         [
           sequelize.literal(
-            `COUNT(CASE WHEN record_status = '${RECORD_STATUSES.DRAFT}' THEN 1 END)`
+            `COUNT(CASE WHEN record_status = '${RECORD_STATUSES.SUBMITTED}' THEN 1 END)`
           ),
           "draft_count",
         ],
@@ -676,7 +675,7 @@ const updateLandRecordService = async (id, data, updater, options = {}) => {
 // Enhanced: Deleting a land record
 const deleteLandRecordService = async (id, deleter, options = {}) => {
   if (!deleter || !deleter.id) {
-    throw new Error("የመሰሪ መረጃ አልተገኘም። ትክክለኛ ማስመሰያ ያክሉ።");
+    throw new Error("የሚደልተው ሰው መረጃ አልተገኘም። ትክክለኛ ቶክን ያክሉ።");
   }
 
   const { transaction } = options;

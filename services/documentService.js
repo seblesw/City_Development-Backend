@@ -104,7 +104,7 @@ const addFilesToDocumentService = async (
     }
 
     if (!files || files.length === 0) {
-      throw new Error("ቢያንስ አንዴ ፋይል መግለጥ አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መግለጥ አለበት።");
     }
 
     // Prepare new files
@@ -187,7 +187,7 @@ const getDocumentByIdService = async (id, options = {}) => {
 const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
   const { transaction } = options;
   try {
-    const documents = await Document.findAll({  
+    const documents = await Document.findAll({
       where: { land_record_id: landRecordId, deletedAt: { [Op.eq]: null } },
       include: [
         {
@@ -215,10 +215,9 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
       ],
       transaction,
     });
-    if (!documents || documents.length === 0) {
-      throw new Error(`መለያ ቁጥር ${landRecordId} ያለው መሬት መዝገብ ላይ ሰነድ አልተገኘም።`);
-    }
-    return documents;
+
+    // No need to throw error if documents not found
+    return documents || [];
   } catch (error) {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }

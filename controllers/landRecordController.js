@@ -11,14 +11,7 @@ const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
 
-    if (!user?.id || typeof user.id !== "number") {
-      return res.status(401).json({
-        status: "error",
-        message: "የ ዩዘር አይዲ ትክክለኛ ቁጥር መሆን አለበት።",
-      });
-    }
-
-    // Parse string fields from form-data
+    // Parse string fields from form-data/request body
     const primary_user = JSON.parse(req.body.primary_user || '{}');
     const co_owners = JSON.parse(req.body.co_owners || '[]');
     const land_record = JSON.parse(req.body.land_record || '{}');
@@ -75,7 +68,7 @@ const getLandRecordById = async (req, res) => {
     const landRecord = await getLandRecordByIdService(req.params.id);
     return res.status(200).json({
       status: "success",
-      message: `መለያ ቁጥር ${req.params.id} ያለው መዝገብ በተሳካ ሁኔታ ተገኝቷል።`,
+      message: `መለያ ቁጥር ${req.params.id} ያለው የመሬት መዝገብ በተሳካ ሁኔታ ተገኝቷል።`,
       data: landRecord,
     });
   } catch (error) {
@@ -119,7 +112,7 @@ const deleteLandRecord = async (req, res) => {
   try {
     const result = await deleteLandRecordService(req.params.id, req.user);
     return res.status(200).json({
-      status: "success",
+      status: "success",  
       message: result.message,
       data: result.deletedRecord,
     });
