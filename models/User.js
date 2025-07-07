@@ -76,7 +76,7 @@ module.exports = (db, DataTypes) => {
       },
       national_id: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: { msg: "ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።" },
         validate: {
           notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አይችልም።" },

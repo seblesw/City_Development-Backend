@@ -42,7 +42,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(DOCUMENT_TYPES)],
-            msg: "የሰነድ አይነት ከተፈቀዱቷ እሴቶች ውስጥ መሆን አለበት።",
+            msg: "የሰነድ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።",
           },
         },
       },
