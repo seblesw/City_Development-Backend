@@ -17,24 +17,23 @@ router.post(
   "/",
   authMiddleware.protect,
   // authMiddleware.restrictTo("መዝጋቢ"),
-  upload.array("documents", 10),
+  upload.array("documents", 20),
   landRecordController.createLandRecord
 );
 
 // Get all land records (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 router.get(
   "/",
-  // authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  authMiddleware.protect,
+  authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getAllLandRecords
 );
 
-// Get a single land record by ID (requires authentication, accessible to መዝጋቢ and አስተዳደር)
+// Get a single land record by ID (requires authentication)
 router.get(
   "/:id",
   authMiddleware.protect,
-  authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getLandRecordById
 );

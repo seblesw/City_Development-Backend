@@ -72,7 +72,7 @@ exports.updateRegion = async (req, res) => {
 
 exports.deleteRegion = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null; // Fallback to null
+    const userId = req.user ? req.user.id : null; 
     await deleteRegionService(req.params.id, userId);
     res.status(204).send();
   } catch (error) {
