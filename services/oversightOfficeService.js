@@ -3,21 +3,23 @@ const { OversightOffice, Region, Zone, Woreda, AdministrativeUnit } = require(".
 
 exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
+  var zone
   try {
     const existingOffice = await OversightOffice.findOne({
-      where: { name, region_id, deleted_at: { [Op.eq]: null } },
+      where: { name, region_id, deletedAt: { [Op.eq]: null } },
       transaction,
     });
     if (existingOffice) throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
     const region = await Region.findByPk(region_id, { transaction });
+    console.log("region_id", region);
     if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
     if (zone_id) {
-      const zone = await Zone.findByPk(zone_id, { transaction });
-      if (!zone || zone.region_id !== region_id) throw new Error("ትክክለኛ ዞን ይምረጡ።");
+      zone = await Zone.findByPk(zone_id, { transaction });
+      if (!zone || zone.region_id !== region.id) throw new Error("ትክክለኛ ዞን ይምረጡ።");
     }
     if (woreda_id) {
       const woreda = await Woreda.findByPk(woreda_id, { transaction });
-      if (!woreda || woreda.zone_id !== zone_id) throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
+      if (!woreda || woreda.zone_id !== zone.id) throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
     }
     return await OversightOffice.create({ name, region_id, zone_id, woreda_id, created_by: userId }, { transaction });
   } catch (error) {
@@ -27,10 +29,10 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
 exports.getAllOversightOfficesService = async (regionId) => {
   try {
-    const where = regionId ? { region_id: regionId, deleted_at: { [Op.eq]: null } } : { deleted_at: { [Op.eq]: null } };
+    const where = regionId ? { region_id: regionId, deletedAt: { [Op.eq]: null } } : { deletedAt: { [Op.eq]: null } };
     return await OversightOffice.findAll({
       where,
-      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deleted_at: { [Op.eq]: null } }, required: false }],
+      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deletedAt: { [Op.eq]: null } }, required: false }],
     });
   } catch (error) {
     throw new Error(error.message || "ቢሮዎችን ማግኘት አልተሳካም።");
@@ -40,7 +42,7 @@ exports.getAllOversightOfficesService = async (regionId) => {
 exports.getOversightOfficeByIdService = async (id) => {
   try {
     const office = await OversightOffice.findByPk(id, {
-      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deleted_at: { [Op.eq]: null } }, required: false }],
+      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deletedAt: { [Op.eq]: null } }, required: false }],
     });
     if (!office) throw new Error("ቢሮ አልተገኘም።");
     return office;
@@ -56,7 +58,7 @@ exports.updateOversightOfficeService = async (id, data, userId, transaction) => 
     if (!office) throw new Error("ቢሮ አልተገኘም።");
     if (name && name !== office.name) {
       const existingOffice = await OversightOffice.findOne({
-        where: { name, region_id: region_id || office.region_id, deleted_at: { [Op.eq]: null } },
+        where: { name, region_id: region_id || office.region_id, deletedAt: { [Op.eq]: null } },
         transaction,
       });
       if (existingOffice) throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
