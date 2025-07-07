@@ -20,7 +20,6 @@ const createLandPaymentController = async (req, res) => {
       payment_status: body.payment_status || PAYMENT_STATUSES.PENDING,
       penalty_reason: body.penalty_reason || null,
       description: body.description || null,
-      payer_name: body.payer_name,
     };
     const payment = await createLandPaymentService(data);
     return res.status(201).json({

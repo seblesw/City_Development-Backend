@@ -6,7 +6,7 @@ const {
   deleteLandRecordService,
 } = require("../services/landRecordService");
 
-// Creating a new land record (unchanged)
+// Creating a new land record 
 const createLandRecord = async (req, res) => {
   try {
     const user = req.user;

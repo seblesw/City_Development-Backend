@@ -57,7 +57,7 @@ module.exports = (db, DataTypes) => {
         validate: { min: 1, max: 6 },
         set(value) {
           const typeLevels = {
-            ሪጂኦፖሊታን: 1,
+            "ሪጂኦፖሊታን": 1,
             "መካከለኛ ከተማ": 2,
             "አነስተኛ ከተማ": 3,
             "መሪ ማዘጋጃ ከተማ": 4,

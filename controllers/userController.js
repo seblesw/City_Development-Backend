@@ -13,6 +13,7 @@ const createLandOwnerController = async (req, res) => {
     }
     const primaryOwnerData = {
       first_name: body.first_name,
+      middle_name:body.middle_name,
       last_name: body.last_name,
       email: body.email || null,
       phone_number: body.phone_number || null,
