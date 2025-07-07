@@ -1,25 +1,49 @@
 const { Op } = require("sequelize");
 const { OversightOffice, Region, Zone, Woreda, AdministrativeUnit } = require("../models");
-
 exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
   try {
+    // Check for existing office with same name in the region
     const existingOffice = await OversightOffice.findOne({
       where: { name, region_id, deleted_at: { [Op.eq]: null } },
       transaction,
     });
     if (existingOffice) throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
+
+    // Validate region
     const region = await Region.findByPk(region_id, { transaction });
     if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
+
+    // Validate zone if provided
+    let zone = null;
     if (zone_id) {
-      const zone = await Zone.findByPk(zone_id, { transaction });
+      zone = await Zone.findByPk(zone_id, { transaction });
       if (!zone || zone.region_id !== region_id) throw new Error("ትክክለኛ ዞን ይምረጡ።");
     }
+
+    // Validate woreda if provided
+    let woreda = null;
     if (woreda_id) {
-      const woreda = await Woreda.findByPk(woreda_id, { transaction });
+      woreda = await Woreda.findByPk(woreda_id, { transaction });
       if (!woreda || woreda.zone_id !== zone_id) throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
     }
-    return await OversightOffice.create({ name, region_id, zone_id, woreda_id, created_by: userId }, { transaction });
+
+    // Generate code based on region, zone, woreda
+    // Find count of offices in this region/zone/woreda
+    const where = { region_id, deleted_at: { [Op.eq]: null } };
+    if (zone_id) where.zone_id = zone_id;
+    if (woreda_id) where.woreda_id = woreda_id;
+    const count = await OversightOffice.count({ where, transaction });
+
+    const regionCode = region.code;
+    const zoneCode = zone ? (zone.code.split("-")[1] || "NZ") : "NZ";
+    const woredaCode = woreda ? (woreda.code.split("-")[2] || "NW") : "NW";
+    const code = `${regionCode}-${zoneCode}-${woredaCode}-OF${count + 1}`;
+
+    return await OversightOffice.create(
+      { name, region_id, zone_id, woreda_id, code, created_by: userId },
+      { transaction }
+    );
   } catch (error) {
     throw new Error(error.message || "ቢሮ መፍጠር አልተሳካም።");
   }
