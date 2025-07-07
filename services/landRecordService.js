@@ -122,14 +122,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     await landRecord.save({ transaction: t });
 
     // Payment
-    if (
-      !land_payment?.payment_type ||
-      !land_payment?.total_amount ||
-      !land_payment?.paid_amount
-    ) {
-      throw new Error("ክፍያ መረጃዎች (payment_type, total_amount, paid_amount) አስፈላጊ ናቸው።");
-    }
-
     const landPayment = await landPaymentService.createLandPaymentService(
       {
         ...land_payment,
