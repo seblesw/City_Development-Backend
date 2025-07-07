@@ -22,6 +22,7 @@ const port = process.env.PORT ;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.json());
 
 // Routes
 app.get('/', (req, res) => {

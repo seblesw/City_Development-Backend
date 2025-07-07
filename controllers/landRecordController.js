@@ -6,17 +6,37 @@ const {
   deleteLandRecordService,
 } = require("../services/landRecordService");
 
-// Creating a new land record 
+// Creating a new land record
 const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
+
     if (!user?.id || typeof user.id !== "number") {
       return res.status(401).json({
         status: "error",
-        message: "ተጠቃሚ መታወቂያ ትክክለኛ ቁጥር መሆን አለበት።",
+        message: "የ ዩዘር አይዲ ትክክለኛ ቁጥር መሆን አለበት።",
       });
     }
-    const result = await createLandRecordService(req.body, req.files, user);
+
+    // Parse string fields from form-data
+    const primary_user = JSON.parse(req.body.primary_user || '{}');
+    const co_owners = JSON.parse(req.body.co_owners || '[]');
+    const land_record = JSON.parse(req.body.land_record || '{}');
+    const documents = JSON.parse(req.body.documents || '[]');
+    const land_payment = JSON.parse(req.body.land_payment || '{}');
+
+    const result = await createLandRecordService(
+      {
+        primary_user,
+        co_owners,
+        land_record,
+        documents,
+        land_payment,
+      },
+      req.files,
+      user
+    );
+
     return res.status(201).json({
       status: "success",
       message: "የመሬት መዝገብ በተሳካ ሁኔታ ተፈጥሯል።",
@@ -29,6 +49,8 @@ const createLandRecord = async (req, res) => {
     });
   }
 };
+
+
 
 // Retrieving all land records
 const getAllLandRecords = async (req, res) => {
@@ -73,13 +95,16 @@ const updateLandRecord = async (req, res) => {
         ? JSON.parse(req.body.land_record)
         : req.body.land_record
       : req.body;
-    const updatedRecord = await updateLandRecordService(req.params.id, data, req.user);
+    const updatedRecord = await updateLandRecordService(
+      req.params.id,
+      data,
+      req.user
+    );
     return res.status(200).json({
       status: "success",
       message: `መለያ ቁጥር ${req.params.id} ያለው መዝገብ በተሳካ ሁኔታ ተቀይሯል።`,
       data: updatedRecord,
     });
-
   } catch (error) {
     const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
     return res.status(statusCode).json({

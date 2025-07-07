@@ -13,6 +13,7 @@ const registerOfficial = async (data, options = {}) => {
     if (
       !data.first_name ||
       !data.last_name ||
+      !data.middle_name ||
       !data.national_id ||
       !data.administrative_unit_id ||
       !data.role_id ||
