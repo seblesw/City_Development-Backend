@@ -96,11 +96,11 @@ module.exports = (db, DataTypes) => {
       },
       gender: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [["ወንድ", "ሴት", "ሌላ"]],
-            msg: "ጾታ ከተፈቀዱት እሴቶች (ወንድ, ሴት, ሌላ) ውስጥ አንዱ መሆን አለበት።",
+            msg: "ጾታ ከተፈቀዱት (ወንድ, ሴት, ሌላ) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -119,11 +119,12 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ነጠላ", "ባለትዳር", "ቤተሰብ", "የጋራ ባለቤትነት"]],
-            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር, ቤተሰብ, የጋራ ባለቤትነት) ውስጥ አንዱ መሆን አለበት።",
+            args: [["ነጠላ", "ባለትዳር",]],
+            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
+      
       primary_owner_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

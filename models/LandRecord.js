@@ -41,9 +41,9 @@ const ZONING_TYPES = {
 
 const OWNERSHIP_TYPES = {
   COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
-  TRANSFER: "የባለቤትነት ማስተላለፍ",
-  LEASE: "የሊዝ ይዞታ-ጨረታ",
-  LEASE_ALLOCATION: "የሊዝ ይዞታ-ምደባ",
+  TRANSFER: "ስመ ንብረት ማስተላለፍ",
+  LEASE: "የሊዝ ይዞታ-በጨረታ",
+  LEASE_ALLOCATION: "የሊዝ ይዞታ-በምደባ",
   NO_PRIOR_DOCUMENT: "ሰነድ አልባ ይዞታ",
   DISPLACEMENT: "በመፈናቀል ትክ",
   MERET_BANK: "የመሬት ባንክ",
@@ -130,7 +130,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የምሥራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
           isValidNeighbor(value) {
             if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
               throw new Error("የምሥራቅ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
@@ -209,7 +208,7 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           min: { args: [1], msg: "የመሬት ደረጃ ከ1 በታች መሆን አይችልም።" },
-          max: { args: [5], msg: "የመሬት ደረጃ ከ10 በላይ መሆን አይችልም።" },
+          max: { args: [5], msg: "የመሬት ደረጃ ከ5 በላይ መሆን አይችልም።" },
         },
       },
       land_use: {

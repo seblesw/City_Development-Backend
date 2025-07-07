@@ -42,7 +42,6 @@ module.exports = (db, DataTypes) => {
     {
       tableName: "regions",
       timestamps: true,
-      paranoid: true,
       freezeTableName: true,
       indexes: [
         {
@@ -52,14 +51,6 @@ module.exports = (db, DataTypes) => {
         },
         { fields: ["name"] },
       ],
-      hooks: {
-        beforeCreate: async (region) => {
-          if (!region.code) {
-            region.code =
-              region.name.toUpperCase().replace(/\s/g, "").slice(0, 10);
-          }
-        },
-      },
     }
   );
 

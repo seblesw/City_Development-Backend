@@ -7,7 +7,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   try {
     if (!data.map_number || !data.document_type) {
       throw new Error(
-        "የሰነድ መረጃዎች (map_number, document_type) መግለጽ አለባቸው።"
+        "የሰነድ መረጃዎች (map_number) መግለጽ አለባቸው።"
       );
     }
     if (!files || !Array.isArray(files) || files.length === 0) {

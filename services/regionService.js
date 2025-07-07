@@ -95,13 +95,15 @@ const updateRegionService = async (id, regionData, updatedByUserId) => {
   });
 };
 
-const deleteRegionService = async (id, deletedByUserId) => {
-  const region = await Region.findByPk(id, { where: { deleted_at: null } });
+const deleteRegionService = async (id,) => {
+  const region = await Region.findOne({
+    where: { id },
+  });
   if (!region) {
     throw new Error("ክልል አልተገኘም።");
   }
 
-  await region.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
+  await region.destroy();
 };
 
 module.exports = {
