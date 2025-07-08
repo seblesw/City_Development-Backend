@@ -115,6 +115,18 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
+      is_draft: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+        validate: {
+          isBoolean(value) {
+            if (typeof value !== "boolean") {
+              throw new Error("is_draft የተለያዩ እሴቶች መሆን አለበት (true ወይም false)።");
+            }
+          },
+        },
+      },
       preparer_name: {
         type: DataTypes.STRING,
         allowNull: false,

@@ -7,6 +7,9 @@ const {
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
   saveLandRecordAsDraftService,
+  getDraftLandRecordService,
+  submitDraftLandRecordService,
+  updateDraftLandRecordService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -83,20 +86,16 @@ const saveLandRecordAsDraft = async (req, res) => {
 };
 const getDraftLandRecord = async (req, res) => {
   try {
-    const { id } = req.params;
-    const user = req.user;
+    const userId = req.user.id;
+    const draftId = req.params.id;
 
-    const result = await getDraftLandRecordService(id, user.id);
+    const result = await getDraftLandRecordService(draftId, userId);
 
-    return res.status(200).json({
-      status: "success",
-      message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተገኝቷል።",
-      ...result
-    });
+    res.status(200).json(result);
   } catch (error) {
-    return res.status(404).json({
+    res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };

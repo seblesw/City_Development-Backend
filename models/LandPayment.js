@@ -109,6 +109,19 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      is_draft: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+        validate: {
+          isBoolean(value) {
+            if (typeof value !== "boolean") {
+              throw new Error("is_draft የተለያዩ እሴቶች መሆን አለበት (true ወይም false)።");
+            }
+          },
+        },
+
+      },
       payer_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
