@@ -212,10 +212,11 @@ const getLandRecordById = async (req, res) => {
     });
   }
 };
-
+// Retrieving land records by user ID
+// This function retrieves all land records associated with a specific user ID
 const getLandRecordByUserId = async (req, res) => {
  try {
-    const userId = parseInt(req.params.userId); // ✅ Ensure it’s parsed correctly
+    const userId = parseInt(req.params.userId); 
 
     if (isNaN(userId)) {
       return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
@@ -228,7 +229,8 @@ const getLandRecordByUserId = async (req, res) => {
     res.status(500).json({ status: "error", message: error.message });
   }
 };
-
+//  Retrieving all land records created by the authenticated user
+// This function retrieves all land records created by the user making the request
 const getLandRecordsByCreator = async (req, res) => {
   try {
     const userId = parseInt(req.user.id);
