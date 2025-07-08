@@ -3,7 +3,7 @@ const router = express.Router();
 const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
-const upload = require("../middlewares/fileStorage");
+const {upload} = require("../middlewares/fileStorage");
 
 // Rate limiters
 const getLimiter = rateLimit({
