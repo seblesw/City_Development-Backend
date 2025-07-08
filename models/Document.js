@@ -1,5 +1,3 @@
-const { Op } = require("sequelize");
-
 const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
   LEASE_AGREEMENT: "የሊዝ ስምምነት",
@@ -88,7 +86,9 @@ module.exports = (db, DataTypes) => {
               }
               if (
                 !file.mime_type ||
-                !["application/pdf", "image/jpeg", "image/png"].includes(file.mime_type)
+                !["application/pdf", "image/jpeg", "image/png"].includes(
+                  file.mime_type
+                )
               ) {
                 throw new Error("የፋይል አይነት PDF፣ JPEG ወይም PNG መሆን አለበት።");
               }
@@ -140,6 +140,22 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      version: {
+        type: DataTypes.INTEGER,
+        defaultValue: 1,
+        allowNull: false,
+        validate: {
+          min: 1,
+        },
+      },
+      uploaded_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+        validate: {
+          isInt: { msg: "ሰነድ የጫነው መለያ ቁጥር ትክክለኛ መሆን አለበት።" },
+        },
+      },
     },
     {
       tableName: "documents",
@@ -152,7 +168,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
       ],
-      
     }
   );
 

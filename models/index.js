@@ -90,6 +90,12 @@ User.hasMany(LandRecord, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+User.hasMany(Document, {
+  foreignKey: "uploaded_by",
+  as: "uploadedDocuments",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
 User.hasMany(LandPayment, {
   as: "payerPayments",
   foreignKey: "payer_id",

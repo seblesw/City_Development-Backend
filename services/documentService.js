@@ -4,22 +4,23 @@ const { Op } = require("sequelize");
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+
   try {
     if (!data.map_number || !data.document_type) {
-      throw new Error(
-        "የሰነድ መረጃዎች (map_number) መግለጽ አለባቸው።"
-      );
+      throw new Error("የሰነድ መረጃዎች (map_number, document_type) አስፈላጊ ናቸው።");
     }
+
     if (!files || !Array.isArray(files) || files.length === 0) {
-      throw new Error("ቢያንስ አንዴ ፋይል መግለጽ አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መስጠት አለበት።");
     }
+
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
-      throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
+      throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
 
     t = t || (await sequelize.transaction());
 
-    // Validate map_number uniqueness
+    // Check for map_number uniqueness
     const existingMap = await Document.findOne({
       where: {
         map_number: data.map_number,
@@ -28,10 +29,10 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       transaction: t,
     });
     if (existingMap) {
-      throw new Error("ይህ የካርታ ቁጥር ተመዝግቧል።");
+      throw new Error("ይህ የካርታ ቁጥር ቀድሞውኑ ተመዝግቧል።");
     }
 
-    // Validate reference_number uniqueness
+    // Check reference_number uniqueness
     if (data.reference_number) {
       const existingRef = await Document.findOne({
         where: {
@@ -45,7 +46,19 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       }
     }
 
-    // Prepare file metadata
+    // Document versioning (optional enhancement)
+    const existingDocs = await Document.findAll({
+      where: {
+        land_record_id: data.land_record_id,
+        map_number: data.map_number,
+        document_type: data.document_type,
+        deletedAt: { [Op.eq]: null },
+      },
+      transaction: t,
+    });
+    const version = existingDocs.length + 1;
+
+    // Build file metadata
     const fileMetadata = files.map((file) => ({
       file_path: file.path,
       file_name: file.originalname,
@@ -53,13 +66,14 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       file_size: file.size,
     }));
 
-    // Create document with land_record_id
+    // Create the document record
     const documentData = {
       map_number: data.map_number,
       document_type: data.document_type,
       reference_number: data.reference_number || null,
       description: data.description || null,
       files: fileMetadata,
+      version,
       land_record_id: data.land_record_id,
       preparer_name: data.preparer_name || null,
       approver_name: data.approver_name || null,
@@ -68,7 +82,30 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       inActived_reason: data.inActived_reason || null,
       uploaded_by: creatorId,
     };
+
     const document = await Document.create(documentData, { transaction: t });
+
+    // Log the document upload on LandRecord action_log
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
+      transaction: t,
+    });
+
+    if (landRecord) {
+      const now = new Date();
+      const newLog = {
+        action: `DOCUMENT_UPLOADED_${data.document_type}`,
+        document_id: document.id,
+        changed_by: creatorId,
+        changed_at: now,
+      };
+
+      const updatedLog = Array.isArray(landRecord.action_log)
+        ? [...landRecord.action_log, newLog]
+        : [newLog];
+
+      landRecord.action_log = updatedLog;
+      await landRecord.save({ transaction: t });
+    }
 
     if (!transaction) await t.commit();
     return document;

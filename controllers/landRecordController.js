@@ -4,6 +4,9 @@ const {
   getLandRecordByIdService,
   updateLandRecordService,
   deleteLandRecordService,
+  getLandRecordByUserIdService,
+  getLandRecordsByCreatorService,
+  saveLandRecordAsDraftService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -42,9 +45,42 @@ const createLandRecord = async (req, res) => {
     });
   }
 };
+const saveLandRecordAsDraft = async (req, res) => {
+  try {
+    const user = req.user;
 
+    // Parse string fields from form-data/request body
+    // All fields are optional for drafts
+    const primary_user = req.body.primary_user ? JSON.parse(req.body.primary_user) : {};
+    const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
+    const land_record = req.body.land_record ? JSON.parse(req.body.land_record) : {};
+    const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
+    const land_payment = req.body.land_payment ? JSON.parse(req.body.land_payment) : {};
 
+    const result = await saveLandRecordAsDraftService(
+      {
+        primary_user,
+        co_owners,
+        land_record,
+        documents,
+        land_payment,
+      },
+      req.files || [],
+      user
+    );
 
+    return res.status(201).json({
+      status: "success",
+      message: "የመሬት ረቂቅ መዝገብ በተሳካ ሁኔታ ተቀምጧል።",
+      data: result,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የረቂቅ መዝገብ ስህተት: ${error.message}`,
+    });
+  }
+};
 // Retrieving all land records
 const getAllLandRecords = async (req, res) => {
   try {
@@ -79,6 +115,37 @@ const getLandRecordById = async (req, res) => {
     });
   }
 };
+
+const getLandRecordByUserId = async (req, res) => {
+ try {
+    const userId = parseInt(req.params.userId); // ✅ Ensure it’s parsed correctly
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+    }
+
+    const records = await getLandRecordByUserIdService(userId);
+
+    res.status(200).json({ status: "success", data: records });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+const getLandRecordsByCreator = async (req, res) => {
+  try {
+    const userId = parseInt(req.user.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+    }
+    const records = await getLandRecordsByCreatorService(userId);
+    res.status(200).json({ status: "success", data: records });
+  } catch (error) {
+    res.status(500).json({ status: "error", message:
+      error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
+    }); 
+  }
+}
 
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
@@ -127,8 +194,11 @@ const deleteLandRecord = async (req, res) => {
 
 module.exports = {
   createLandRecord,
+  saveLandRecordAsDraft,
   getAllLandRecords,
   getLandRecordById,
+  getLandRecordByUserId,
+  getLandRecordsByCreator,
   updateLandRecord,
   deleteLandRecord,
 };
