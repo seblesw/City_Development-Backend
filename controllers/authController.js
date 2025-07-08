@@ -12,6 +12,7 @@ const registerOfficialController = async (req, res) => {
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
+      middle_name: body.middle_name || null,
       email: body.email ,
       phone_number: body.phone_number,
       password: body.password || "12345678", 

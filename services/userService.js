@@ -117,6 +117,8 @@ const getAllUserService = async (options = {}) => {
         "oversight_office_id",
         "national_id",
         "address",
+        "is_active",
+        "last_login",
       ],
       where: { deletedAt: { [Op.eq]: null } },
       order: [["createdAt", "DESC"]],

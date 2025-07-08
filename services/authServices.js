@@ -10,6 +10,7 @@ const registerOfficial = async (data, options = {}) => {
 
   try {
     // Basic required fields check
+    console.log("Registering official with data:", data);
     if (
       !data.first_name ||
       !data.last_name ||

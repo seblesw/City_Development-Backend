@@ -119,7 +119,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ያላገባ/ች", "ባለትዳር",]],
+            args: [["ነጠላ", "ባለትዳር",]],
             msg: "የጋብቻ ሁኔታ ከተፈቀዱት  (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
           },
         },
