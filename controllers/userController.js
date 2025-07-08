@@ -3,6 +3,7 @@ const {
   getUserById,
   updateUser,
   deleteUser,
+  getAllUserService,
 } = require("../services/userService");
 
 const createLandOwnerController = async (req, res) => {
@@ -47,6 +48,19 @@ const createLandOwnerController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+
+const getAllUsersController = async (req, res) => {
+  try {
+    const users = await getAllUserService();
+    return res.status(200).json({
+      message: "ሁሉም ተጠቃሚዎች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: users,
+    });
+    
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+    
+  }};
 
 
 const getUserByIdController = async (req, res) => {
@@ -116,5 +130,6 @@ module.exports = {
   createLandOwnerController,
   getUserByIdController,
   updateUserController,
+  getAllUsersController,
   deleteUserController,
 };

@@ -151,6 +151,159 @@ const createLandRecordService = async (data, files, user, options = {}) => {
   }
 };
 
+const saveLandRecordAsDraftService = async (
+  data,
+  files,
+  user,
+  options = {}
+) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    const {
+      primary_user = {},
+      co_owners = [],
+      land_record = {},
+      documents = [],
+      land_payment = {},
+    } = data;
+
+    const administrative_unit_id = user.administrative_unit_id;
+
+    // Only set administrative_unit_id if we have the primary_user data
+    if (primary_user) {
+      primary_user.administrative_unit_id = administrative_unit_id;
+    }
+
+    if (land_record) {
+      land_record.administrative_unit_id = administrative_unit_id;
+    }
+
+    // Skip parcel number validation for drafts
+    const now = new Date();
+    const status_history = [
+      {
+        status: RECORD_STATUSES.DRAFT,
+        changed_by: user.id,
+        changed_at: now,
+      },
+    ];
+    const action_log = [
+      {
+        action: "DRAFT_CREATED",
+        changed_by: user.id,
+        changed_at: now,
+      },
+    ];
+
+    // Create primary owner if data exists
+    let primaryOwner = null;
+    let coOwners = [];
+
+    if (primary_user && Object.keys(primary_user).length > 0) {
+      const ownerResult = await userService.createLandOwner(
+        primary_user,
+        co_owners,
+        user.id,
+        { transaction: t }
+      );
+      primaryOwner = ownerResult.primaryOwner;
+      coOwners = ownerResult.coOwners;
+    }
+
+    const landRecord = await LandRecord.create(
+      {
+        ...land_record,
+        user_id: primaryOwner?.id || null,
+        created_by: user.id,
+        status: RECORD_STATUSES.DRAFT,
+        notification_status: NOTIFICATION_STATUSES.NOT_SENT,
+        priority: land_record.priority || PRIORITIES.LOW,
+        status_history,
+        action_log,
+        rejection_reason: null,
+        approver_id: null,
+        coordinates: land_record.coordinates
+          ? JSON.stringify(land_record.coordinates)
+          : null,
+        is_draft: true, // Mark explicitly as draft
+      },
+      { transaction: t }
+    );
+
+    // Handle documents if any files were uploaded
+    let documentResults = [];
+    if (Array.isArray(files) && files.length > 0 && documents.length > 0) {
+      documentResults = await Promise.all(
+        documents
+          .map((doc, index) => {
+            const file = files[index];
+            if (!file) return null; // Skip if no file for this document
+
+            return documentService.createDocumentService(
+              {
+                ...doc,
+                land_record_id: landRecord.id,
+                preparer_name: doc.preparer_name || user.full_name || "Unknown",
+                approver_name: doc.approver_name || null,
+                is_draft: true, // Mark document as draft
+              },
+              [file],
+              user.id,
+              { transaction: t }
+            );
+          })
+          .filter(Boolean) // Remove null entries from skipped documents
+      );
+
+      // Log successful document uploads
+      landRecord.action_log.push(
+        ...documentResults.map((doc) => ({
+          action: `DRAFT_DOCUMENT_UPLOADED_${doc.document_type}`,
+          changed_by: user.id,
+          changed_at: doc.createdAt || now,
+          document_id: doc.id,
+        }))
+      );
+      await landRecord.save({ transaction: t });
+    }
+
+    // Handle payment if minimal data exists
+    let landPayment = null;
+    if (
+      land_payment &&
+      (land_payment.payment_type ||
+        land_payment.total_amount ||
+        land_payment.paid_amount)
+    ) {
+      landPayment = await landPaymentService.createLandPaymentService(
+        {
+          ...land_payment,
+          land_record_id: landRecord.id,
+          payer_id: primaryOwner?.id || null,
+          created_by: user.id,
+          is_draft: true, // Mark payment as draft
+        },
+        { transaction: t }
+      );
+    }
+
+    await t.commit();
+
+    return {
+      landRecord,
+      primaryOwner,
+      coOwners,
+      documents: documentResults,
+      landPayment,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`የረቂቅ መዝገብ መቀመጥ ስህተት: ${error.message}`);
+  }
+};
+
 // Enhanced: Retrieving all land records with advanced filtering, sorting, and aggregated stats
 const getAllLandRecordService = async (query) => {
   const where = { deletedAt: { [Op.eq]: null } }; // Only non-deleted records
@@ -533,8 +686,12 @@ const getLandRecordByUserIdService = async (userId) => {
 
     const enrichedRecords = await Promise.all(
       landRecords.map(async (record) => {
-        const documents = await documentService.getDocumentsByLandRecordId(record.id);
-        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id);
+        const documents = await documentService.getDocumentsByLandRecordId(
+          record.id
+        );
+        const payments = await landPaymentService.getPaymentsByLandRecordId(
+          record.id
+        );
         return {
           ...record.toJSON(),
           documents,
@@ -578,8 +735,12 @@ const getLandRecordsByCreatorService = async (userId) => {
     // Enrich with documents and payments
     const enrichedRecords = await Promise.all(
       records.map(async (record) => {
-        const documents = await documentService.getDocumentsByLandRecordId(record.id);
-        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id);
+        const documents = await documentService.getDocumentsByLandRecordId(
+          record.id
+        );
+        const payments = await landPaymentService.getPaymentsByLandRecordId(
+          record.id
+        );
 
         return {
           ...record.toJSON(),
@@ -594,7 +755,6 @@ const getLandRecordsByCreatorService = async (userId) => {
     throw new Error(`በተጠቃሚው የተፈጠሩ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-
 
 // Enhanced: Updating an existing land record
 const updateLandRecordService = async (id, data, updater, options = {}) => {
@@ -873,6 +1033,7 @@ const deleteLandRecordService = async (id, deleter, options = {}) => {
 
 module.exports = {
   createLandRecordService,
+  saveLandRecordAsDraftService,
   getAllLandRecordService,
   getLandRecordByIdService,
   getLandRecordByUserIdService,

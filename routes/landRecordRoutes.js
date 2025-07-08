@@ -20,6 +20,13 @@ router.post(
   upload.array("documents", 20),
   landRecordController.createLandRecord
 );
+router.post(
+  "/",
+  authMiddleware.protect,
+  // authMiddleware.restrictTo("መዝጋቢ"),
+  upload.array("documents", 20),
+  landRecordController.saveLandRecordAsDraft
+);
 
 // Get all land records (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 router.get(

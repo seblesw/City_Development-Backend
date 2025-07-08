@@ -97,7 +97,37 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
 };
 
 
-
+const getAllUserService = async (options = {}) => {
+  const { transaction } = options;
+  try {
+    const users = await User.findAll({  
+      include: [
+        { model: Role, as: "role", attributes: ["id", "name"] },
+        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
+        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"] },
+      ],
+      attributes: [
+        "id", 
+        "first_name",
+        "last_name",
+        "email",
+        "phone_number",
+        "role_id",
+        "administrative_unit_id",
+        "oversight_office_id",
+        "national_id",
+        "address",
+      ],
+      where: { deletedAt: { [Op.eq]: null } },
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+    return users;
+  } catch (error) {
+    throw new Error(`ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+        
 
 const getUserById = async (id, options = {}) => {
   const { transaction } = options;
@@ -298,4 +328,5 @@ module.exports = {
   getUserById,
   updateUser,
   deleteUser,
+  getAllUserService,
 };

@@ -347,6 +347,18 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      is_draft: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+        validate: {
+          isBoolean(value) {
+            if (typeof value !== "boolean") {
+              throw new Error("የድራፍት ሁኔታ ትክክለኛ መሆን አለበት።");
+            }
+          },
+        },
+      },
       rejection_reason: {
         type: DataTypes.TEXT,
         allowNull: true,
