@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const documentController = require("../controllers/documentController");
 const authMiddleware = require("../middlewares/authMiddleware");
-const{ upload} = require("../middlewares/fileStorage");
+const upload = require("../middlewares/fileStorage");
 const rateLimit = require("express-rate-limit");
 
 const getLimiter = rateLimit({
