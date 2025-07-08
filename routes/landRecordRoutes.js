@@ -29,6 +29,12 @@ router.get(
   getLimiter,
   landRecordController.getAllLandRecords
 );
+router.get(
+  "/my-records",
+  authMiddleware.protect,
+  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  landRecordController.getLandRecordsByCreator
+);
 
 // Get a single land record by ID (requires authentication)
 router.get(
@@ -37,6 +43,14 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordById
 );
+// Get land records by user ID (requires authentication)
+router.get(
+  "/user/:userId",
+  authMiddleware.protect,
+  landRecordController.getLandRecordByUserId
+);
+// Get land records by creator (requires authentication, accessible to መዝጋቢ and አስተዳደር)
+
 
 // Update a land record (requires authentication, file upload, and restricted to አስተዳደር)
 router.put(

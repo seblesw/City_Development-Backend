@@ -4,6 +4,8 @@ const {
   getLandRecordByIdService,
   updateLandRecordService,
   deleteLandRecordService,
+  getLandRecordByUserIdService,
+  getLandRecordsByCreatorService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -80,6 +82,37 @@ const getLandRecordById = async (req, res) => {
   }
 };
 
+const getLandRecordByUserId = async (req, res) => {
+ try {
+    const userId = parseInt(req.params.userId); // ✅ Ensure it’s parsed correctly
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+    }
+
+    const records = await getLandRecordByUserIdService(userId);
+
+    res.status(200).json({ status: "success", data: records });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+const getLandRecordsByCreator = async (req, res) => {
+  try {
+    const userId = parseInt(req.user.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+    }
+    const records = await getLandRecordsByCreatorService(userId);
+    res.status(200).json({ status: "success", data: records });
+  } catch (error) {
+    res.status(500).json({ status: "error", message:
+      error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
+    }); 
+  }
+}
+
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
   try {
@@ -129,6 +162,8 @@ module.exports = {
   createLandRecord,
   getAllLandRecords,
   getLandRecordById,
+  getLandRecordByUserId,
+  getLandRecordsByCreator,
   updateLandRecord,
   deleteLandRecord,
 };

@@ -5,7 +5,7 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
   try {
     // Check for existing office with same name in the region
     const existingOffice = await OversightOffice.findOne({
-      where: { name, region_id, deleted_at: { [Op.eq]: null } },
+      where: { name, region_id, deletedAt: { [Op.eq]: null } },
       transaction,
     });
     if (existingOffice) throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
@@ -30,7 +30,7 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
     // Generate code based on region, zone, woreda
     // Find count of offices in this region/zone/woreda
-    const where = { region_id, deleted_at: { [Op.eq]: null } };
+    const where = { region_id, deletedAt: { [Op.eq]: null } };
     if (zone_id) where.zone_id = zone_id;
     if (woreda_id) where.woreda_id = woreda_id;
     const count = await OversightOffice.count({ where, transaction });
@@ -51,10 +51,10 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
 exports.getAllOversightOfficesService = async (regionId) => {
   try {
-    const where = regionId ? { region_id: regionId, deleted_at: { [Op.eq]: null } } : { deleted_at: { [Op.eq]: null } };
+    const where = regionId ? { region_id: regionId, deletedAt: { [Op.eq]: null } } : { deletedAt: { [Op.eq]: null } };
     return await OversightOffice.findAll({
       where,
-      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deleted_at: { [Op.eq]: null } }, required: false }],
+      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deletedAt: { [Op.eq]: null } }, required: false }],
     });
   } catch (error) {
     throw new Error(error.message || "ቢሮዎችን ማግኘት አልተሳካም።");
@@ -64,7 +64,7 @@ exports.getAllOversightOfficesService = async (regionId) => {
 exports.getOversightOfficeByIdService = async (id) => {
   try {
     const office = await OversightOffice.findByPk(id, {
-      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deleted_at: { [Op.eq]: null } }, required: false }],
+      include: [{ model: AdministrativeUnit, as: "administrativeUnits", where: { deletedAt: { [Op.eq]: null } }, required: false }],
     });
     if (!office) throw new Error("ቢሮ አልተገኘም።");
     return office;
@@ -80,7 +80,7 @@ exports.updateOversightOfficeService = async (id, data, userId, transaction) => 
     if (!office) throw new Error("ቢሮ አልተገኘም።");
     if (name && name !== office.name) {
       const existingOffice = await OversightOffice.findOne({
-        where: { name, region_id: region_id || office.region_id, deleted_at: { [Op.eq]: null } },
+        where: { name, region_id: region_id || office.region_id, deletedAt: { [Op.eq]: null } },
         transaction,
       });
       if (existingOffice) throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");

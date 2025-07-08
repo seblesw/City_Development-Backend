@@ -36,7 +36,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
-        adminunitistrative_unit_id: adminunit,
+        administrative_unit_id: adminunit,
         deletedAt: { [Op.eq]: null },
       },
       transaction: t,
@@ -55,16 +55,20 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     );
 
     const now = new Date();
-    const status_history = [{
-      status: RECORD_STATUSES.SUBMITTED,
-      changed_by: user.id,
-      changed_at: now,
-    }];
-    const action_log = [{
-      action: "CREATED",
-      changed_by: user.id,
-      changed_at: now,
-    }];
+    const status_history = [
+      {
+        status: RECORD_STATUSES.SUBMITTED,
+        changed_by: user.id,
+        changed_at: now,
+      },
+    ];
+    const action_log = [
+      {
+        action: "CREATED",
+        changed_by: user.id,
+        changed_at: now,
+      },
+    ];
 
     const landRecord = await LandRecord.create(
       {
@@ -147,8 +151,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
   }
 };
 
-
-
 // Enhanced: Retrieving all land records with advanced filtering, sorting, and aggregated stats
 const getAllLandRecordService = async (query) => {
   const where = { deletedAt: { [Op.eq]: null } }; // Only non-deleted records
@@ -189,7 +191,7 @@ const getAllLandRecordService = async (query) => {
     where.zoning_type = query.zoning_type;
   }
   if (query.parcel_number) {
-    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` }; 
+    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` };
   }
   if (query.start_date && query.end_date) {
     where.createdAt = {
@@ -442,6 +444,157 @@ const getLandRecordByIdService = async (id) => {
     throw new Error(`የመዝገብ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
+
+const getLandRecordByUserIdService = async (userId) => {
+  try {
+    const landRecords = await LandRecord.findAll({
+      where: {
+        user_id: userId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "national_id",
+            "email",
+            "phone_number",
+            "address",
+          ],
+          include: [
+            {
+              model: User,
+              as: "coOwners",
+              attributes: [
+                "id",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "national_id",
+                "relationship_type",
+                "email",
+                "phone_number",
+              ],
+            },
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name", "max_land_levels"],
+        },
+        {
+          model: User,
+          as: "creator",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
+        {
+          model: User,
+          as: "approver",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "land_level",
+        "area",
+        "land_use",
+        "ownership_type",
+        "zoning_type",
+        "record_status",
+        "priority",
+        "notification_status",
+        "status_history",
+        "action_log",
+        "north_neighbor",
+        "east_neighbor",
+        "south_neighbor",
+        "west_neighbor",
+        "block_number",
+        "block_special_name",
+        "plot_number",
+        "coordinates",
+        "rejection_reason",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!landRecords || landRecords.length === 0) {
+      return [];
+    }
+
+    const enrichedRecords = await Promise.all(
+      landRecords.map(async (record) => {
+        const documents = await documentService.getDocumentsByLandRecordId(record.id);
+        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id);
+        return {
+          ...record.toJSON(),
+          documents,
+          payments,
+        };
+      })
+    );
+
+    return enrichedRecords;
+  } catch (error) {
+    throw new Error(`የባለቤት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
+const getLandRecordsByCreatorService = async (userId) => {
+  if (!userId) {
+    throw new Error("የተጠቃሚ መለያ ቁጥር አልተሰጠም።");
+  }
+
+  try {
+    const records = await LandRecord.findAll({
+      where: {
+        created_by: userId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["first_name", "middle_name", "last_name", "national_id"],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Enrich with documents and payments
+    const enrichedRecords = await Promise.all(
+      records.map(async (record) => {
+        const documents = await documentService.getDocumentsByLandRecordId(record.id);
+        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id);
+
+        return {
+          ...record.toJSON(),
+          documents,
+          payments,
+        };
+      })
+    );
+
+    return enrichedRecords;
+  } catch (error) {
+    throw new Error(`በተጠቃሚው የተፈጠሩ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
 
 // Enhanced: Updating an existing land record
 const updateLandRecordService = async (id, data, updater, options = {}) => {
@@ -722,6 +875,8 @@ module.exports = {
   createLandRecordService,
   getAllLandRecordService,
   getLandRecordByIdService,
+  getLandRecordByUserIdService,
+  getLandRecordsByCreatorService,
   updateLandRecordService,
   deleteLandRecordService,
 };
