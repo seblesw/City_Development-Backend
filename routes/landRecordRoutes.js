@@ -5,74 +5,101 @@ const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
 
-// Rate limiter for GET requests
+// Rate limiters
 const getLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit to 100 requests per window
+  max: 100,
   message: "በጣም ብዙ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
 
-// Create a new land record (requires authentication and file upload, restricted to መዝጋቢ)
+const postLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
+});
+
+// Draft Management Routes
 router.post(
-  "/",
+  "/drafts",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ"),
-  upload.array("documents", 20),
-  landRecordController.createLandRecord
-);
-router.post(
-  "/",
-  authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ"),
+  postLimiter,
   upload.array("documents", 20),
   landRecordController.saveLandRecordAsDraft
 );
 
-// Get all land records (requires authentication, accessible to መዝጋቢ and አስተዳደር)
+router.get(
+  "/drafts/:id",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getDraftLandRecord
+);
+
+router.put(
+  "/drafts/:id",
+  authMiddleware.protect,
+  postLimiter,
+  upload.array("documents", 20),
+  landRecordController.updateDraftLandRecord
+);
+
+router.post(
+  "/drafts/:id/submit",
+  authMiddleware.protect,
+  postLimiter,
+  landRecordController.submitDraftLandRecord
+);
+
+// Main Land Record Routes
+router.post(
+  "/",
+  authMiddleware.protect,
+  postLimiter,
+  upload.array("documents", 20),
+  landRecordController.createLandRecord
+);
+
 router.get(
   "/",
   authMiddleware.protect,
-  authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getAllLandRecords
 );
+
 router.get(
   "/my-records",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  getLimiter,
   landRecordController.getLandRecordsByCreator
 );
 
-// Get a single land record by ID (requires authentication)
 router.get(
   "/:id",
   authMiddleware.protect,
   getLimiter,
   landRecordController.getLandRecordById
 );
-// Get land records by user ID (requires authentication)
+
 router.get(
   "/user/:userId",
   authMiddleware.protect,
+  getLimiter,
   landRecordController.getLandRecordByUserId
 );
-// Get land records by creator (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 
-
-// Update a land record (requires authentication, file upload, and restricted to አስተዳደር)
 router.put(
   "/:id",
   authMiddleware.protect,
-  authMiddleware.restrictTo("አስተዳደር"),
+  // authMiddleware.restrictTo("አስተዳደር"),
+  postLimiter,
   upload.array("documents", 5),
   landRecordController.updateLandRecord
 );
 
-// Delete a land record (requires authentication and restricted to አስተዳደር)
 router.delete(
   "/:id",
   authMiddleware.protect,
-  authMiddleware.restrictTo("አስተዳደር"),
+  // authMiddleware.restrictTo("አስተዳደር"),
   landRecordController.deleteLandRecord
 );
 
