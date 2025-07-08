@@ -4,16 +4,13 @@ const bcrypt = require("bcryptjs");
 
 const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, options = {}) => {
   const { transaction } = options;
-  let t = transaction || (await sequelize.transaction());
+  const t = transaction || await sequelize.transaction();
+
   try {
+    // Validate required primary owner fields
     const requiredFields = [
-      "first_name",
-      "middle_name",
-      "last_name",
-      "national_id",
-      "gender",
-      "marital_status",
-      "administrative_unit_id",
+      "first_name", "middle_name", "last_name", "national_id",
+      "gender", "marital_status", "administrative_unit_id"
     ];
     for (const field of requiredFields) {
       if (!primaryOwnerData[field]) {
@@ -21,40 +18,38 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
       }
     }
 
-    // Reuse or create primary owner
+    //  Check if primary owner exists
     let primaryOwner = await User.findOne({
-      where: { national_id: primaryOwnerData.national_id, deletedAt: { [Op.eq]: null } },
+      where: {
+        national_id: primaryOwnerData.national_id,
+        deletedAt: { [Op.eq]: null },
+      },
       transaction: t,
     });
 
     if (primaryOwner) {
-      // Update primary owner attributes if needed
-      await primaryOwner.update(
-        {
-          ...primaryOwnerData,
-          updated_by: creatorId,
-        },
-        { transaction: t }
-      );
+      // Update existing primary owner
+      await primaryOwner.update({
+        ...primaryOwnerData,
+        updated_by: creatorId,
+      }, { transaction: t });
     } else {
-      // Create new primary owner
-      primaryOwner = await User.create(
-        {
-          ...primaryOwnerData,
-          password: primaryOwnerData.password
-            ? await bcrypt.hash(primaryOwnerData.password, 10)
-            : null,
-          role_id: null,
-          oversight_office_id: null,
-          primary_owner_id: null,
-          relationship_type: null,
-          created_by: creatorId,
-          is_active: true,
-        },
-        { transaction: t }
-      );
+      //  Create new primary owner
+      primaryOwner = await User.create({
+        ...primaryOwnerData,
+        password: primaryOwnerData.password
+          ? await bcrypt.hash(primaryOwnerData.password, 10)
+          : null,
+        role_id: null,
+        oversight_office_id: null,
+        primary_owner_id: null,
+        relationship_type: null,
+        created_by: creatorId,
+        is_active: true,
+      }, { transaction: t });
     }
 
+    // Create co-owners only if marital_status ≠ ነጠላ
     const coOwners = [];
 
     if (primaryOwnerData.marital_status !== "ነጠላ") {
@@ -63,50 +58,29 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
       }
 
       for (const co of coOwnersData) {
-        const required = ["first_name", "middle_name", "last_name", "national_id", "relationship_type"];
+        const required = ["first_name", "middle_name", "last_name", "relationship_type"];
         for (const field of required) {
           if (!co[field]) {
             throw new Error(`በተጋሪ ባለቤት መረጃ ውስጥ ${field} አልተሞላም።`);
           }
         }
 
-        let coOwner = await User.findOne({
-          where: { national_id: co.national_id, deletedAt: { [Op.eq]: null } },
-          transaction: t,
-        });
-
-        if (coOwner) {
-          // Avoid linking same relationship twice
-          if (coOwner.primary_owner_id === primaryOwner.id) {
-            continue;
-          }
-
-          // Update existing co-owner details if needed
-          await coOwner.update(
-            {
-              ...co,
-              primary_owner_id: primaryOwner.id,
-              updated_by: creatorId,
-              is_active: true,
-            },
-            { transaction: t }
-          );
-        } else {
-          // Create new co-owner
-          coOwner = await User.create(
-            {
-              ...co,
-              administrative_unit_id: primaryOwnerData.administrative_unit_id,
-              primary_owner_id: primaryOwner.id,
-              created_by: creatorId,
-              is_active: true,
-            },
-            { transaction: t }
-          );
-        }
+        // Always create new co-owner — no DB check
+        const coOwner = await User.create({
+          first_name: co.first_name,
+          middle_name: co.middle_name,
+          last_name: co.last_name,
+          phone_number: co.phone_number || null,
+          relationship_type: co.relationship_type,
+          primary_owner_id: primaryOwner.id,
+          administrative_unit_id: primaryOwner.administrative_unit_id,
+          created_by: creatorId,
+          is_active: true,
+        }, { transaction: t });
 
         coOwners.push(coOwner);
       }
+
     } else if (coOwnersData.length) {
       throw new Error("ነጠላ የጋብቻ ሁኔታ ላላቸው ተጋሪ ባለቤት መረጃ መስጠት አይቻልም።");
     }

@@ -29,14 +29,14 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       land_payment,
     } = data;
 
-    const administrative_unit_id = user.administrative_unit_id;
-    primary_user.administrative_unit_id = administrative_unit_id;
-    land_record.administrative_unit_id = administrative_unit_id;
+    const adminunit = user.administrative_unit_id;
+    primary_user.administrative_unit_id = adminunit;
+    land_record.administrative_unit_id = adminunit;
 
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
-        administrative_unit_id,
+        adminunitistrative_unit_id: adminunit,
         deletedAt: { [Op.eq]: null },
       },
       transaction: t,
@@ -85,7 +85,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       { transaction: t }
     );
 
-    // 📎 Document upload
+    // Document upload
     if (!Array.isArray(files) || files.length < documents.length) {
       throw new Error("ሁሉንም የመሬት ሰነዶችን እባክዎ ያስገቡ።");
     }
@@ -94,7 +94,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents.map((doc, index) => {
         const file = files[index];
         if (!file) {
-          throw new Error(`ዶክመንት ${index + 1} ተጠናቀቀ አይደለም።`);
+          throw new Error(`ዶክመንት ${index + 1} የተጠናቀቀ አይደለም።`);
         }
         return documentService.createDocumentService(
           {
@@ -121,15 +121,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     );
     await landRecord.save({ transaction: t });
 
-    // 💵 Payment
-    if (
-      !land_payment?.payment_type ||
-      !land_payment?.total_amount ||
-      !land_payment?.paid_amount
-    ) {
-      throw new Error("ክፍያ መረጃዎች (payment_type, total_amount, paid_amount) አስፈላጊ ናቸው።");
-    }
-
+    // Payment
     const landPayment = await landPaymentService.createLandPaymentService(
       {
         ...land_payment,
