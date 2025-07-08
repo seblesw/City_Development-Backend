@@ -32,7 +32,7 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
     // Generate code based on region, zone, woreda
     // Find count of offices in this region/zone/woreda
-    const where = { region_id, deleted_at: { [Op.eq]: null } };
+    const where = { region_id, deletedAt: { [Op.eq]: null } };
     if (zone_id) where.zone_id = zone_id;
     if (woreda_id) where.woreda_id = woreda_id;
     const count = await OversightOffice.count({ where, transaction });
