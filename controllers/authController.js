@@ -12,8 +12,9 @@ const registerOfficialController = async (req, res) => {
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
-      email: body.email || null,
-      phone_number: body.phone_number || null,
+      middle_name: body.middle_name || null,
+      email: body.email ,
+      phone_number: body.phone_number,
       password: body.password || "12345678", 
       role_id: body.role_id,
       administrative_unit_id: body.administrative_unit_id,

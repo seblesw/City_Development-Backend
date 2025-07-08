@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { OversightOffice, Region, Zone, Woreda, AdministrativeUnit } = require("../models");
 exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
+  var zone
   try {
     // Check for existing office with same name in the region
     const existingOffice = await OversightOffice.findOne({
@@ -12,20 +13,21 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
     // Validate region
     const region = await Region.findByPk(region_id, { transaction });
+    console.log("region_id", region);
     if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
 
     // Validate zone if provided
     let zone = null;
     if (zone_id) {
       zone = await Zone.findByPk(zone_id, { transaction });
-      if (!zone || zone.region_id !== region_id) throw new Error("ትክክለኛ ዞን ይምረጡ።");
+      if (!zone || zone.region_id !== region.id) throw new Error("ትክክለኛ ዞን ይምረጡ።");
     }
 
     // Validate woreda if provided
     let woreda = null;
     if (woreda_id) {
-      woreda = await Woreda.findByPk(woreda_id, { transaction });
-      if (!woreda || woreda.zone_id !== zone_id) throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
+      const woreda = await Woreda.findByPk(woreda_id, { transaction });
+      if (!woreda || woreda.zone_id !== zone.id) throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
     }
 
     // Generate code based on region, zone, woreda

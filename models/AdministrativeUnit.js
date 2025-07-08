@@ -137,9 +137,10 @@ module.exports = (db, DataTypes) => {
                 { transaction: options.transaction }
               )
             : null;
+            // console.log(oversight.region_id !=unit.region_id);
           if (
             unit.oversight_office_id &&
-            (!oversight || oversight.region_id !== unit.region_id)
+            (!oversight || oversight.region_id != unit.region_id)
           )
             throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
           const count = await db.models.AdministrativeUnit.count({

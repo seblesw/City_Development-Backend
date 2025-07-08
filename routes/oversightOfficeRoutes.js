@@ -7,8 +7,9 @@ const {
   updateOversightOffice,
   deleteOversightOffice,
 } = require("../controllers/oversightOfficeController");
+const authMiddleware = require("../middlewares/authMiddleware");
 
-router.post("/", createOversightOffice);
+router.post("/",authMiddleware.protect, createOversightOffice);
 router.get("/", getAllOversightOffices);
 router.get("/:id", getOversightOfficeById);
 router.put("/:id", updateOversightOffice);

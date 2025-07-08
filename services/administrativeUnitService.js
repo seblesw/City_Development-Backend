@@ -49,7 +49,7 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
   }
 
   const oversight = oversight_office_id ? await OversightOffice.findByPk(oversight_office_id) : null;
-  if (oversight_office_id && (!oversight || oversight.region_id !== region_id)) {
+  if (oversight_office_id && (!oversight || oversight.region_id !== region.id)) {
     throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
   }
 
@@ -161,7 +161,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId) =>
   }
 
   const oversight = oversight_office_id ? await OversightOffice.findByPk(oversight_office_id) : oversight_office_id === null ? null : await OversightOffice.findByPk(unit.oversight_office_id);
-  if (oversight_office_id && (!oversight || oversight.region_id !== (region_id || unit.region_id))) {
+  if (oversight_office_id && (!oversight || oversight.region_id !== (region.id || unit.region_id))) {
     throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
   }
 
