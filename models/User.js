@@ -119,8 +119,18 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ነጠላ", "ባለትዳር",]],
-            msg: "የጋብቻ ሁኔታ ከተፈቀዱት እሴቶች (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
+            args: [["ያላገባ/ች", "ባለትዳር",]],
+            msg: "የጋብቻ ሁኔታ ከተፈቀዱት  (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
+      },
+      ownership_category: {
+        type: DataTypes.STRING, 
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [["የግል", "የጋራ"]],
+            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ ) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },

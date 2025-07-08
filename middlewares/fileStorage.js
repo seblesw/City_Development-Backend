@@ -12,7 +12,7 @@ if (!fs.existsSync(ROOT_UPLOAD_DIR)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const recordId =
-      req.body.land_record_id || req.query.land_record_id || "general";
+      req.body.land_record_id || req.query.land_record_id || "ሰነድ";
     const folderPath = path.join(ROOT_UPLOAD_DIR, `${recordId}`);
 
     if (!fs.existsSync(folderPath)) {
@@ -41,7 +41,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max
+    fileSize: 10 * 1024 * 1024, 
   },
 });
 

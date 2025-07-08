@@ -7,18 +7,23 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
   const t = transaction || await sequelize.transaction();
 
   try {
-    // Validate required primary owner fields
     const requiredFields = [
       "first_name", "middle_name", "last_name", "national_id",
-      "gender", "marital_status", "administrative_unit_id"
+      "gender", "marital_status", "ownership_category", "administrative_unit_id"
     ];
+
     for (const field of requiredFields) {
       if (!primaryOwnerData[field]) {
         throw new Error(`እባክዎ የመሬት ባለቤት ${field} ያስገቡ።`);
       }
     }
 
-    //  Check if primary owner exists
+    // Check ownership category validity
+    if (!["የግል", "የጋራ"].includes(primaryOwnerData.ownership_category)) {
+      throw new Error("የባለቤትነት ክፍል የግል ወይም የጋራ መሆን አለበት።");
+    }
+
+    // Create or update primary owner
     let primaryOwner = await User.findOne({
       where: {
         national_id: primaryOwnerData.national_id,
@@ -28,13 +33,11 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     });
 
     if (primaryOwner) {
-      // Update existing primary owner
       await primaryOwner.update({
         ...primaryOwnerData,
         updated_by: creatorId,
       }, { transaction: t });
     } else {
-      //  Create new primary owner
       primaryOwner = await User.create({
         ...primaryOwnerData,
         password: primaryOwnerData.password
@@ -49,12 +52,12 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
       }, { transaction: t });
     }
 
-    // Create co-owners only if marital_status ≠ ነጠላ
     const coOwners = [];
 
-    if (primaryOwnerData.marital_status !== "ነጠላ") {
+    // Co-owners only for የጋራ
+    if (primaryOwnerData.ownership_category === "የጋራ") {
       if (!coOwnersData.length) {
-        throw new Error("ባለቤቱ ተጋሪ ባለቤቶችን ያስገቡ።");
+        throw new Error("የጋራ ባለቤትነት ሲሆን ተጋሪ ባለቤቶችን ያስገቡ።");
       }
 
       for (const co of coOwnersData) {
@@ -65,7 +68,6 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
           }
         }
 
-        // Always create new co-owner — no DB check
         const coOwner = await User.create({
           first_name: co.first_name,
           middle_name: co.middle_name,
@@ -81,8 +83,8 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
         coOwners.push(coOwner);
       }
 
-    } else if (coOwnersData.length) {
-      throw new Error("ነጠላ የጋብቻ ሁኔታ ላላቸው ተጋሪ ባለቤት መረጃ መስጠት አይቻልም።");
+    } else if (coOwnersData.length > 0) {
+      throw new Error("የግል ባለቤትነት ሲሆን ተጋሪ ባለቤት መረጃ መስጠት አይቻልም።");
     }
 
     if (!transaction) await t.commit();
@@ -93,6 +95,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     throw new Error(`የመሬት ባለቤት መፍጠር ስህተት: ${error.message}`);
   }
 };
+
 
 
 

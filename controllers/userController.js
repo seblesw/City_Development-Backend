@@ -19,7 +19,7 @@ const createLandOwnerController = async (req, res) => {
       phone_number: body.phone_number || null,
       password: body.password || null,
       role_id: body.role_id || null,
-      administrative_unit_id: body.administrative_unit_id,
+      administrative_unit_id: authUser.administrative_unit_id,
       oversight_office_id: body.oversight_office_id || null,
       national_id: body.national_id,
       address: body.address || null,

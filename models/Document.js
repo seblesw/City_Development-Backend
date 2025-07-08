@@ -1,6 +1,3 @@
-const { Op } = require("sequelize");
-const upload = require("../middlewares/fileStorage");
-
 const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
   LEASE_AGREEMENT: "የሊዝ ስምምነት",
@@ -153,10 +150,10 @@ module.exports = (db, DataTypes) => {
       },
       uploaded_by: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "users", key: "id" },
         validate: {
-          isInt: { msg: "የሰነድ አዘጋጅ መለያ ቁጥር ትክክለኛ መሆን አለበት።" },
+          isInt: { msg: "ሰነድ የጫነው መለያ ቁጥር ትክክለኛ መሆን አለበት።" },
         },
       },
     },
