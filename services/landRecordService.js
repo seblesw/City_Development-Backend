@@ -598,7 +598,7 @@ const getAllLandRecordService = async (options = {}) => {
   try {
     // Fetch all non-deleted land records
     const rows = await LandRecord.findAll({
-      where: { deletedAt: { [Op.eq]: null } }, // Only non-deleted records
+      where: { deletedAt: { [Op.eq]: null } },
       include: [
         {
           model: User,
@@ -1028,6 +1028,93 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
+const getLandRecordsByUserAdminUnitService = async (userId, adminUnitId, options = {}) => {
+  const { transaction } = options;
+
+  try {
+    const records = await LandRecord.findAll({
+      where: {
+        administrative_unit_id: adminUnitId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "first_name", "middle_name", "last_name", "email", "ownership_category"],
+          include: [
+            {
+              model: User,
+              as: "coOwners",
+              attributes: ["id", "first_name", "middle_name", "last_name", "relationship_type"],
+            },
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: Document,
+          as: "documents",
+          attributes: ["id", "document_type", "files", "createdAt"],
+        },
+        {
+          model: LandPayment,
+          as: "payments",
+          attributes: ["id", "payment_type", "total_amount", "paid_amount", "createdAt"],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "block_number",
+        "land_use",
+        "ownership_type",
+        "area",
+        "record_status",
+        "priority",
+        "coordinates",
+        "administrative_unit_id",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      parcel_number: record.parcel_number,
+      block_number: record.block_number,
+      land_use: record.land_use,
+      ownership_type: record.ownership_type,
+      area: record.area,
+      record_status: record.record_status,
+      priority: record.priority,
+      coordinates: record.coordinates ? JSON.parse(record.coordinates) : null,
+      administrative_unit: record.administrativeUnit ? { id: record.administrativeUnit.id, name: record.administrativeUnit.name } : null,
+      primary_owner: record.user
+        ? {
+            id: record.user.id,
+            first_name: record.user.first_name,
+            middle_name: record.user.middle_name,
+            last_name: record.user.last_name,
+            email: record.user.email,
+            ownership_category: record.user.ownership_category,
+            co_owners: record.user.coOwners || [],
+          }
+        : null,
+      documents: record.documents || [],
+      payments: record.payments || [],
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    }));
+  } catch (error) {
+    throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
 // Enhanced: Updating an existing land record
 const updateLandRecordService = async (id, data, updater, options = {}) => {
   if (!updater || !updater.id) {
@@ -1314,4 +1401,5 @@ module.exports = {
   updateDraftLandRecordService,
   submitDraftLandRecordService,
   getMyLandRecordsService,
+  getLandRecordsByUserAdminUnitService,
 };

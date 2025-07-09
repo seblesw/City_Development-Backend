@@ -11,6 +11,7 @@ const {
   submitDraftLandRecordService,
   updateDraftLandRecordService,
   getMyLandRecordsService,
+  getLandRecordsByUserAdminUnitService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -272,6 +273,34 @@ const getMyLandRecords = async (req, res) => {
     });
   }
 };
+// Retrieving land records by user and administrative unit
+const getLandRecordsByUserAdminUnit = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || !user.id || !user.administrative_unit_id) {
+      return res.status(401).json({
+        status: "error",
+        message: "ያልተፈቀደ መዳረሻ ወይም የአስተዳደር ክፍል አልተገለጸም። እባክዎ ይግቡ።",
+        code: "unauthorized",
+      });
+    }
+
+    const records = await getLandRecordsByUserAdminUnitService(user.id, user.administrative_unit_id);
+
+    return res.status(200).json({
+      status: "success",
+      message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: records,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
+      code: "error",
+    });
+  }
+};
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
   try {
@@ -330,4 +359,5 @@ module.exports = {
   getDraftLandRecord,
   updateDraftLandRecord,
   submitDraftLandRecord,
+  getLandRecordsByUserAdminUnit,
   };
