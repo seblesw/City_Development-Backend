@@ -1028,7 +1028,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-const getLandRecordsByUserAdminUnitService = async (userId, adminUnitId, options = {}) => {
+const getLandRecordsByUserAdminUnitService = async ( adminUnitId, options = {}) => {
   const { transaction } = options;
 
   try {

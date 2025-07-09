@@ -57,7 +57,7 @@ router.post(
   upload.array("documents", 20),
   landRecordController.createLandRecord
 );
-//get the land records the user has on the system regardles of admin unit
+//get the land records the primary owner has on the system 
 router.get(
   "/my-land-records",
   authMiddleware.protect,
@@ -80,7 +80,7 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
-// This route is used to get land records created by the logged-in user
+// This route is used to get land records created by the logged-in user only records he created
 router.get(
   "/my-records",
   authMiddleware.protect,

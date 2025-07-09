@@ -230,7 +230,7 @@ const getLandRecordByUserId = async (req, res) => {
     res.status(500).json({ status: "error", message: error.message });
   }
 };
-//  Retrieving all land records created by the authenticated user
+//  Retrieving all land records created by the authenticated user to differentiate between user on same role
 // This function retrieves all land records created by the user making the request
 const getLandRecordsByCreator = async (req, res) => {
   try {
@@ -286,11 +286,17 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
       });
     }
 
-    const records = await getLandRecordsByUserAdminUnitService(user.id, user.administrative_unit_id);
+    const records = await getLandRecordsByUserAdminUnitService(user.administrative_unit_id);
+
+    // Try to get the admin unit name from the first record, fallback if not found
+    const adminUnitName = records.length > 0 && records[0].administrative_unit && records[0].administrative_unit.name
+      ? records[0].administrative_unit.name
+      : "አስተዳደር ክፍል";
 
     return res.status(200).json({
       status: "success",
-      message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
+      count: records.length,
+      message: `የ ${adminUnitName} መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።`,
       data: records,
     });
   } catch (error) {
