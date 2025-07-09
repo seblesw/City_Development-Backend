@@ -78,6 +78,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         status: RECORD_STATUSES.DRAFT,
         notification_status: NOTIFICATION_STATUSES.NOT_SENT,
         priority: land_record.priority || PRIORITIES.LOW,
+        parcel_number: land_record.parcel_number,
         status_history,
         action_log,
         rejection_reason: null,
@@ -124,6 +125,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }))
     );
     await landRecord.save({ transaction: t });
+    // console.log(land_payment)
 
     // Payment
     const landPayment = await landPaymentService.createLandPaymentService(
@@ -147,7 +149,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
+    throw new Error(`የመዝገብ መፍጠር ስህተትuu: ${error.message}`);
   }
 };
 

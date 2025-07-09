@@ -16,10 +16,10 @@ const createLandPaymentService = async (data, options = {}) => {
       !data.payment_type ||
       !data.total_amount ||
       !data.paid_amount ||
-      !data.currency
+      !data.Currency
     ) {
       throw new Error(
-        "የክፍያ መረጃዎች (payment_type, total_amount, paid_amount, currency) መግለጽ አለባቸው።"
+        "የክፍያ መረጃዎች (payment_type, total_amount, paid_amount jh, currency) መግለጽ አለባቸው።"
       );
     }
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
