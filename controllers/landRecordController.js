@@ -10,6 +10,7 @@ const {
   getDraftLandRecordService,
   submitDraftLandRecordService,
   updateDraftLandRecordService,
+  getMyLandRecordsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -244,7 +245,33 @@ const getLandRecordsByCreator = async (req, res) => {
     }); 
   }
 }
+const getMyLandRecords = async (req, res) => {
+  try {
+    const user = req.user;
 
+    if (!user || !user.id) {
+      return res.status(401).json({
+        status: "error",
+        message: "ያልተፈቀደ መዳረሻ። እባክዎ ይግቡ።",
+        code: "unauthorized",
+      });
+    }
+
+    const records = await getMyLandRecordsService(user.id);
+
+    return res.status(200).json({
+      status: "success",
+      message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: records,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
+      code: "error",
+    });
+  }
+};
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
   try {
@@ -295,6 +322,7 @@ module.exports = {
   saveLandRecordAsDraft,
   getAllLandRecords,
   getLandRecordById,
+  getMyLandRecords,
   getLandRecordByUserId,
   getLandRecordsByCreator,
   updateLandRecord,

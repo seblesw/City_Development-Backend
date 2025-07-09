@@ -592,97 +592,23 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
   }
 };
 // Enhanced: Retrieving all land records with advanced filtering, sorting, and aggregated stats
-const getAllLandRecordService = async (query) => {
-  const where = { deletedAt: { [Op.eq]: null } }; // Only non-deleted records
-  const page = parseInt(query.page) || 1;
-  const limit = parseInt(query.limit) || 10;
-  const offset = (page - 1) * limit;
-  const order = [];
-
-  // Enhanced filtering
-  if (query.administrative_unit_id) {
-    where.administrative_unit_id = parseInt(query.administrative_unit_id);
-  }
-  if (
-    query.record_status &&
-    Object.values(RECORD_STATUSES).includes(query.record_status)
-  ) {
-    where.record_status = query.record_status;
-  }
-  if (query.priority && Object.values(PRIORITIES).includes(query.priority)) {
-    where.priority = query.priority;
-  }
-  if (
-    query.land_use &&
-    Object.values(LAND_USE_TYPES).includes(query.land_use)
-  ) {
-    where.land_use = query.land_use;
-  }
-  if (
-    query.ownership_type &&
-    Object.values(OWNERSHIP_TYPES).includes(query.ownership_type)
-  ) {
-    where.ownership_type = query.ownership_type;
-  }
-  if (
-    query.zoning_type &&
-    Object.values(ZONING_TYPES).includes(query.zoning_type)
-  ) {
-    where.zoning_type = query.zoning_type;
-  }
-  if (query.parcel_number) {
-    where.parcel_number = { [Op.iLike]: `%${query.parcel_number}%` };
-  }
-  if (query.start_date && query.end_date) {
-    where.createdAt = {
-      [Op.between]: [new Date(query.start_date), new Date(query.end_date)],
-    };
-  }
-
-  // Sorting options
-  if (query.sort_by) {
-    const sortField =
-      query.sort_by === "created_at"
-        ? "createdAt"
-        : query.sort_by === "area"
-        ? "area"
-        : query.sort_by === "priority"
-        ? "priority"
-        : "createdAt";
-    const sortOrder = query.sort_order === "desc" ? "DESC" : "ASC";
-    order.push([sortField, sortOrder]);
-  } else {
-    order.push(["createdAt", "DESC"]); // Default sort
-  }
+const getAllLandRecordService = async (options = {}) => {
+  const { transaction } = options;
 
   try {
-    // Fetch records with associated data
-    const { count, rows } = await LandRecord.findAndCountAll({
-      where,
+    // Fetch all non-deleted land records
+    const rows = await LandRecord.findAll({
+      where: { deletedAt: { [Op.eq]: null } }, // Only non-deleted records
       include: [
         {
           model: User,
           as: "user",
-          attributes: [
-            "id",
-            "first_name",
-            "middle_name",
-            "last_name",
-            "national_id",
-            "email",
-          ],
+          attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "email", "ownership_category"],
           include: [
             {
               model: User,
               as: "coOwners",
-              attributes: [
-                "id",
-                "first_name",
-                "middle_name",
-                "last_name",
-                "national_id",
-                "relationship_type",
-              ],
+              attributes: ["id", "first_name", "middle_name", "last_name", "national_id", "relationship_type"],
             },
           ],
         },
@@ -727,60 +653,25 @@ const getAllLandRecordService = async (query) => {
         "createdAt",
         "updatedAt",
       ],
-      limit,
-      offset,
-      order,
+      transaction,
     });
 
     // Fetch associated documents and payments
     const enrichedRows = await Promise.all(
       rows.map(async (record) => {
-        const documents = await documentService.getDocumentsByLandRecordId(
-          record.id
-        );
-        const payments = await landPaymentService.getPaymentsByLandRecordId(
-          record.id
-        );
+        const documents = await documentService.getDocumentsByLandRecordId(record.id, { transaction });
+        const payments = await landPaymentService.getPaymentsByLandRecordId(record.id, { transaction });
         return {
           ...record.toJSON(),
+          coordinates: record.coordinates ? JSON.parse(record.coordinates) : null,
           documents,
           payments,
         };
       })
     );
 
-    // Aggregate statistics (avoid anything related to status, use record_status instead)
-    const stats = await LandRecord.findAll({
-      where,
-      attributes: [
-        [sequelize.fn("COUNT", sequelize.col("id")), "total_records"],
-        [
-          sequelize.literal(
-            `COUNT(CASE WHEN record_status = '${RECORD_STATUSES.SUBMITTED}' THEN 1 END)`
-          ),
-          "draft_count",
-        ],
-        [
-          sequelize.literal(
-            `COUNT(CASE WHEN record_status = '${RECORD_STATUSES.APPROVED}' THEN 1 END)`
-          ),
-          "approved_count",
-        ],
-        [
-          sequelize.literal(
-            `COUNT(CASE WHEN record_status = '${RECORD_STATUSES.REJECTED}' THEN 1 END)`
-          ),
-          "rejected_count",
-        ],
-      ],
-      raw: true,
-    });
-
     return {
-      total: count,
-      page,
-      limit,
-      stats: stats[0],
+      total: enrichedRows.length,
       data: enrichedRows,
     };
   } catch (error) {
@@ -1037,6 +928,104 @@ const getLandRecordsByCreatorService = async (userId) => {
     return enrichedRecords;
   } catch (error) {
     throw new Error(`በተጠቃሚው የተፈጠሩ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+const getMyLandRecordsService = async (userId, options = {}) => {
+  const { transaction } = options;
+
+  try {
+    // Fetch land records where the user is the primary owner (user_id)
+    // or a co-owner (primary_owner_id in User model)
+    const records = await LandRecord.findAll({
+      where: {
+        [Op.or]: [
+          { user_id: userId }, // Primary owner
+          {
+            user_id: {
+              [Op.in]: sequelize.literal(
+                `(SELECT id FROM users WHERE primary_owner_id = ${userId} )`
+              ),
+            },
+          }, //
+        ],
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "first_name", "middle_name", "last_name", "email", "ownership_category"],
+          include: [
+            {
+              model: User,
+              as: "coOwners",
+              attributes: ["id", "first_name", "middle_name", "last_name", "relationship_type"],
+            },
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: Document,
+          as: "documents",
+          attributes: ["id", "document_type", "files", "createdAt"],
+        },
+        {
+          model: LandPayment,
+          as: "payments",
+          attributes: ["id", "payment_type", "total_amount", "paid_amount", "createdAt"],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "block_number",
+        "land_use",
+        "ownership_type",
+        "area",
+        "record_status",
+        "priority",
+        "coordinates",
+        "administrative_unit_id",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      parcel_number: record.parcel_number,
+      block_number: record.block_number,
+      land_use: record.land_use,
+      ownership_type: record.ownership_type,
+      area: record.area,
+      status: record.status,
+      priority: record.priority,
+      coordinates: record.coordinates ? JSON.parse(record.coordinates) : null,
+      administrative_unit: record.administrativeUnit ? { id: record.administrativeUnit.id, name: record.administrativeUnit.name } : null,
+      primary_owner: record.user
+        ? {
+            id: record.user.id,
+            first_name: record.user.first_name,
+            middle_name: record.user.middle_name,
+            last_name: record.user.last_name,
+            email: record.user.email,
+            ownership_category: record.user.ownership_category,
+            co_owners: record.user.coOwners || [],
+          }
+        : null,
+      documents: record.documents || [],
+      payments: record.payments || [],
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    }));
+  } catch (error) {
+    throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
 // Enhanced: Updating an existing land record
@@ -1324,4 +1313,5 @@ module.exports = {
   getDraftLandRecordService,
   updateDraftLandRecordService,
   submitDraftLandRecordService,
+  getMyLandRecordsService,
 };

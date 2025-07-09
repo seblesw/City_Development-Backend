@@ -57,7 +57,12 @@ router.post(
   upload.array("documents", 20),
   landRecordController.createLandRecord
 );
-
+router.get(
+  "/my-land-records",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getMyLandRecords
+); 
 router.get(
   "/",
   authMiddleware.protect,
@@ -86,6 +91,7 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordByUserId
 );
+
 
 router.put(
   "/:id",
