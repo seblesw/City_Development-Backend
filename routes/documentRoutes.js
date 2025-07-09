@@ -24,7 +24,7 @@ router.post(
 router.post(
   "/:id/files",
   authMiddleware.protect,
-//   authMiddleware.restrictTo("መዝጋቢ"),
+  // authMiddleware.restrictTo("መዝጋቢ"),
   upload.array("documents", 10),
   documentController.addFilesToDocumentController
 );

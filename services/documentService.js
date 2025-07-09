@@ -127,12 +127,10 @@ const addFilesToDocumentService = async (
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-    const updater = await User.findByPk(updaterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-      throw new Error("ፋይሎችን መጨመር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+    // Assume updaterId is the req user object, not a DB id
+    const updater = updaterId;
+    if (!updater ) {
+      throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
     const document = await Document.findByPk(id, { transaction: t });
@@ -141,7 +139,7 @@ const addFilesToDocumentService = async (
     }
 
     if (!files || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መግለጥ አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
     // Prepare new files
@@ -259,8 +257,6 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
-
-
 
 const updateDocumentService = async (
   id,
