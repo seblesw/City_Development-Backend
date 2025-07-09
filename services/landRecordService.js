@@ -591,7 +591,7 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
     throw new Error(`የረቂቅ መዝገብ ማስፈጸም ስህተት: ${error.message}`);
   }
 };
-// Enhanced: Retrieving all land records with advanced filtering, sorting, and aggregated stats
+// Enhanced: Retrieving all 
 const getAllLandRecordService = async (options = {}) => {
   const { transaction } = options;
 

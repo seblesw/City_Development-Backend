@@ -11,7 +11,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     }
 
     if (!files || !Array.isArray(files) || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መስጠት አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መግባት  አለበት።");
     }
 
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
@@ -42,7 +42,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       });
       if (existingRef) {
-        throw new Error("ይህ የሰነድ ቁጥር ተመዝግቧል።");
+        throw new Error("ይህ የሰነድ አመልካች ወይም reference ተመዝግቧል።");
       }
     }
 
