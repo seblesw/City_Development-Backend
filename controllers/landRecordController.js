@@ -145,7 +145,7 @@ const submitDraftLandRecord = async (req, res) => {
     if (!id) {
       return res.status(400).json({
         status: "error",
-        message: "የረቂቅ መዝገብ ID ያስፈልጋል።",
+        message: "ድራፍት ውይም ረቂቅ መዝገብ ID ያስፈልጋል።",
       });
     }
 

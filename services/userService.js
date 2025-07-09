@@ -8,8 +8,8 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
 
   try {
     const requiredFields = [
-      "first_name", "middle_name", "last_name", "national_id",
-      "gender", "marital_status", "ownership_category", "administrative_unit_id"
+      "first_name", "middle_name", "last_name", "national_id","phone_number",
+       "marital_status", "ownership_category", "administrative_unit_id"
     ];
 
     for (const field of requiredFields) {
@@ -27,6 +27,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     let primaryOwner = await User.findOne({
       where: {
         national_id: primaryOwnerData.national_id,
+        phone_number: primaryOwnerData.phone_number,
         deletedAt: { [Op.eq]: null },
       },
       transaction: t,
@@ -95,8 +96,6 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     throw new Error(`የመሬት ባለቤት መፍጠር ስህተት: ${error.message}`);
   }
 };
-
-
 const getAllUserService = async (options = {}) => {
   const { transaction } = options;
   try {

@@ -180,7 +180,6 @@ const addFilesToDocumentService = async (
     throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
   }
 };
-
 const getDocumentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
@@ -271,12 +270,9 @@ const updateDocumentService = async (
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-    const updater = await User.findByPk(updaterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-      throw new Error("ሰነድ መቀየር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+      const updater = updaterId;
+    if (!updater ) {
+      throw new Error("ፋይሎችን መቀየር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
     const document = await Document.findByPk(id, { transaction: t });
