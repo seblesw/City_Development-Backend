@@ -1030,6 +1030,7 @@ const getLandRecordByIdService = async (id) => {
             "national_id",
             "email",
             "phone_number",
+            "ownership_category",
             "address",
           ],
           include: [
@@ -1517,22 +1518,22 @@ const updateLandRecordService = async (
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
-        { 
-          model: User, 
-          as: 'user',
-          include: [{ model: User, as: 'coOwners' }]
+        {
+          model: User,
+          as: "user",
+          include: [{ model: User, as: "coOwners" }],
         },
-        { 
-          model: Document, 
-          as: 'documents',
+        {
+          model: Document,
+          as: "documents",
           where: { deletedAt: null },
-          required: false
+          required: false,
         },
-        { 
-          model: LandPayment, 
-          as: 'payments',
+        {
+          model: LandPayment,
+          as: "payments",
           where: { deletedAt: null },
-          required: false
+          required: false,
         },
       ],
       transaction: t,
@@ -1625,6 +1626,143 @@ const updateLandRecordService = async (
     throw new Error(`Land record update failed: ${error.message}`);
   }
 };
+
+const changeRecordStatusService = async (
+  recordId,
+  newStatus,
+  user,
+  notes = null,
+  rejectionReason = null,
+  options = {}
+) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    // 1. Validate input
+    if (!Object.values(RECORD_STATUSES).includes(newStatus)) {
+      throw new Error("የማያገለግል የመዝገብ ሁኔታ");
+    }
+
+    // 2. Get the record with current status
+    const record = await LandRecord.findOne({
+      where: { id: recordId, deletedAt: null },
+      transaction: t,
+    });
+
+    if (!record) {
+      throw new Error("የመሬት መዝገብ አልተገኘም።");
+    }
+
+    // 3. Validate status transition
+    validateStatusTransition(record.record_status, newStatus);
+
+    // 4. Prepare update data
+    const updateData = {
+      record_status: newStatus,
+      updated_by: user.id,
+      status_history: [
+        ...(record.status_history || []),
+        {
+          from: record.record_status,
+          to: newStatus,
+          changed_by: user.id,
+          changed_at: new Date(),
+          notes,
+        },
+      ],
+      action_log: [
+        ...(record.action_log || []),
+        {
+          action: `STATUS_CHANGE_${newStatus}`,
+          changed_by: user.id,
+          changed_at: new Date(),
+          notes,
+        },
+      ],
+    };
+
+    // 5. Handle status-specific fields
+    if (newStatus === RECORD_STATUSES.REJECTED) {
+      updateData.rejection_reason = rejectionReason;
+      updateData.rejected_at = new Date();
+      updateData.rejected_by = user.id;
+    } else if (newStatus === RECORD_STATUSES.APPROVED) {
+      updateData.approved_at = new Date();
+      updateData.approver_id = user.id;
+    }
+
+    // 6. Update the record
+    await record.update(updateData, { transaction: t });
+
+    // 7. Handle post-status-change actions
+    await handlePostStatusChange(record, newStatus, user, { transaction: t });
+
+    if (!transaction) await t.commit();
+
+    return await getLandRecordByIdService(recordId, { transaction: t });
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    console.error(`Status change error (${newStatus}):`, error);
+    throw error;
+  }
+};
+
+// Validate allowed status transitions
+const validateStatusTransition = (currentStatus, newStatus) => {
+  const validTransitions = {
+    [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
+    [RECORD_STATUSES.SUBMITTED]: [
+      RECORD_STATUSES.UNDER_REVIEW,
+      RECORD_STATUSES.REJECTED,
+      RECORD_STATUSES.DRAFT,
+    ],
+    [RECORD_STATUSES.UNDER_REVIEW]: [
+      RECORD_STATUSES.APPROVED,
+      RECORD_STATUSES.REJECTED,
+      RECORD_STATUSES.SUBMITTED,
+    ],
+    [RECORD_STATUSES.REJECTED]: [
+      RECORD_STATUSES.SUBMITTED,
+      RECORD_STATUSES.DRAFT,
+    ],
+    [RECORD_STATUSES.APPROVED]: [], // Final state
+  };
+
+  if (!validTransitions[currentStatus]?.includes(newStatus)) {
+    throw new Error(
+      `ከ ${currentStatus} ወደ ${newStatus} መሄድ አይቻልም። የተፈቀዱ ሽግግሮች፡ ${
+        validTransitions[currentStatus]?.join(", ") || "ምንም"
+      }`
+    );
+  }
+};
+
+// Handle post-status-change actions
+const handlePostStatusChange = async (record, newStatus, user, options) => {
+  const { transaction } = options;
+
+  try {
+    switch (newStatus) {
+      case RECORD_STATUSES.APPROVED:
+        // await generateCertificate(record, user, { transaction });
+        // await sendApprovalNotification(record, user, { transaction });
+        break;
+
+      case RECORD_STATUSES.REJECTED:
+        // await sendRejectionNotification(record, user, { transaction });
+        break;
+
+      case RECORD_STATUSES.SUBMITTED:
+        // await sendSubmissionNotification(record, user, { transaction });
+        break;
+    }
+  } catch (error) {
+    console.error("Post-status-change action failed:", error);
+    // Don't rethrow to avoid failing the main transaction
+  }
+};
+
 // Enhanced: Deleting a land record
 const deleteLandRecordService = async (id, deleter, options = {}) => {
   if (!deleter || !deleter.id) {
@@ -1680,6 +1818,7 @@ const deleteLandRecordService = async (id, deleter, options = {}) => {
 };
 module.exports = {
   createLandRecordService,
+  changeRecordStatusService,
   saveLandRecordAsDraftService,
   getAllLandRecordService,
   getLandRecordByIdService,

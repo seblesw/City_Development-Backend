@@ -57,13 +57,19 @@ router.post(
   upload.array("documents", 20),
   landRecordController.createLandRecord
 );
-//get the land records the primary owner has on the system 
+router.post(
+  "/:id/status",
+  authMiddleware.protect,
+  postLimiter,
+  landRecordController.changeRecordStatus
+);
+//get the land records the primary owner has on the system
 router.get(
   "/my-land-records",
   authMiddleware.protect,
   getLimiter,
   landRecordController.getMyLandRecords
-); 
+);
 // This route is used to get all land records, accessible by the system admin or authorized users
 router.get(
   "/",
@@ -101,7 +107,6 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordByUserId
 );
-
 
 router.put(
   "/:id",

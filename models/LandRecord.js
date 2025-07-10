@@ -1,6 +1,6 @@
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
-  SUBMITTED: "ቀርቧል",
+  SUBMITTED: "ተልኳል",
   UNDER_REVIEW: "በግምገማ ላይ",
   APPROVED: "ጸድቋል",
   REJECTED: "ውድቅ ተደርጓል",
@@ -173,6 +173,10 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      notes:{
+        type:DataTypes.STRING,
+        allowNull:true,
+      },
       block_number: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -285,31 +289,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.JSONB,
         allowNull: false,
         defaultValue: [],
-        validate: {
-          isValidHistory(value) {
-            if (!Array.isArray(value)) {
-              throw new Error("የሁኔታ ታሪክ ዝርዝር መሆን አለበት።");
-            }
-            for (const entry of value) {
-              if (
-                !entry.status ||
-                !Object.values(RECORD_STATUSES).includes(entry.status)
-              ) {
-                throw new Error(
-                  `የሁኔታ ታሪክ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(
-                    RECORD_STATUSES
-                  ).join(", ")}) መሆን አለበት።`
-                );
-              }
-              if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
-                throw new Error("የሁኔታ ታሪክ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
-              }
-              if (!entry.changed_by) {
-                throw new Error("የሁኔታ ታሪክ ተቀያሪ መግለጥ አለበት።");
-              }
-            }
-          },
-        },
       },
       action_log: {
         type: DataTypes.JSONB,
@@ -362,9 +341,6 @@ module.exports = (db, DataTypes) => {
       rejection_reason: {
         type: DataTypes.TEXT,
         allowNull: true,
-        validate: {
-          len: { args: [0, 500], msg: "የውድቅ ምክንያት ከ500  መብለጥ አይችልም።" },
-        },
       },
       notification_status: {
         type: DataTypes.STRING,

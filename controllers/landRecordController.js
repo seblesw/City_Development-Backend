@@ -1,4 +1,5 @@
-const { sequelize } = require("../models");
+const { sequelize,RECORD_STATUSES } = require("../models");
+
 const {
   createLandRecordService,
   getAllLandRecordService,
@@ -13,6 +14,7 @@ const {
   updateDraftLandRecordService,
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
+  changeRecordStatusService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -375,6 +377,59 @@ const updateLandRecord = async (req, res) => {
   }
 };
 
+
+const changeRecordStatus = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { record_status, notes, rejectionReason } = req.body;
+    const { id: recordId } = req.params;
+    const user = req.user;
+
+    // Validate required fields
+    if (!record_status) {
+      throw new Error("የመዝገብ ሁኔታ ያስፈልጋል።");
+    }
+
+    if (record_status === RECORD_STATUSES.REJECTED && !rejectionReason) {
+      throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
+    }
+
+    const updatedRecord = await changeRecordStatusService(
+      recordId,
+      record_status,
+      user,
+      notes,
+      rejectionReason,
+      { transaction: t }
+    );
+
+    await t.commit();
+    
+    res.status(200).json({
+      status: "success",
+      message: getStatusChangeMessage(record_status),
+      data: updatedRecord
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message
+    });
+  }
+};
+
+// Helper function for status-specific messages
+const getStatusChangeMessage = (status) => {
+  const messages = {
+    [RECORD_STATUSES.DRAFT]: "መዝገብ ወደ ረቂቅ ተመለሰ",
+    [RECORD_STATUSES.SUBMITTED]: "መዝገብ በተሳካ ሁኔታ ቀርቧል",
+    [RECORD_STATUSES.UNDER_REVIEW]: "መዝገብ በግምገማ ላይ ሆኗል",
+    [RECORD_STATUSES.APPROVED]: "መዝገብ በተሳካ ሁኔታ ጸድቋል",
+    [RECORD_STATUSES.REJECTED]: "መዝገብ በተሳካ ሁኔታ ውድቅ ተደርጓል"
+  };
+  return messages[status] || "የመዝገብ ሁኔታ ተቀይሯል";
+};
 // Deleting a land record
 const deleteLandRecord = async (req, res) => {
   try {
@@ -397,6 +452,7 @@ module.exports = {
   createLandRecord,
   saveLandRecordAsDraft,
   getAllLandRecords,
+  changeRecordStatus,
   getLandRecordById,
   getMyLandRecords,
   getLandRecordByUserId,
