@@ -17,7 +17,11 @@ const postLimiter = rateLimit({
   max: 20,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
-
+router.get(
+  '/trash',
+  authMiddleware.protect,
+  landRecordController.getTrash
+);
 // Draft Management Routes
 router.post(
   "/drafts",
@@ -117,11 +121,32 @@ router.put(
   landRecordController.updateLandRecord
 );
 
+// router.delete(
+//   "/:id",
+//   authMiddleware.protect,
+//   // authMiddleware.restrictTo("አስተዳደር"),
+//   landRecordController.deleteLandRecord
+// );
+
+//trash management
 router.delete(
-  "/:id",
+  '/:id',
   authMiddleware.protect,
-  // authMiddleware.restrictTo("አስተዳደር"),
-  landRecordController.deleteLandRecord
+  landRecordController.moveToTrash
 );
+
+router.post(
+  '/:id/restore',
+  authMiddleware.protect,
+  landRecordController.restoreFromTrash
+);
+
+router.delete(
+  '/:id/permanent',
+  authMiddleware.protect,
+  // authMiddleware.restrictTo('admin'),
+  landRecordController.permanentlyDelete
+);
+
 
 module.exports = router;

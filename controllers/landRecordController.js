@@ -1,11 +1,10 @@
-const { sequelize,RECORD_STATUSES } = require("../models");
+const { sequelize, RECORD_STATUSES } = require("../models");
 
 const {
   createLandRecordService,
   getAllLandRecordService,
   getLandRecordByIdService,
   updateLandRecordService,
-  deleteLandRecordService,
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
   saveLandRecordAsDraftService,
@@ -15,6 +14,10 @@ const {
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
   changeRecordStatusService,
+  moveToTrashService,
+  restoreFromTrashService,
+  permanentlyDeleteService,
+  getTrashItemsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -260,12 +263,10 @@ const getLandRecordsByCreator = async (req, res) => {
     const records = await getLandRecordsByCreatorService(userId);
     res.status(200).json({ status: "success", data: records });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        status: "error",
-        message: error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
-      });
+    res.status(500).json({
+      status: "error",
+      message: error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
+    });
   }
 };
 const getMyLandRecords = async (req, res) => {
@@ -343,11 +344,19 @@ const updateLandRecord = async (req, res) => {
 
     // Parse all fields (all optional for partial updates)
     const updateData = {
-      primary_user: req.body.primary_user ? JSON.parse(req.body.primary_user) : undefined,
-      co_owners: req.body.co_owners ? JSON.parse(req.body.co_owners) : undefined,
+      primary_user: req.body.primary_user
+        ? JSON.parse(req.body.primary_user)
+        : undefined,
+      co_owners: req.body.co_owners
+        ? JSON.parse(req.body.co_owners)
+        : undefined,
       land_record: req.body.land_record ? JSON.parse(req.body.land_record) : {},
-      documents: req.body.documents ? JSON.parse(req.body.documents) : undefined,
-      land_payment: req.body.land_payment ? JSON.parse(req.body.land_payment) : undefined
+      documents: req.body.documents
+        ? JSON.parse(req.body.documents)
+        : undefined,
+      land_payment: req.body.land_payment
+        ? JSON.parse(req.body.land_payment)
+        : undefined,
     };
 
     // Process the update
@@ -363,20 +372,19 @@ const updateLandRecord = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Land record updated successfully",
-      data: updatedRecord
+      data: updatedRecord,
     });
   } catch (error) {
     await t.rollback();
     console.error("Update error:", error);
-    
+
     const statusCode = error.message.includes("not found") ? 404 : 400;
     return res.status(statusCode).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
-
 
 const changeRecordStatus = async (req, res) => {
   const t = await sequelize.transaction();
@@ -404,17 +412,17 @@ const changeRecordStatus = async (req, res) => {
     );
 
     await t.commit();
-    
+
     res.status(200).json({
       status: "success",
       message: getStatusChangeMessage(record_status),
-      data: updatedRecord
+      data: updatedRecord,
     });
   } catch (error) {
     await t.rollback();
     res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -426,22 +434,104 @@ const getStatusChangeMessage = (status) => {
     [RECORD_STATUSES.SUBMITTED]: "መዝገብ በተሳካ ሁኔታ ቀርቧል",
     [RECORD_STATUSES.UNDER_REVIEW]: "መዝገብ በግምገማ ላይ ሆኗል",
     [RECORD_STATUSES.APPROVED]: "መዝገብ በተሳካ ሁኔታ ጸድቋል",
-    [RECORD_STATUSES.REJECTED]: "መዝገብ በተሳካ ሁኔታ ውድቅ ተደርጓል"
+    [RECORD_STATUSES.REJECTED]: "መዝገብ በተሳካ ሁኔታ ውድቅ ተደርጓል",
   };
   return messages[status] || "የመዝገብ ሁኔታ ተቀይሯል";
 };
-// Deleting a land record
-const deleteLandRecord = async (req, res) => {
+// trash management 
+const moveToTrash = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    const result = await deleteLandRecordService(req.params.id, req.user);
-    return res.status(200).json({
+    const { id } = req.params;
+    const user = req.user;
+    const { deletionReason } = req.body;
+
+    if (!deletionReason) {
+      throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
+    }
+
+    const result = await moveToTrashService(
+      id,
+      user,
+      deletionReason,
+      { transaction: t }
+    );
+
+    await t.commit();
+    res.status(200).json({
       status: "success",
-      message: result.message,
-      data: result.deletedRecord,
+      message: "መዝገብ ወደ መጥፎ ቅርጫት ተዛውሯል",
+      data: result,
     });
   } catch (error) {
-    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
-    return res.status(statusCode).json({
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const restoreFromTrash = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    const result = await restoreFromTrashService(id, user, {
+      transaction: t,
+    });
+
+    await t.commit();
+    res.status(200).json({
+      status: "success",
+      message: "መዝገብ ከመጥፎ ቅርጫት ተመልሷል",
+      data: result,
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const permanentlyDelete = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    await permanentlyDeleteService(id, user, { transaction: t });
+
+    await t.commit();
+    res.status(200).json({
+      status: "success",
+      message: "መዝገብ ለዘላለም ተሰርዟል",
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const getTrash = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const user = req.user;
+
+    const result = await getTrashItemsService(user, { page, limit });
+
+    res.status(200).json({
+      status: "success",
+      data: result,
+    });
+  } catch (error) {
+    res.status(400).json({
       status: "error",
       message: error.message,
     });
@@ -449,6 +539,10 @@ const deleteLandRecord = async (req, res) => {
 };
 
 module.exports = {
+  moveToTrash,
+  restoreFromTrash,
+  permanentlyDelete,
+  getTrash,
   createLandRecord,
   saveLandRecordAsDraft,
   getAllLandRecords,
@@ -458,7 +552,6 @@ module.exports = {
   getLandRecordByUserId,
   getLandRecordsByCreator,
   updateLandRecord,
-  deleteLandRecord,
   getDraftLandRecord,
   updateDraftLandRecord,
   submitDraftLandRecord,
