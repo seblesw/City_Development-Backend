@@ -108,7 +108,7 @@ router.put(
   authMiddleware.protect,
   // authMiddleware.restrictTo("አስተዳደር"),
   postLimiter,
-  upload.array("documents", 5),
+  upload.array("documents", 10),
   landRecordController.updateLandRecord
 );
 

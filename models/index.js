@@ -18,8 +18,8 @@ const {
   OWNERSHIP_TYPES,
   ZONING_TYPES,
 } = require("./LandRecord")(db, DataTypes);
-const LandPayment = require("./LandPayment")(db, DataTypes);
-const Document = require("./Document")(db, DataTypes);
+const {LandPayment,PAYMENT_STATUSES, PAYMENT_TYPES} = require("./LandPayment")(db, DataTypes);
+const {Document, DOCUMENT_TYPES} = require("./Document")(db, DataTypes);
 
 // Role associations
 Role.hasMany(User, {
@@ -325,11 +325,15 @@ module.exports = {
   User,
   LandRecord,
   LandPayment,
+
   Document,
+  DOCUMENT_TYPES,
   RECORD_STATUSES,
   NOTIFICATION_STATUSES,
   PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
   ZONING_TYPES,
+  PAYMENT_STATUSES,
+  PAYMENT_TYPES,
 };

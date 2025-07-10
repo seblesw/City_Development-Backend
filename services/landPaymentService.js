@@ -125,12 +125,10 @@ const updateLandPaymentService = async (id, data, updaterId, options = {}) => {
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-    const updater = await User.findByPk(updaterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-      throw new Error("ክፍያ መቀየር የሚችሉት መዝጋቢ ወዯም አስተዳደር ብቻ ናቸው።");
+        const updater = updaterId;
+
+    if (!updater) {
+      throw new Error("ክፍያ መቀየር የሚችሉት መዝጋቢ አልተገኙም");
     }
 
     const payment = await LandPayment.findByPk(id, { transaction: t });

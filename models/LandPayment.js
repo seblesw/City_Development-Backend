@@ -141,5 +141,5 @@ module.exports = (db, DataTypes) => {
     }
   );
 
-  return LandPayment;
+  return {LandPayment, PAYMENT_TYPES, PAYMENT_STATUSES};
 };

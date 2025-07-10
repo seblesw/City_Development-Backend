@@ -183,5 +183,5 @@ module.exports = (db, DataTypes) => {
     }
   );
 
-  return Document;
+  return {Document, DOCUMENT_TYPES};
 };

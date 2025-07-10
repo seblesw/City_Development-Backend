@@ -1,3 +1,4 @@
+const { sequelize } = require("../models");
 const {
   createLandRecordService,
   getAllLandRecordService,
@@ -20,11 +21,11 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = JSON.parse(req.body.primary_user || '{}');
-    const co_owners = JSON.parse(req.body.co_owners || '[]');
-    const land_record = JSON.parse(req.body.land_record || '{}');
-    const documents = JSON.parse(req.body.documents || '[]');
-    const land_payment = JSON.parse(req.body.land_payment || '{}');
+    const primary_user = JSON.parse(req.body.primary_user || "{}");
+    const co_owners = JSON.parse(req.body.co_owners || "[]");
+    const land_record = JSON.parse(req.body.land_record || "{}");
+    const documents = JSON.parse(req.body.documents || "[]");
+    const land_payment = JSON.parse(req.body.land_payment || "{}");
 
     const result = await createLandRecordService(
       {
@@ -56,11 +57,17 @@ const saveLandRecordAsDraft = async (req, res) => {
 
     // Parse string fields from form-data/request body
     // All fields are optional for drafts
-    const primary_user = req.body.primary_user ? JSON.parse(req.body.primary_user) : {};
+    const primary_user = req.body.primary_user
+      ? JSON.parse(req.body.primary_user)
+      : {};
     const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record ? JSON.parse(req.body.land_record) : {};
+    const land_record = req.body.land_record
+      ? JSON.parse(req.body.land_record)
+      : {};
     const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment ? JSON.parse(req.body.land_payment) : {};
+    const land_payment = req.body.land_payment
+      ? JSON.parse(req.body.land_payment)
+      : {};
 
     const result = await saveLandRecordAsDraftService(
       {
@@ -107,11 +114,17 @@ const updateDraftLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = req.body.primary_user ? JSON.parse(req.body.primary_user) : {};
+    const primary_user = req.body.primary_user
+      ? JSON.parse(req.body.primary_user)
+      : {};
     const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record ? JSON.parse(req.body.land_record) : {};
+    const land_record = req.body.land_record
+      ? JSON.parse(req.body.land_record)
+      : {};
     const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment ? JSON.parse(req.body.land_payment) : {};
+    const land_payment = req.body.land_payment
+      ? JSON.parse(req.body.land_payment)
+      : {};
 
     const result = await updateDraftLandRecordService(
       id,
@@ -129,12 +142,12 @@ const updateDraftLandRecord = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተዘምኗል።",
-      data: result
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -156,17 +169,17 @@ const submitDraftLandRecord = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: result.message,
-      data: result.data
+      data: result.data,
     });
   } catch (error) {
     // Handle specific error types differently
-    if (error.message.includes('Validation failed')) {
+    if (error.message.includes("Validation failed")) {
       return res.status(422).json({
         status: "validation_error",
-        message: error.message.replace('Validation failed: ', ''),
-        details: error.message.split('; '),
+        message: error.message.replace("Validation failed: ", ""),
+        details: error.message.split("; "),
       });
-    } else if (error.message.includes('ተመዝግቧል')) {
+    } else if (error.message.includes("ተመዝግቧል")) {
       return res.status(409).json({
         status: "conflict",
         message: error.message,
@@ -216,11 +229,13 @@ const getLandRecordById = async (req, res) => {
 // Retrieving land records by user ID
 // This function retrieves all land records associated with a specific user ID
 const getLandRecordByUserId = async (req, res) => {
- try {
-    const userId = parseInt(req.params.userId); 
+  try {
+    const userId = parseInt(req.params.userId);
 
     if (isNaN(userId)) {
-      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+      return res
+        .status(400)
+        .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
 
     const records = await getLandRecordByUserIdService(userId);
@@ -236,16 +251,21 @@ const getLandRecordsByCreator = async (req, res) => {
   try {
     const userId = parseInt(req.user.id);
     if (isNaN(userId)) {
-      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+      return res
+        .status(400)
+        .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
     const records = await getLandRecordsByCreatorService(userId);
     res.status(200).json({ status: "success", data: records });
   } catch (error) {
-    res.status(500).json({ status: "error", message:
-      error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
-    }); 
+    res
+      .status(500)
+      .json({
+        status: "error",
+        message: error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
+      });
   }
-}
+};
 const getMyLandRecords = async (req, res) => {
   try {
     const user = req.user;
@@ -286,12 +306,17 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
       });
     }
 
-    const records = await getLandRecordsByUserAdminUnitService(user.administrative_unit_id);
+    const records = await getLandRecordsByUserAdminUnitService(
+      user.administrative_unit_id
+    );
 
     // Try to get the admin unit name from the first record, fallback if not found
-    const adminUnitName = records.length > 0 && records[0].administrative_unit && records[0].administrative_unit.name
-      ? records[0].administrative_unit.name
-      : "አስተዳደር ክፍል";
+    const adminUnitName =
+      records.length > 0 &&
+      records[0].administrative_unit &&
+      records[0].administrative_unit.name
+        ? records[0].administrative_unit.name
+        : "አስተዳደር ክፍል";
 
     return res.status(200).json({
       status: "success",
@@ -309,27 +334,43 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
 };
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    const data = req.body.land_record
-      ? typeof req.body.land_record === "string"
-        ? JSON.parse(req.body.land_record)
-        : req.body.land_record
-      : req.body;
+    const user = req.user;
+    const recordId = req.params.id;
+
+    // Parse all fields (all optional for partial updates)
+    const updateData = {
+      primary_user: req.body.primary_user ? JSON.parse(req.body.primary_user) : undefined,
+      co_owners: req.body.co_owners ? JSON.parse(req.body.co_owners) : undefined,
+      land_record: req.body.land_record ? JSON.parse(req.body.land_record) : {},
+      documents: req.body.documents ? JSON.parse(req.body.documents) : undefined,
+      land_payment: req.body.land_payment ? JSON.parse(req.body.land_payment) : undefined
+    };
+
+    // Process the update
     const updatedRecord = await updateLandRecordService(
-      req.params.id,
-      data,
-      req.user
+      recordId,
+      updateData,
+      req.files || [],
+      user,
+      { transaction: t }
     );
+
+    await t.commit();
     return res.status(200).json({
       status: "success",
-      message: `መለያ ቁጥር ${req.params.id} ያለው መዝገብ በተሳካ ሁኔታ ተቀይሯል።`,
-      data: updatedRecord,
+      message: "Land record updated successfully",
+      data: updatedRecord
     });
   } catch (error) {
-    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
+    await t.rollback();
+    console.error("Update error:", error);
+    
+    const statusCode = error.message.includes("not found") ? 404 : 400;
     return res.status(statusCode).json({
       status: "error",
-      message: error.message,
+      message: error.message
     });
   }
 };
@@ -339,7 +380,7 @@ const deleteLandRecord = async (req, res) => {
   try {
     const result = await deleteLandRecordService(req.params.id, req.user);
     return res.status(200).json({
-      status: "success",  
+      status: "success",
       message: result.message,
       data: result.deletedRecord,
     });
@@ -366,4 +407,4 @@ module.exports = {
   updateDraftLandRecord,
   submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
-  };
+};
