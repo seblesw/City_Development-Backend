@@ -389,6 +389,7 @@ const updateLandRecord = async (req, res) => {
 const changeRecordStatus = async (req, res) => {
   const t = await sequelize.transaction();
   try {
+    const io = req.app.get('io'); // Get Socket.IO instance
     const { record_status, notes, rejectionReason } = req.body;
     const { id: recordId } = req.params;
     const user = req.user;
@@ -408,7 +409,10 @@ const changeRecordStatus = async (req, res) => {
       user,
       notes,
       rejectionReason,
-      { transaction: t }
+      { 
+        transaction: t,
+        io // Pass Socket.IO instance
+      }
     );
 
     await t.commit();

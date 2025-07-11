@@ -2,14 +2,15 @@ const { sequelize, User, Role, AdministrativeUnit, OversightOffice } = require("
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 
+
 const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, options = {}) => {
   const { transaction } = options;
   const t = transaction || await sequelize.transaction();
 
   try {
     const requiredFields = [
-      "first_name", "middle_name", "last_name", "national_id","phone_number",
-       "marital_status", "ownership_category", "administrative_unit_id"
+      "first_name", "middle_name", "last_name", "national_id", "phone_number",
+      "marital_status", "ownership_category", "administrative_unit_id"
     ];
 
     for (const field of requiredFields) {
@@ -18,12 +19,14 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
       }
     }
 
-    // Check ownership category validity
+    // Check ownership category
     if (!["የግል", "የጋራ"].includes(primaryOwnerData.ownership_category)) {
       throw new Error("የባለቤትነት ክፍል የግል ወይም የጋራ መሆን አለበት።");
     }
 
-    // Create or update primary owner
+    // Always hash and set default password for primary owner
+    const hashedPassword = await bcrypt.hash("12345678", 10);
+
     let primaryOwner = await User.findOne({
       where: {
         national_id: primaryOwnerData.national_id,
@@ -41,9 +44,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     } else {
       primaryOwner = await User.create({
         ...primaryOwnerData,
-        password: primaryOwnerData.password
-          ? await bcrypt.hash(primaryOwnerData.password, 10)
-          : null,
+        password: hashedPassword, // Set default password
         role_id: null,
         oversight_office_id: null,
         primary_owner_id: null,
@@ -55,7 +56,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
 
     const coOwners = [];
 
-    // Co-owners only for የጋራ
+    // Add co-owners only if ownership is የጋራ
     if (primaryOwnerData.ownership_category === "የጋራ") {
       if (!coOwnersData.length) {
         throw new Error("የጋራ ባለቤትነት ሲሆን ተጋሪ ባለቤቶችን ያስገቡ።");
@@ -96,6 +97,7 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
     throw new Error(`የመሬት ባለቤት መፍጠር ስህተት: ${error.message}`);
   }
 };
+
 const getAllUserService = async (options = {}) => {
   const { transaction } = options;
   try {

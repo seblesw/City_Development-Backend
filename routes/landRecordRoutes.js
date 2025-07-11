@@ -121,13 +121,6 @@ router.put(
   landRecordController.updateLandRecord
 );
 
-// router.delete(
-//   "/:id",
-//   authMiddleware.protect,
-//   // authMiddleware.restrictTo("አስተዳደር"),
-//   landRecordController.deleteLandRecord
-// );
-
 //trash management
 router.delete(
   '/:id',

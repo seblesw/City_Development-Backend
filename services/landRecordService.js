@@ -1637,6 +1637,36 @@ const updateLandRecordService = async (
   }
 };
 
+const validateStatusTransition = (currentStatus, newStatus) => {
+  const validTransitions = {
+    [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
+    [RECORD_STATUSES.SUBMITTED]: [
+      RECORD_STATUSES.UNDER_REVIEW,
+      RECORD_STATUSES.REJECTED,
+      RECORD_STATUSES.DRAFT,
+    ],
+    [RECORD_STATUSES.UNDER_REVIEW]: [
+      RECORD_STATUSES.APPROVED,
+      RECORD_STATUSES.REJECTED,
+      RECORD_STATUSES.SUBMITTED,
+    ],
+    [RECORD_STATUSES.REJECTED]: [
+      RECORD_STATUSES.SUBMITTED,
+      RECORD_STATUSES.DRAFT,
+    ],
+    [RECORD_STATUSES.APPROVED]: []
+  };
+
+  if (!validTransitions[currentStatus]?.includes(newStatus)) {
+    throw new Error(`Invalid status transition from ${currentStatus} to ${newStatus}`);
+  }
+};
+
+const handlePostStatusChange = async (record, newStatus, user, { transaction }) => {
+  // Add any post-status change logic here
+  // Example: Send emails, create audit logs, etc.
+};
+
 const changeRecordStatusService = async (
   recordId,
   newStatus,
@@ -1645,29 +1675,32 @@ const changeRecordStatusService = async (
   rejectionReason = null,
   options = {}
 ) => {
-  const { transaction } = options;
+  const { transaction, io } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Validate input
+    // Validate input
     if (!Object.values(RECORD_STATUSES).includes(newStatus)) {
-      throw new Error("የማያገለግል የመዝገብ ሁኔታ");
+      throw new Error("Invalid record status");
     }
 
-    // 2. Get the record with current status
+    // Get record with owner information
     const record = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'email', 'phone_number']
+      }],
       transaction: t,
     });
 
-    if (!record) {
-      throw new Error("የመሬት መዝገብ አልተገኘም።");
-    }
+    if (!record) throw new Error("Land record not found");
 
-    // 3. Validate status transition
+    // Validate transition
     validateStatusTransition(record.record_status, newStatus);
 
-    // 4. Prepare update data
+    // Prepare update
     const updateData = {
       record_status: newStatus,
       updated_by: user.id,
@@ -1692,7 +1725,7 @@ const changeRecordStatusService = async (
       ],
     };
 
-    // 5. Handle status-specific fields
+    // Status-specific fields
     if (newStatus === RECORD_STATUSES.REJECTED) {
       updateData.rejection_reason = rejectionReason;
       updateData.rejected_at = new Date();
@@ -1702,15 +1735,52 @@ const changeRecordStatusService = async (
       updateData.approver_id = user.id;
     }
 
-    // 6. Update the record
+    // Update record
     await record.update(updateData, { transaction: t });
 
-    // 7. Handle post-status-change actions
+    // Handle post-status actions
     await handlePostStatusChange(record, newStatus, user, { transaction: t });
 
-    if (!transaction) await t.commit();
+    // Real-time notification
+    if (io && record.user_id) {
+      const notificationPayload = {
+        recordId: record.id,
+        parcelNumber: record.parcel_number,
+        oldStatus: record.record_status,
+        newStatus,
+        changedBy: {
+          id: user.id,
+          name: user.full_name || "System Administrator"
+        },
+        changedAt: new Date(),
+        notes,
+        links: [
+          {
+            rel: 'view-details',
+            href: `/land-records/${record.id}`
+          }
+        ]
+      };
 
-    return await getLandRecordByIdService(recordId, { transaction: t });
+      // Notify land owner
+      await io.notifyUser(record.user_id, 'land_record_status_update', notificationPayload);
+
+      // Also notify admin unit (optional)
+      io.notifyAdminUnit(
+        record.administrative_unit_id,
+        'admin_land_record_update',
+        {
+          ...notificationPayload,
+          recordType: 'status_change'
+        }
+      );
+    }
+
+    if (!transaction) await t.commit();
+    return await LandRecord.findByPk(recordId, {
+      include: [{ model: User, as: 'user' }],
+      transaction: t
+    });
   } catch (error) {
     if (!transaction && t) await t.rollback();
     console.error(`Status change error (${newStatus}):`, error);
@@ -1718,60 +1788,6 @@ const changeRecordStatusService = async (
   }
 };
 
-// Validate allowed status transitions
-const validateStatusTransition = (currentStatus, newStatus) => {
-  const validTransitions = {
-    [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
-    [RECORD_STATUSES.SUBMITTED]: [
-      RECORD_STATUSES.UNDER_REVIEW,
-      RECORD_STATUSES.REJECTED,
-      RECORD_STATUSES.DRAFT,
-    ],
-    [RECORD_STATUSES.UNDER_REVIEW]: [
-      RECORD_STATUSES.APPROVED,
-      RECORD_STATUSES.REJECTED,
-      RECORD_STATUSES.SUBMITTED,
-    ],
-    [RECORD_STATUSES.REJECTED]: [
-      RECORD_STATUSES.SUBMITTED,
-      RECORD_STATUSES.DRAFT,
-    ],
-    [RECORD_STATUSES.APPROVED]: [], // Final state
-  };
-
-  if (!validTransitions[currentStatus]?.includes(newStatus)) {
-    throw new Error(
-      `ከ ${currentStatus} ወደ ${newStatus} መሄድ አይቻልም። የተፈቀዱ ሽግግሮች፡ ${
-        validTransitions[currentStatus]?.join(", ") || "ምንም"
-      }`
-    );
-  }
-};
-
-// Handle post-status-change actions
-const handlePostStatusChange = async (record, newStatus, user, options) => {
-  const { transaction } = options;
-
-  try {
-    switch (newStatus) {
-      case RECORD_STATUSES.APPROVED:
-        // await generateCertificate(record, user, { transaction });
-        // await sendApprovalNotification(record, user, { transaction });
-        break;
-
-      case RECORD_STATUSES.REJECTED:
-        // await sendRejectionNotification(record, user, { transaction });
-        break;
-
-      case RECORD_STATUSES.SUBMITTED:
-        // await sendSubmissionNotification(record, user, { transaction });
-        break;
-    }
-  } catch (error) {
-    console.error("Post-status-change action failed:", error);
-    // Don't rethrow to avoid failing the main transaction
-  }
-};
 
 // trash management services
 const moveToTrashService = async (recordId, user, deletionReason, options = {}) => {
