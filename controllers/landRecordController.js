@@ -1,12 +1,23 @@
+const { sequelize, RECORD_STATUSES } = require("../models");
+
 const {
   createLandRecordService,
   getAllLandRecordService,
   getLandRecordByIdService,
   updateLandRecordService,
-  deleteLandRecordService,
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
   saveLandRecordAsDraftService,
+  getDraftLandRecordService,
+  submitDraftLandRecordService,
+  updateDraftLandRecordService,
+  getMyLandRecordsService,
+  getLandRecordsByUserAdminUnitService,
+  changeRecordStatusService,
+  moveToTrashService,
+  restoreFromTrashService,
+  permanentlyDeleteService,
+  getTrashItemsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -15,11 +26,11 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = JSON.parse(req.body.data).primary_user || {};
-    const co_owners = JSON.parse(req.body.data).co_owners || [];
-    const land_record = JSON.parse(req.body.data).land_record || {};
-    const documents = JSON.parse(req.body.data).documents || [];
-    const land_payment = JSON.parse(req.body.data).land_payment || {};
+    const primary_user = JSON.parse(req.body.primary_user || "{}");
+    const co_owners = JSON.parse(req.body.co_owners || "[]");
+    const land_record = JSON.parse(req.body.land_record || "{}");
+    const documents = JSON.parse(req.body.documents || "[]");
+    const land_payment = JSON.parse(req.body.land_payment || "{}");
 
     // console.log(JSON.parse(req.body.data).land_payment);
     const result = await createLandRecordService(
@@ -53,11 +64,17 @@ const saveLandRecordAsDraft = async (req, res) => {
 
     // Parse string fields from form-data/request body
     // All fields are optional for drafts
-    const primary_user = req.body.primary_user ? JSON.parse(req.body.primary_user) : {};
+    const primary_user = req.body.primary_user
+      ? JSON.parse(req.body.primary_user)
+      : {};
     const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record ? JSON.parse(req.body.land_record) : {};
+    const land_record = req.body.land_record
+      ? JSON.parse(req.body.land_record)
+      : {};
     const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment ? JSON.parse(req.body.land_payment) : {};
+    const land_payment = req.body.land_payment
+      ? JSON.parse(req.body.land_payment)
+      : {};
 
     const result = await saveLandRecordAsDraftService(
       {
@@ -85,20 +102,16 @@ const saveLandRecordAsDraft = async (req, res) => {
 };
 const getDraftLandRecord = async (req, res) => {
   try {
-    const { id } = req.params;
-    const user = req.user;
+    const userId = req.user.id;
+    const draftId = req.params.id;
 
-    const result = await getDraftLandRecordService(id, user.id);
+    const result = await getDraftLandRecordService(draftId, userId);
 
-    return res.status(200).json({
-      status: "success",
-      message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተገኝቷል።",
-      ...result
-    });
+    res.status(200).json(result);
   } catch (error) {
-    return res.status(404).json({
+    res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -108,11 +121,17 @@ const updateDraftLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = req.body.primary_user ? JSON.parse(req.body.primary_user) : {};
+    const primary_user = req.body.primary_user
+      ? JSON.parse(req.body.primary_user)
+      : {};
     const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record ? JSON.parse(req.body.land_record) : {};
+    const land_record = req.body.land_record
+      ? JSON.parse(req.body.land_record)
+      : {};
     const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment ? JSON.parse(req.body.land_payment) : {};
+    const land_payment = req.body.land_payment
+      ? JSON.parse(req.body.land_payment)
+      : {};
 
     const result = await updateDraftLandRecordService(
       id,
@@ -130,12 +149,12 @@ const updateDraftLandRecord = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተዘምኗል።",
-      data: result
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -148,7 +167,7 @@ const submitDraftLandRecord = async (req, res) => {
     if (!id) {
       return res.status(400).json({
         status: "error",
-        message: "የረቂቅ መዝገብ ID ያስፈልጋል።",
+        message: "ድራፍት ውይም ረቂቅ መዝገብ ID ያስፈልጋል።",
       });
     }
 
@@ -157,17 +176,17 @@ const submitDraftLandRecord = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: result.message,
-      data: result.data
+      data: result.data,
     });
   } catch (error) {
     // Handle specific error types differently
-    if (error.message.includes('Validation failed')) {
+    if (error.message.includes("Validation failed")) {
       return res.status(422).json({
         status: "validation_error",
-        message: error.message.replace('Validation failed: ', ''),
-        details: error.message.split('; '),
+        message: error.message.replace("Validation failed: ", ""),
+        details: error.message.split("; "),
       });
-    } else if (error.message.includes('ተመዝግቧል')) {
+    } else if (error.message.includes("ተመዝግቧል")) {
       return res.status(409).json({
         status: "conflict",
         message: error.message,
@@ -217,11 +236,13 @@ const getLandRecordById = async (req, res) => {
 // Retrieving land records by user ID
 // This function retrieves all land records associated with a specific user ID
 const getLandRecordByUserId = async (req, res) => {
- try {
-    const userId = parseInt(req.params.userId); 
+  try {
+    const userId = parseInt(req.params.userId);
 
     if (isNaN(userId)) {
-      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+      return res
+        .status(400)
+        .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
 
     const records = await getLandRecordByUserIdService(userId);
@@ -231,43 +252,135 @@ const getLandRecordByUserId = async (req, res) => {
     res.status(500).json({ status: "error", message: error.message });
   }
 };
-//  Retrieving all land records created by the authenticated user
+//  Retrieving all land records created by the authenticated user to differentiate between user on same role
 // This function retrieves all land records created by the user making the request
 const getLandRecordsByCreator = async (req, res) => {
   try {
     const userId = parseInt(req.user.id);
     if (isNaN(userId)) {
-      return res.status(400).json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
+      return res
+        .status(400)
+        .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
     const records = await getLandRecordsByCreatorService(userId);
     res.status(200).json({ status: "success", data: records });
   } catch (error) {
-    res.status(500).json({ status: "error", message:
-      error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
-    }); 
+    res.status(500).json({
+      status: "error",
+      message: error.message || "የመሬት መዝገቦችን ማግኘት አልተሳካም።",
+    });
   }
-}
-
-// Updating an existing land record
-const updateLandRecord = async (req, res) => {
+};
+const getMyLandRecords = async (req, res) => {
   try {
-    const data = req.body.land_record
-      ? typeof req.body.land_record === "string"
-        ? JSON.parse(req.body.land_record)
-        : req.body.land_record
-      : req.body;
-    const updatedRecord = await updateLandRecordService(
-      req.params.id,
-      data,
-      req.user
-    );
+    const user = req.user;
+
+    if (!user || !user.id) {
+      return res.status(401).json({
+        status: "error",
+        message: "ያልተፈቀደ መዳረሻ። እባክዎ ይግቡ።",
+        code: "unauthorized",
+      });
+    }
+
+    const records = await getMyLandRecordsService(user.id);
+
     return res.status(200).json({
       status: "success",
-      message: `መለያ ቁጥር ${req.params.id} ያለው መዝገብ በተሳካ ሁኔታ ተቀይሯል።`,
+      message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: records,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
+      code: "error",
+    });
+  }
+};
+// Retrieving land records by user and administrative unit
+const getLandRecordsByUserAdminUnit = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || !user.id || !user.administrative_unit_id) {
+      return res.status(401).json({
+        status: "error",
+        message: "ያልተፈቀደ መዳረሻ ወይም የአስተዳደር ክፍል አልተገለጸም። እባክዎ ይግቡ።",
+        code: "unauthorized",
+      });
+    }
+
+    const records = await getLandRecordsByUserAdminUnitService(
+      user.administrative_unit_id
+    );
+
+    // Try to get the admin unit name from the first record, fallback if not found
+    const adminUnitName =
+      records.length > 0 &&
+      records[0].administrative_unit &&
+      records[0].administrative_unit.name
+        ? records[0].administrative_unit.name
+        : "አስተዳደር ክፍል";
+
+    return res.status(200).json({
+      status: "success",
+      count: records.length,
+      message: `የ ${adminUnitName} መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።`,
+      data: records,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
+      code: "error",
+    });
+  }
+};
+// Updating an existing land record
+const updateLandRecord = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const user = req.user;
+    const recordId = req.params.id;
+
+    // Parse all fields (all optional for partial updates)
+    const updateData = {
+      primary_user: req.body.primary_user
+        ? JSON.parse(req.body.primary_user)
+        : undefined,
+      co_owners: req.body.co_owners
+        ? JSON.parse(req.body.co_owners)
+        : undefined,
+      land_record: req.body.land_record ? JSON.parse(req.body.land_record) : {},
+      documents: req.body.documents
+        ? JSON.parse(req.body.documents)
+        : undefined,
+      land_payment: req.body.land_payment
+        ? JSON.parse(req.body.land_payment)
+        : undefined,
+    };
+
+    // Process the update
+    const updatedRecord = await updateLandRecordService(
+      recordId,
+      updateData,
+      req.files || [],
+      user,
+      { transaction: t }
+    );
+
+    await t.commit();
+    return res.status(200).json({
+      status: "success",
+      message: "Land record updated successfully",
       data: updatedRecord,
     });
   } catch (error) {
-    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
+    await t.rollback();
+    console.error("Update error:", error);
+
+    const statusCode = error.message.includes("not found") ? 404 : 400;
     return res.status(statusCode).json({
       status: "error",
       message: error.message,
@@ -275,18 +388,152 @@ const updateLandRecord = async (req, res) => {
   }
 };
 
-// Deleting a land record
-const deleteLandRecord = async (req, res) => {
+const changeRecordStatus = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    const result = await deleteLandRecordService(req.params.id, req.user);
-    return res.status(200).json({
-      status: "success",  
-      message: result.message,
-      data: result.deletedRecord,
+    const { record_status, notes, rejectionReason } = req.body;
+    const { id: recordId } = req.params;
+    const user = req.user;
+
+    // Validate required fields
+    if (!record_status) {
+      throw new Error("የመዝገብ ሁኔታ ያስፈልጋል።");
+    }
+
+    if (record_status === RECORD_STATUSES.REJECTED && !rejectionReason) {
+      throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
+    }
+
+    const updatedRecord = await changeRecordStatusService(
+      recordId,
+      record_status,
+      user,
+      notes,
+      rejectionReason,
+      { transaction: t }
+    );
+
+    await t.commit();
+
+    res.status(200).json({
+      status: "success",
+      message: getStatusChangeMessage(record_status),
+      data: updatedRecord,
     });
   } catch (error) {
-    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
-    return res.status(statusCode).json({
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Helper function for status-specific messages
+const getStatusChangeMessage = (status) => {
+  const messages = {
+    [RECORD_STATUSES.DRAFT]: "መዝገብ ወደ ረቂቅ ተመለሰ",
+    [RECORD_STATUSES.SUBMITTED]: "መዝገብ በተሳካ ሁኔታ ቀርቧል",
+    [RECORD_STATUSES.UNDER_REVIEW]: "መዝገብ በግምገማ ላይ ሆኗል",
+    [RECORD_STATUSES.APPROVED]: "መዝገብ በተሳካ ሁኔታ ጸድቋል",
+    [RECORD_STATUSES.REJECTED]: "መዝገብ በተሳካ ሁኔታ ውድቅ ተደርጓል",
+  };
+  return messages[status] || "የመዝገብ ሁኔታ ተቀይሯል";
+};
+// trash management 
+const moveToTrash = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+    const { deletionReason } = req.body;
+
+    if (!deletionReason) {
+      throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
+    }
+
+    const result = await moveToTrashService(
+      id,
+      user,
+      deletionReason,
+      { transaction: t }
+    );
+
+    await t.commit();
+    res.status(200).json({
+      status: "success",
+      message: "መዝገብ ወደ መጥፎ ቅርጫት ተዛውሯል",
+      data: result,
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const restoreFromTrash = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    const result = await restoreFromTrashService(id, user, {
+      transaction: t,
+    });
+
+    await t.commit();
+    res.status(200).json({
+      status: "success",
+      message: "መዝገብ ከመጥፎ ቅርጫት ተመልሷል",
+      data: result,
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const permanentlyDelete = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const user = req.user;
+
+    await permanentlyDeleteService(id, user, { transaction: t });
+
+    await t.commit();
+    res.status(200).json({
+      status: "success",
+      message: "መዝገብ ለዘላለም ተሰርዟል",
+    });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const getTrash = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const user = req.user;
+
+    const result = await getTrashItemsService(user, { page, limit });
+
+    res.status(200).json({
+      status: "success",
+      data: result,
+    });
+  } catch (error) {
+    res.status(400).json({
       status: "error",
       message: error.message,
     });
@@ -294,15 +541,21 @@ const deleteLandRecord = async (req, res) => {
 };
 
 module.exports = {
+  moveToTrash,
+  restoreFromTrash,
+  permanentlyDelete,
+  getTrash,
   createLandRecord,
   saveLandRecordAsDraft,
   getAllLandRecords,
+  changeRecordStatus,
   getLandRecordById,
+  getMyLandRecords,
   getLandRecordByUserId,
   getLandRecordsByCreator,
   updateLandRecord,
-  deleteLandRecord,
   getDraftLandRecord,
   updateDraftLandRecord,
   submitDraftLandRecord,
-  };
+  getLandRecordsByUserAdminUnit,
+};

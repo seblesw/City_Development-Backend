@@ -17,7 +17,11 @@ const postLimiter = rateLimit({
   max: 20,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
-
+router.get(
+  '/trash',
+  authMiddleware.protect,
+  landRecordController.getTrash
+);
 // Draft Management Routes
 router.post(
   "/drafts",
@@ -57,7 +61,20 @@ router.post(
   upload.array("documents", 20),
   landRecordController.createLandRecord
 );
-
+router.post(
+  "/:id/status",
+  authMiddleware.protect,
+  postLimiter,
+  landRecordController.changeRecordStatus
+);
+//get the land records the primary owner has on the system
+router.get(
+  "/my-land-records",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getMyLandRecords
+);
+// This route is used to get all land records, accessible by the system admin or authorized users
 router.get(
   "/",
   authMiddleware.protect,
@@ -65,7 +82,15 @@ router.get(
   getLimiter,
   landRecordController.getAllLandRecords
 );
-
+// This route is used to get land records by the admin unit of the logged-in user
+//this helps to filter land records geographically by admin unit
+router.get(
+  "/admin-unit-records",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getLandRecordsByUserAdminUnit
+);
+// This route is used to get land records created by the logged-in user only records he created
 router.get(
   "/my-records",
   authMiddleware.protect,
@@ -92,15 +117,36 @@ router.put(
   authMiddleware.protect,
   // authMiddleware.restrictTo("አስተዳደር"),
   postLimiter,
-  upload.array("documents", 5),
+  upload.array("documents", 10),
   landRecordController.updateLandRecord
 );
 
+// router.delete(
+//   "/:id",
+//   authMiddleware.protect,
+//   // authMiddleware.restrictTo("አስተዳደር"),
+//   landRecordController.deleteLandRecord
+// );
+
+//trash management
 router.delete(
-  "/:id",
+  '/:id',
   authMiddleware.protect,
-  // authMiddleware.restrictTo("አስተዳደር"),
-  landRecordController.deleteLandRecord
+  landRecordController.moveToTrash
 );
+
+router.post(
+  '/:id/restore',
+  authMiddleware.protect,
+  landRecordController.restoreFromTrash
+);
+
+router.delete(
+  '/:id/permanent',
+  authMiddleware.protect,
+  // authMiddleware.restrictTo('admin'),
+  landRecordController.permanentlyDelete
+);
+
 
 module.exports = router;

@@ -42,10 +42,10 @@ const addFilesToDocumentController = async (req, res) => {
     const { id } = req.params;
     const { files, user } = req;
     if (!user) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+      return res.status(401).json({ error: "ይህን ስራ ለመስራት ሎግ ኢን ያድርጉ!" });
     }
     if (!files || files.length === 0) {
-      return res.status(400).json({ error: "ቢያንስ አንዴ ፋይል መግለጥ አለበት።" });
+      return res.status(400).json({ error: "ቢያንስ አንድ ፋይል መጨመር አለበት።" });
     }
     const document = await addFilesToDocumentService(id, files, user.id);
     return res.status(200).json({
@@ -75,7 +75,7 @@ const updateDocumentController = async (req, res) => {
     const { id } = req.params;
     const { body, files, user } = req;
     if (!user) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+      return res.status(401).json({ error: "እባክዎ መጀመሪያ ሎጊን ያድርጉ!" });
     }
     const data = {
       map_number: body.map_number,

@@ -11,7 +11,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     }
 
     if (!files || !Array.isArray(files) || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መስጠት አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መግባት  አለበት።");
     }
 
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
@@ -42,7 +42,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       });
       if (existingRef) {
-        throw new Error("ይህ የሰነድ ቁጥር ተመዝግቧል።");
+        throw new Error("ይህ የሰነድ አመልካች ወይም reference ተመዝግቧል።");
       }
     }
 
@@ -127,12 +127,10 @@ const addFilesToDocumentService = async (
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-    const updater = await User.findByPk(updaterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-      throw new Error("ፋይሎችን መጨመር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+    // Assume updaterId is the req user object, not a DB id
+    const updater = updaterId;
+    if (!updater ) {
+      throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
     const document = await Document.findByPk(id, { transaction: t });
@@ -141,7 +139,7 @@ const addFilesToDocumentService = async (
     }
 
     if (!files || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መግለጥ አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
     // Prepare new files
@@ -182,7 +180,6 @@ const addFilesToDocumentService = async (
     throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
   }
 };
-
 const getDocumentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
@@ -260,8 +257,6 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
   }
 };
 
-
-
 const updateDocumentService = async (
   id,
   data,
@@ -275,12 +270,9 @@ const updateDocumentService = async (
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-    const updater = await User.findByPk(updaterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!updater || !["መዝጋቢ", "አስተዳደር"].includes(updater.role?.name)) {
-      throw new Error("ሰነድ መቀየር የሚችሉት መዝጋቢ ወይም አስተዳደር ብቻ ናቸው።");
+      const updater = updaterId;
+    if (!updater ) {
+      throw new Error("ፋይሎችን መቀየር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
     const document = await Document.findByPk(id, { transaction: t });
