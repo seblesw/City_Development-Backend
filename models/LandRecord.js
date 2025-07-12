@@ -86,13 +86,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      land_level: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        validate: {
-          min: { args: [1], msg: "የመሬት ደረጃ ከ1 በታች መሆን አይችልም።" },
-        },
-      },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
