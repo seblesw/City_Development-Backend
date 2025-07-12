@@ -1,110 +1,149 @@
 const jwt = require('jsonwebtoken');
-const { LandRecord, User } = require('../models');
+const { User } = require('../models');
 
 module.exports = (io) => {
   const connectedUsers = new Map();
+
+  // Enhanced connection logger
+  const logConnections = () => {
+    console.log('=== Active Connections ===');
+    connectedUsers.forEach((socketData, userId) => {
+      console.log(`User ${userId}: Socket ${socketData.socketId} | Last Active: ${socketData.lastActive}`);
+    });
+    console.log(`Total connections: ${connectedUsers.size}`);
+  };
 
   // Authentication middleware
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
-      if (!token) return next(new Error('Authentication error'));
+      if (!token) {
+        console.log('Connection attempt without token');
+        return next(new Error('Authentication error'));
+      }
       
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findByPk(decoded.id);
+      const user = await User.findByPk(decoded.id, {
+        attributes: ['id', 'role', 'administrative_unit_id', 'email']
+      });
       
-      if (!user) return next(new Error('User not found'));
+      if (!user) {
+        console.log(`User ${decoded.id} not found in database`);
+        return next(new Error('User not found'));
+      }
       
       socket.user = {
         id: user.id,
+        email: user.email,
         role: user.role,
-        administrativeUnitId: user.administrative_unit_id
+        adminUnit: user.administrative_unit_id
       };
       
+      console.log(`Socket ${socket.id} authenticated for user ${user.id} (${user.email})`);
       next();
     } catch (err) {
+      console.error('Authentication error:', err.message);
       next(new Error('Invalid token'));
     }
   });
 
   io.on('connection', (socket) => {
-    console.log(`New connection: ${socket.id} (User: ${socket.user?.id || 'unauthenticated'})`);
+    console.log(`\nNew connection: ${socket.id}`);
+    console.log(`Headers:`, socket.handshake.headers);
+    console.log(`Auth:`, socket.handshake.auth);
 
-    // Handle authentication confirmation
+    // Authentication handler
     socket.on('authenticate', async () => {
-      if (socket.user?.id) {
-        socket.join([
-          `user_${socket.user.id}`,
-          `admin_unit_${socket.user.administrativeUnitId}`,
-          `role_${socket.user.role}`
-        ]);
-        
-        connectedUsers.set(socket.user.id, {
-          socketId: socket.id,
-          lastActive: new Date()
-        });
-        
-        socket.emit('authentication_success', {
-          timestamp: new Date(),
-          userId: socket.user.id
-        });
-        
-        console.log(`User ${socket.user.id} authenticated with roles ${socket.user.role}`);
-      }
-    });
-
-    // Handle status update acknowledgments
-    socket.on('status_update_ack', (data) => {
-      console.log(`User ${socket.user.id} acknowledged update for record ${data.recordId}`);
-      // Can implement read receipts here
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      if (socket.user?.id) {
-        connectedUsers.delete(socket.user.id);
-        console.log(`User ${socket.user.id} disconnected`);
-      }
-    });
-
-    // Error handling
-    socket.on('error', (err) => {
-      console.error(`Socket error (${socket.id}):`, err);
-    });
-  });
-
-  // Notification system
-  io.notifyUser = async (userId, event, payload) => {
-    try {
-      const user = await User.findByPk(userId);
-      if (!user) {
-        console.error(`User ${userId} not found for notification`);
+      if (!socket.user?.id) {
+        console.warn(`Socket ${socket.id} attempted auth without user data`);
         return;
       }
 
-      const socketData = connectedUsers.get(userId);
-      if (socketData) {
+      const rooms = [
+        `user_${socket.user.id}`,
+        `admin_unit_${socket.user.adminUnit}`,
+        `role_${socket.user.role}`
+      ];
+      
+      await socket.join(rooms);
+      
+      connectedUsers.set(socket.user.id, {
+        socketId: socket.id,
+        email: socket.user.email,
+        lastActive: new Date(),
+        rooms: rooms
+      });
+
+      console.log(`User ${socket.user.id} (${socket.user.email}) joined rooms:`, rooms);
+      logConnections();
+
+      socket.emit('authentication_success', {
+        userId: socket.user.id,
+        socketId: socket.id,
+        timestamp: new Date()
+      });
+    });
+
+    // Heartbeat for tracking active connections
+    socket.on('heartbeat', () => {
+      if (socket.user?.id && connectedUsers.has(socket.user.id)) {
+        connectedUsers.get(socket.user.id).lastActive = new Date();
+      }
+    });
+
+    // Disconnection handler
+    socket.on('disconnect', (reason) => {
+      if (socket.user?.id) {
+        console.log(`\nUser ${socket.user.id} disconnected (Reason: ${reason})`);
+        connectedUsers.delete(socket.user.id);
+        logConnections();
+      }
+    });
+
+    // Error handler
+    socket.on('error', (err) => {
+      console.error(`Socket ${socket.id} error:`, err);
+    });
+  });
+
+  // Enhanced notification with logging
+  io.notifyUser = async (userId, event, data) => {
+    try {
+      console.log(`\nAttempting to notify user ${userId} of ${event}`);
+      
+      const user = await User.findByPk(userId, {
+        attributes: ['id', 'email', 'last_login']
+      });
+
+      if (!user) {
+        console.error(`User ${userId} not found in database`);
+        return false;
+      }
+
+      const connection = connectedUsers.get(userId);
+      
+      if (connection) {
+        console.log(`User ${userId} is connected via socket ${connection.socketId}`);
+        console.log(`Last active: ${connection.lastActive}`);
+        
         io.to(`user_${userId}`).emit(event, {
-          ...payload,
-          serverTime: new Date()
+          ...data,
+          _meta: {
+            deliveredAt: new Date(),
+            toSocket: connection.socketId
+          }
         });
-        console.log(`Notification sent to user ${userId}`);
+        
+        console.log(`Notification sent successfully to user ${userId}`);
+        return true;
       } else {
-        console.log(`User ${userId} is not currently connected`);
-        // Optionally queue notifications for when user reconnects
+        console.warn(`User ${userId} is not currently connected`);
+        console.log(`Last login was at: ${user.last_login}`);
+        return false;
       }
     } catch (error) {
-      console.error(`Error sending notification to user ${userId}:`, error);
+      console.error(`Notification error for user ${userId}:`, error);
+      return false;
     }
-  };
-
-  // Broadcast to admin unit
-  io.notifyAdminUnit = (adminUnitId, event, payload) => {
-    io.to(`admin_unit_${adminUnitId}`).emit(event, payload);
-  };
-
-  // Broadcast to role
-  io.notifyRole = (role, event, payload) => {
-    io.to(`role_${role}`).emit(event, payload);
   };
 };
