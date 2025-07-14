@@ -31,6 +31,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents = [],
       land_payment,
     } = data;
+    console.log(documents)
     const adminunit = user.administrative_unit_id;
     primary_user.administrative_unit_id = adminunit;
     land_record.administrative_unit_id = adminunit;
@@ -127,25 +128,25 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         },
         { transaction: t }
       );
-    const landRecord = await LandRecord.create(
-      {
-        ...land_record,
-        user_id: primaryOwner.id,
-        created_by: user.id,
-        status: RECORD_STATUSES.DRAFT,
-        notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-        priority: land_record.priority || PRIORITIES.LOW,
-        parcel_number: land_record.parcel_number,
-        status_history,
-        action_log,
-        rejection_reason: null,
-        approver_id: null,
-        coordinates: land_record.coordinates
-          ? JSON.stringify(land_record.coordinates)
-          : null,
-      },
-      { transaction: t }
-    );
+    // const landRecord = await LandRecord.create(
+    //   {
+    //     ...land_record,
+    //     user_id: primaryOwner.id,
+    //     created_by: user.id,
+    //     status: RECORD_STATUSES.DRAFT,
+    //     notification_status: NOTIFICATION_STATUSES.NOT_SENT,
+    //     priority: land_record.priority || PRIORITIES.LOW,
+    //     parcel_number: land_record.parcel_number,
+    //     status_history,
+    //     action_log,
+    //     rejection_reason: null,
+    //     approver_id: null,
+    //     coordinates: land_record.coordinates
+    //       ? JSON.stringify(land_record.coordinates)
+    //       : null,
+    //   },
+    //   { transaction: t }
+    // );
 
     // Document upload
     if (!Array.isArray(files) || files.length < documents.length) {
@@ -184,7 +185,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           {
             ...doc,
             land_record_id: landRecord.id,
-            preparer_name: doc.preparer_name || null,
+            preparer_name: doc.preparer_name || "unknown",
             approver_name: doc.approver_name || null,
             is_draft: isDraftSubmission ? false : true,
           },
@@ -1385,6 +1386,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       order: [["createdAt", "DESC"]],
       transaction,
     });
+    // console.log(records)
 
     return records.map((record) => ({
       id: record.id,
@@ -1393,7 +1395,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       land_use: record.land_use,
       ownership_type: record.ownership_type,
       area: record.area,
-      status: record.status,
+      status: record.record_status,
       priority: record.priority,
       coordinates: record.coordinates ? JSON.parse(record.coordinates) : null,
       administrative_unit: record.administrativeUnit

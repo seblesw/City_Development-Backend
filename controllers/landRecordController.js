@@ -26,13 +26,13 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = JSON.parse(req.body.primary_user || "{}");
-    const co_owners = JSON.parse(req.body.co_owners || "[]");
-    const land_record = JSON.parse(req.body.land_record || "{}");
-    const documents = JSON.parse(req.body.documents || "[]");
-    const land_payment = JSON.parse(req.body.land_payment || "{}");
+    const primary_user = JSON.parse(req.body.data).primary_user || "{}";
+    const co_owners = JSON.parse(req.body.data).co_owners || "[]";
+    const land_record = JSON.parse(req.body.data).land_record || "{}";
+    const documents = JSON.parse(req.body.data).documents || "[]";
+    const land_payment = JSON.parse(req.body.data).land_payment || "{}";
 
-    // console.log(JSON.parse(req.body.data).land_payment);
+    console.log(req.body);
     const result = await createLandRecordService(
       {
         primary_user,
