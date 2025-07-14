@@ -18,6 +18,7 @@ const {
   restoreFromTrashService,
   permanentlyDeleteService,
   getTrashItemsService,
+  importLandRecordsFromCSVService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -53,6 +54,42 @@ const createLandRecord = async (req, res) => {
     return res.status(400).json({
       status: "error",
       message: `የመዝገብ መፍጠር ስህተት: ${error.message}`,
+    });
+  }
+};
+const importLandRecordsFromCSV = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    if (!req.file) {
+      throw new Error("CSV ፋይል ያስፈልጋል።");
+    }
+
+    const results = await importLandRecordsFromCSVService(
+      req.file.path,
+      req.user,
+      { transaction: t }
+    );
+
+    await t.commit();
+    fs.unlinkSync(req.file.path); // Cleanup
+
+    res.status(201).json({
+      status: "success",
+      message: `CSV በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+      data: {
+        created: results.createdCount,
+        skipped: results.skippedCount,
+        errors: results.errors.slice(0, 10), // Show first 10 errors
+      },
+    });
+  } catch (error) {
+    await t.rollback();
+    if (req.file?.path) fs.unlinkSync(req.file.path);
+
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
     });
   }
 };
@@ -544,6 +581,7 @@ module.exports = {
   permanentlyDelete,
   getTrash,
   createLandRecord,
+  importLandRecordsFromCSV,
   saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,

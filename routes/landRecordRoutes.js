@@ -17,6 +17,14 @@ const postLimiter = rateLimit({
   max: 20,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
+// Import Land Records from CSV
+router.post(
+  "/import",
+  authMiddleware.protect,
+  postLimiter,
+  upload.single("file"),
+  landRecordController.importLandRecordsFromCSV
+);
 router.get(
   '/trash',
   authMiddleware.protect,

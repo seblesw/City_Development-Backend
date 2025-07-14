@@ -20,29 +20,23 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
-  const { transaction, isDraftSubmission = false, draftRecordId } = options;
+  const { transaction, isDraftSubmission = false, draftRecordId, isImport = false } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
-    const {
-      primary_user,
-      co_owners = [],
-      land_record,
-      documents = [],
-      land_payment,
-    } = data;
+    const { primary_user, co_owners = [], land_record, documents = [], land_payment } = data;
+
+    if (primary_user.ownership_category === "የጋራ" && !co_owners.length) {
+      throw new Error("የጋራ ባለቤትነት ለመመዝገብ ተጋሪ ባለቤቶች ያስፈልጋሉ።");
+    }
+
     const adminunit = user.administrative_unit_id;
     primary_user.administrative_unit_id = adminunit;
     land_record.administrative_unit_id = adminunit;
 
     // Check for duplicate parcel_number
     const existingRecord = await LandRecord.findOne({
-      where: {
-        parcel_number: land_record.parcel_number,
-        administrative_unit_id: adminunit,
-        id: { [Op.ne]: draftRecordId || 0 },
-        deletedAt: { [Op.eq]: null },
-      },
+      where: { parcel_number: land_record.parcel_number, administrative_unit_id: adminunit, id: { [Op.ne]: draftRecordId || 0 }, deletedAt: { [Op.eq]: null } },
       transaction: t,
     });
 
@@ -51,38 +45,16 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     }
 
     // Reuse or create primary owner and co-owners
-    const { primaryOwner, coOwners } = await userService.createLandOwner(
-      primary_user,
-      co_owners,
-      user.id,
-      { transaction: t }
-    );
+    const { primaryOwner, coOwners } = await userService.createLandOwner(primary_user, co_owners, user.id, { transaction: t });
 
     const now = new Date();
-    const status_history = [
-      {
-        status: isDraftSubmission
-          ? RECORD_STATUSES.SUBMITTED
-          : RECORD_STATUSES.DRAFT,
-        changed_by: user.id,
-        changed_at: now,
-      },
-    ];
-    const action_log = [
-      {
-        action: isDraftSubmission ? "SUBMITTED" : "CREATED",
-        changed_by: user.id,
-        changed_at: now,
-      },
-    ];
+    const status_history = [{ status: isDraftSubmission ? RECORD_STATUSES.SUBMITTED : RECORD_STATUSES.DRAFT, changed_by: user.id, changed_at: now }];
+    const action_log = [{ action: isDraftSubmission ? "SUBMITTED" : "CREATED", changed_by: user.id, changed_at: now }];
 
     let landRecord;
     if (isDraftSubmission && draftRecordId) {
       // Update existing draft record
-      landRecord = await LandRecord.findOne({
-        where: { id: draftRecordId, is_draft: true },
-        transaction: t,
-      });
+      landRecord = await LandRecord.findOne({ where: { id: draftRecordId, is_draft: true }, transaction: t });
       if (!landRecord) throw new Error("Draft record not found for update");
       await landRecord.update(
         {
@@ -92,16 +64,11 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           record_status: RECORD_STATUSES.SUBMITTED,
           notification_status: NOTIFICATION_STATUSES.NOT_SENT,
           priority: land_record.priority || PRIORITIES.LOW,
-          status_history: [
-            ...(landRecord.status_history || []),
-            ...status_history,
-          ],
+          status_history: [...(landRecord.status_history || []), ...status_history],
           action_log: [...(landRecord.action_log || []), ...action_log],
           rejection_reason: null,
           approver_id: null,
-          coordinates: land_record.coordinates
-            ? JSON.stringify(land_record.coordinates)
-            : null,
+          coordinates: land_record.coordinates ? JSON.stringify(land_record.coordinates) : null,
         },
         { transaction: t }
       );
@@ -112,145 +79,220 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           ...land_record,
           user_id: primaryOwner.id,
           created_by: user.id,
-          record_status: isDraftSubmission
-            ? RECORD_STATUSES.SUBMITTED
-            : RECORD_STATUSES.DRAFT,
+          record_status: isDraftSubmission ? RECORD_STATUSES.SUBMITTED : RECORD_STATUSES.DRAFT,
           notification_status: NOTIFICATION_STATUSES.NOT_SENT,
           priority: land_record.priority || PRIORITIES.LOW,
           status_history,
           action_log,
           rejection_reason: null,
           approver_id: null,
-          coordinates: land_record.coordinates
-            ? JSON.stringify(land_record.coordinates)
-            : null,
+          coordinates: land_record.coordinates ? JSON.stringify(land_record.coordinates) : null,
         },
         { transaction: t }
       );
     }
 
-    // Reuse or update documents
-    const documentResults = await Promise.all(
-      documents.map(async (doc, index) => {
-        if (isDraftSubmission && doc.id) {
-          // Reuse existing document
-          const existingDoc = await Document.findOne({
-            where: {
-              id: doc.id,
-              land_record_id: landRecord.id,
-              is_draft: true,
-              deletedAt: { [Op.eq]: null },
-            },
-            transaction: t,
-          });
-          if (existingDoc) {
-            await existingDoc.update(
-              { ...doc, is_draft: false, updated_by: user.id, updatedAt: now },
-              { transaction: t }
-            );
-            return existingDoc;
+    // Document validation (skipped for imports if empty)
+    let documentResults = [];
+    if (!isImport && (!documents.length || !documents.some((doc, index) => doc.file_path || (files[index] && files[index].path)))) {
+      throw new Error("ዶክመንት ያስፈልጋል። At least one document with a valid file is required.");
+    }
+    if (documents.length > 0) {
+      documentResults = await Promise.all(
+        documents.map(async (doc, index) => {
+          if (isDraftSubmission && doc.id) {
+            // Reuse existing document
+            const existingDoc = await Document.findOne({
+              where: { id: doc.id, land_record_id: landRecord.id, is_draft: true, deletedAt: { [Op.eq]: null } },
+              transaction: t,
+            });
+            if (existingDoc) {
+              await existingDoc.update({ ...doc, is_draft: isDraftSubmission ? false : true, updated_by: user.id, updatedAt: now }, { transaction: t });
+              return existingDoc;
+            }
           }
-        }
-        // Create new document if no file provided or new document needed
-        const file = files[index];
-        if (!file && !doc.file_path)
-          throw new Error(
-            `ዶክመንት ${doc.document_type || index + 1} የተጠናቀቀ አይደለም።`
+          // Create new document (file optional for imports)
+          const file = files[index];
+          if (!isImport && !file && !doc.file_path) {
+            throw new Error(`ዶክመንት ${doc.document_type || index + 1} የተጠናቀቀ አይደለም።`);
+          }
+          return documentService.createDocumentService(
+            {
+              ...doc,
+              land_record_id: landRecord.id,
+              preparer_name: doc.preparer_name || null,
+              approver_name: doc.approver_name || null,
+              is_draft: isDraftSubmission ? false : true,
+              file_path: file ? file.path : doc.file_path || null,
+            },
+            [file || { path: doc.file_path }],
+            user.id,
+            { transaction: t }
           );
-        return documentService.createDocumentService(
-          {
-            ...doc,
-            land_record_id: landRecord.id,
-            preparer_name: doc.preparer_name || null,
-            approver_name: doc.approver_name || null,
-            is_draft: isDraftSubmission ? false : true,
-          },
-          [file || { path: doc.file_path }],
-          user.id,
-          { transaction: t }
-        );
-      })
-    );
+        })
+      );
+      landRecord.action_log.push(
+        ...documentResults.map((doc) => ({
+          action: `DOCUMENT_UPLOADED_${doc.document_type}`,
+          changed_by: user.id,
+          changed_at: doc.createdAt || now,
+          document_id: doc.id,
+        }))
+      );
+      await landRecord.save({ transaction: t });
+    }
 
-    landRecord.action_log.push(
-      ...documentResults.map((doc) => ({
-        action: `DOCUMENT_UPLOADED_${doc.document_type}`,
-        changed_by: user.id,
-        changed_at: doc.createdAt || now,
-        document_id: doc.id,
-      }))
-    );
-    await landRecord.save({ transaction: t });
-
-    // Reuse or update payment
-    let landPayment;
-    if (isDraftSubmission && land_payment && land_payment.id) {
-      const existingPayment = await LandPayment.findOne({
-        where: {
-          id: land_payment.id,
-          land_record_id: landRecord.id,
-          is_draft: true,
-          deletedAt: { [Op.eq]: null },
-        },
-        transaction: t,
-      });
-      if (existingPayment && existingPayment.total_amount > 0) {
-        await existingPayment.update(
-          {
-            ...land_payment,
-            land_record_id: landRecord.id,
-            payer_id: primaryOwner.id,
-            created_by: user.id,
-            is_draft: false,
-            updated_by: user.id,
-            updatedAt: now,
-          },
-          { transaction: t }
-        );
-        landPayment = existingPayment;
+    // Payment validation (skipped for imports if not provided)
+    let landPayment = null;
+    if (!isImport && (!land_payment || land_payment.total_amount <= 0)) {
+      throw new Error("Payment information with valid total_amount is required");
+    }
+    if (land_payment && land_payment.total_amount > 0) {
+      if (isDraftSubmission && land_payment.id) {
+        const existingPayment = await LandPayment.findOne({
+          where: { id: land_payment.id, land_record_id: landRecord.id, is_draft: true, deletedAt: { [Op.eq]: null } },
+          transaction: t,
+        });
+        if (existingPayment && existingPayment.total_amount > 0) {
+          await existingPayment.update(
+            {
+              ...land_payment,
+              land_record_id: landRecord.id,
+              payer_id: primaryOwner.id,
+              created_by: user.id,
+              is_draft: false,
+              updated_by: user.id,
+              updatedAt: now,
+            },
+            { transaction: t }
+          );
+          landPayment = existingPayment;
+        } else {
+          landPayment = await landPaymentService.createLandPaymentService(
+            { ...land_payment, land_record_id: landRecord.id, payer_id: primaryOwner.id, created_by: user.id, is_draft: false },
+            { transaction: t }
+          );
+        }
       } else {
         landPayment = await landPaymentService.createLandPaymentService(
-          {
-            ...land_payment,
-            land_record_id: landRecord.id,
-            payer_id: primaryOwner.id,
-            created_by: user.id,
-            is_draft: false,
-          },
+          { ...land_payment, land_record_id: landRecord.id, payer_id: primaryOwner.id, created_by: user.id, is_draft: isDraftSubmission ? false : true },
           { transaction: t }
         );
       }
-    } else if (land_payment && land_payment.total_amount > 0) {
-      landPayment = await landPaymentService.createLandPaymentService(
-        {
-          ...land_payment,
-          land_record_id: landRecord.id,
-          payer_id: primaryOwner.id,
-          created_by: user.id,
-          is_draft: isDraftSubmission ? false : true,
-        },
-        { transaction: t }
-      );
-    } else {
-      throw new Error(
-        "Payment information with valid total_amount is required"
-      );
     }
 
     if (!transaction) await t.commit();
-    return {
-      landRecord,
-      primaryOwner,
-      coOwners,
-      documents: documentResults,
-      landPayment,
-    };
+    return { landRecord, primaryOwner, coOwners, documents: documentResults, landPayment };
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
+const importLandRecordsFromCSVService = async (filePath, user, options = {}) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
 
+  try {
+    const results = {
+      createdCount: 0,
+      skippedCount: 0,
+      totalRows: 0,
+      errors: [],
+      errorDetails: [],
+    };
+
+    const csvData = await parseCSVFile(filePath);
+    results.totalRows = csvData.length;
+
+    for (const [index, row] of csvData.entries()) {
+      const rowNum = index + 1;
+      try {
+        // --- VALIDATION ---
+        if (!row.parcel_number) throw new Error("የመሬት ቁጥር (parcel_number) ባዶ ነው።");
+        if (!row.land_level) throw new Error("የመሬት ደረጃ (land_level) ባዶ ነው።");
+        if (!row.land_use) throw new Error("የመሬት አጠቃቀም (land_use) ባዶ ነው።");
+        if (isNaN(parseInt(row.land_level))) throw new Error("የመሬት ደረጃ (land_level) ቁጥር መሆን አለበት።");
+
+        // --- DATA PREPARATION ---
+        const primary_user = {
+          first_name: row.owner_first_name || "መረጃ የለም",
+          middle_name: row.owner_middle_name,
+          last_name: row.owner_last_name || "መረጃ የለም",
+          national_id: row.owner_national_id,
+          email: row.owner_email?.trim(),
+          phone_number: row.owner_phone,
+          address: row.owner_address || "መረጃ የለም",
+          ownership_category: row.ownership_category || "የግል",
+          administrative_unit_id: user.administrative_unit_id,
+        };
+
+        const co_owners = row.co_owners ? parseSafeJSON(row.co_owners, "የተጋሩ ባለቤቶች") : [];
+
+        const land_record = {
+          parcel_number: row.parcel_number,
+          plot_number: row.plot_number,
+          land_level: parseInt(row.land_level),
+          administrative_unit_id: user.administrative_unit_id,
+          area: parseFloat(row.area) || 0,
+          land_use: row.land_use,
+          ownership_type: row.ownership_type || "ግል",
+          coordinates: row.coordinates ? parseSafeJSON(row.coordinates, "ካርታ መጋጠሚያዎች") : null,
+          priority: row.priority || "መካከለኛ",
+        };
+
+        const documents = row.documents
+          ? parseSafeJSON(row.documents, "ሰነዶች").map((doc) => ({
+              document_type: doc.document_type || "ያልተገለጸ",
+              map_number: doc.map_number || null,
+              file_path: doc.file_path || null, // Allow file_path from CSV if provided
+              is_draft: false,
+            }))
+          : [];
+
+        const land_payment = {
+          payment_type: row.payment_type || "የኪራይ ክፍያ",
+          total_amount: parseFloat(row.total_amount) || 0,
+          paid_amount: parseFloat(row.paid_amount) || 0,
+          currency: row.currency || "ETB",
+          payment_status: row.payment_status || "PENDING",
+          description: row.payment_description || "Imported payment",
+        };
+
+        // --- REUSE createLandRecordService ---
+        await createLandRecordService(
+          { primary_user, co_owners, land_record, documents, land_payment },
+          [], // No files uploaded for imports
+          user,
+          { transaction: t, isImport: true }
+        );
+
+        results.createdCount++;
+      } catch (error) {
+        results.skippedCount++;
+        results.errors.push(`ረድፍ ${rowNum}: ${error.message}`);
+        results.errorDetails.push({
+          row: rowNum,
+          parcel_number: row.parcel_number || "N/A",
+          error: error.message,
+        });
+      }
+    }
+
+    if (!transaction) await t.commit();
+    return results;
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`CSV ማስገቢያ አልተሳካም፡ ${error.message}`);
+  }
+};
+// Helper: Safely parse JSON
+const parseSafeJSON = (str, fieldName) => {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    throw new Error(`የ${fieldName} መረጃ ትክክል አይደለም (Invalid JSON)`);
+  }
+};
 const saveLandRecordAsDraftService = async (
   data,
   files,
@@ -1090,10 +1132,10 @@ const getLandRecordByIdService = async (id, options = {}) => {
         "rejection_reason",
         "createdAt",
         "updatedAt",
-        "deletedAt" // Include deletedAt in attributes
+        "deletedAt", // Include deletedAt in attributes
       ],
       paranoid: !includeDeleted, // Control soft-delete filtering
-      transaction
+      transaction,
     });
 
     if (!landRecord) {
@@ -1101,14 +1143,14 @@ const getLandRecordByIdService = async (id, options = {}) => {
     }
 
     // Fetch associated documents and payments with same deletion filter
-    const documents = await documentService.getDocumentsByLandRecordId(id, { 
+    const documents = await documentService.getDocumentsByLandRecordId(id, {
       includeDeleted,
-      transaction 
+      transaction,
     });
-    
-    const payments = await landPaymentService.getPaymentsByLandRecordId(id, { 
+
+    const payments = await landPaymentService.getPaymentsByLandRecordId(id, {
       includeDeleted,
-      transaction 
+      transaction,
     });
 
     return {
@@ -1774,7 +1816,12 @@ const handlePostStatusChange = async (record, newStatus, user, options) => {
 };
 
 // trash management services
-const moveToTrashService = async (recordId, user, deletionReason, options = {}) => {
+const moveToTrashService = async (
+  recordId,
+  user,
+  deletionReason,
+  options = {}
+) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
 
@@ -1842,15 +1889,15 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
       include: [
         {
           model: Document,
-          as: 'documents',
-          paranoid: false
+          as: "documents",
+          paranoid: false,
         },
         {
           model: LandPayment,
-          as: 'payments',
-          paranoid: false
-        }
-      ]
+          as: "payments",
+          paranoid: false,
+        },
+      ],
     });
 
     if (!record) {
@@ -1867,18 +1914,14 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
     // 3. Restore all associated documents
     if (record.documents && record.documents.length > 0) {
       await Promise.all(
-        record.documents.map(doc => 
-          doc.restore({ transaction: t })
-        )
+        record.documents.map((doc) => doc.restore({ transaction: t }))
       );
     }
 
     // 4. Restore all associated payments
     if (record.payments && record.payments.length > 0) {
       await Promise.all(
-        record.payments.map(payment => 
-          payment.restore({ transaction: t })
-        )
+        record.payments.map((payment) => payment.restore({ transaction: t }))
       );
     }
 
@@ -1889,8 +1932,8 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
         action: "RESTORED_FROM_TRASH",
         changed_by: user.id,
         changed_at: new Date(),
-        notes: "Restored from trash"
-      }
+        notes: "Restored from trash",
+      },
     ];
     await record.save({ transaction: t });
 
@@ -1900,12 +1943,12 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
     return await getLandRecordByIdService(recordId, { transaction: t });
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    
+
     // Convert Sequelize errors to more user-friendly messages
-    if (error.name === 'SequelizeDatabaseError') {
+    if (error.name === "SequelizeDatabaseError") {
       throw new Error("የዳታቤዝ ስህተት፡ መልሶ ማስጀመር አልተቻለም።");
     }
-    
+
     throw new Error(`መልሶ ማስጀመር ስህተት፡ ${error.message}`);
   }
 };
@@ -2005,6 +2048,7 @@ module.exports = {
   permanentlyDeleteService,
   getTrashItemsService,
   createLandRecordService,
+  importLandRecordsFromCSVService,
   changeRecordStatusService,
   saveLandRecordAsDraftService,
   getAllLandRecordService,
