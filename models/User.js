@@ -48,12 +48,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         unique: { msg: "ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።" },
-        validate: {
-          is: {
-            args: [/^\+251[79]\d{8}$/],
-            msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ (+2517... ወይም +2519...)።",
-          },
-        },
       },
       password: {
         type: DataTypes.STRING,
@@ -84,10 +78,7 @@ module.exports = (db, DataTypes) => {
             args: [5, 50],
             msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።",
-          },
+       
         },
       },
       address: {

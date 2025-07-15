@@ -18,6 +18,7 @@ const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 const { Op } = require("sequelize");
 const userService = require("./userService");
+const { parseCSVFile } = require("../utils/csvParser");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
   const { transaction, isDraftSubmission = false, draftRecordId, isImport = false } = options;
@@ -206,37 +207,51 @@ const importLandRecordsFromCSVService = async (filePath, user, options = {}) => 
 
     for (const [index, row] of csvData.entries()) {
       const rowNum = index + 1;
+      let rowTransaction = await sequelize.transaction();
       try {
         // --- VALIDATION ---
         if (!row.parcel_number) throw new Error("የመሬት ቁጥር (parcel_number) ባዶ ነው።");
         if (!row.land_level) throw new Error("የመሬት ደረጃ (land_level) ባዶ ነው።");
         if (!row.land_use) throw new Error("የመሬት አጠቃቀም (land_use) ባዶ ነው።");
         if (isNaN(parseInt(row.land_level))) throw new Error("የመሬት ደረጃ (land_level) ቁጥር መሆን አለበት።");
+        if (!row.marital_status) throw new Error("የመሬት ባለቤት marital_status ባዶ ነው።");
 
         // --- DATA PREPARATION ---
         const primary_user = {
-          first_name: row.owner_first_name || "መረጃ የለም",
-          middle_name: row.owner_middle_name,
-          last_name: row.owner_last_name || "መረጃ የለም",
-          national_id: row.owner_national_id,
-          email: row.owner_email?.trim(),
-          phone_number: row.owner_phone,
-          address: row.owner_address || "መረጃ የለም",
+          first_name: row.first_name || "መረጃ የለም",
+          middle_name: row.middle_name || null,
+          last_name: row.last_name || "መረጃ የለም",
+          marital_status: row.marital_status || null,
+          national_id: String(row.national_id) || null,
+          email: row.email?.trim() || null,
+          phone_number: row.phone_number || null,
+          address: row.address || "መረጃ የለም",
           ownership_category: row.ownership_category || "የግል",
-          administrative_unit_id: user.administrative_unit_id,
+          administrative_unit_id: parseInt(user.administrative_unit_id) || null,
         };
 
-        const co_owners = row.co_owners ? parseSafeJSON(row.co_owners, "የተጋሩ ባለቤቶች") : [];
+        const co_owners = row.co_owners
+          ? parseSafeJSON(row.co_owners, "የተጋሩ ባለቤቶች").map((owner) => ({
+              first_name: owner.first_name || "መረጃ የለም",
+              middle_name: owner.middle_name || null,
+              last_name: owner.last_name || "መረጃ የለም",
+              marital_status: owner.marital_status || null,
+              national_id: String(owner.national_id) || null,
+              email: owner.email?.trim() || null,
+              phone_number: owner.phone_number || null,
+              address: owner.address || "መረጃ የለም",
+            }))
+          : [];
 
         const land_record = {
           parcel_number: row.parcel_number,
           plot_number: row.plot_number,
           land_level: parseInt(row.land_level),
-          administrative_unit_id: user.administrative_unit_id,
+          administrative_unit_id: parseInt(user.administrative_unit_id) || null,
           area: parseFloat(row.area) || 0,
           land_use: row.land_use,
           ownership_type: row.ownership_type || "ግል",
-          coordinates: row.coordinates ? parseSafeJSON(row.coordinates, "ካርታ መጋጠሚያዎች") : null,
+          coordinates: row.coordinates ? parseSafeJSON(row.coordinates, "ካርታ መጋጠሚዪዎች") : null,
           priority: row.priority || "መካከለኛ",
         };
 
@@ -244,7 +259,14 @@ const importLandRecordsFromCSVService = async (filePath, user, options = {}) => 
           ? parseSafeJSON(row.documents, "ሰነዶች").map((doc) => ({
               document_type: doc.document_type || "ያልተገለጸ",
               map_number: doc.map_number || null,
-              file_path: doc.file_path || null, // Allow file_path from CSV if provided
+              file_path: doc.file_path || null,
+              reference_number: doc.reference_number || null,
+              description: doc.description || null,
+              issue_date: doc.issue_date || null,
+              preparer_name: doc.preparer_name || null,
+              approver_name: doc.approver_name || null,
+              isActive: doc.isActive ?? true,
+              inActived_reason: doc.inActived_reason || null,
               is_draft: false,
             }))
           : [];
@@ -261,12 +283,13 @@ const importLandRecordsFromCSVService = async (filePath, user, options = {}) => 
         // --- REUSE createLandRecordService ---
         await createLandRecordService(
           { primary_user, co_owners, land_record, documents, land_payment },
-          [], // No files uploaded for imports
+          [],
           user,
-          { transaction: t, isImport: true }
+          { transaction: rowTransaction, isImport: true }
         );
 
         results.createdCount++;
+        await rowTransaction.commit();
       } catch (error) {
         results.skippedCount++;
         results.errors.push(`ረድፍ ${rowNum}: ${error.message}`);
@@ -275,6 +298,7 @@ const importLandRecordsFromCSVService = async (filePath, user, options = {}) => 
           parcel_number: row.parcel_number || "N/A",
           error: error.message,
         });
+        await rowTransaction.rollback();
       }
     }
 
@@ -290,7 +314,7 @@ const parseSafeJSON = (str, fieldName) => {
   try {
     return JSON.parse(str);
   } catch (e) {
-    throw new Error(`የ${fieldName} መረጃ ትክክል አይደለም (Invalid JSON)`);
+    throw new Error(`የ${fieldName} መረጃ ትክክል አይደለም (Invalid JSON): ${e.message}. Problematic string: "${str}"`);
   }
 };
 const saveLandRecordAsDraftService = async (

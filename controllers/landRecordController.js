@@ -1,4 +1,5 @@
 const { sequelize, RECORD_STATUSES } = require("../models");
+const fs = require("fs");
 
 const {
   createLandRecordService,

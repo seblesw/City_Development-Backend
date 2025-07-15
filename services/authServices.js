@@ -151,8 +151,43 @@ const login = async ({ email, phone_number, password }, options = {}) => {
     throw new Error(`መግባት ስህተት: ${error.message}`);
   }
 };
+// logoute service
+const logoutService = async (userId, options = {}) => {
+  const { transaction } = options;  
+  try {
+    // Here you can implement the logic to invalidate the user's session or token
+    // For example, if you're using JWT, you might want to blacklist the token
+    // or simply remove it from the client side.
+    
+    // If you have a session store, you can destroy the session here.
+    
+    return { message: "በተሳካ ሁኔታ ወጣል።" };
+  } catch (error) {
+    throw new Error(`መውጫ ስህተት: ${error.message}`);
+  }
+};
+//forgot password service
+const forgotPasswordService = async (email, options = {}) => {
+  const { transaction } = options;
+  try {
+    // Here you can implement the logic to handle forgot password
+    // For example, sending a reset link to the user's email
+    // or generating a temporary password.
+    
+    // This is just a placeholder implementation
+    if (!email) {
+      throw new Error("ኢሜይል መግለጽ አለበት።");
+    }
+    
+    return { message: "የይለፍ ቃል መለወጫ እንደተላከ ተመልከቱ።" };
+  } catch (error) {
+    throw new Error(`የይለፍ ቃል መለወጫ ስህተት: ${error.message}`);
+  }
+};
 
 module.exports = {
   registerOfficial,
   login,
+  logoutService,
+  forgotPasswordService,
 };
