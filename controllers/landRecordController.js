@@ -28,16 +28,27 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = JSON.parse(req.body.primary_user || "{}");
-    const co_owners = JSON.parse(req.body.co_owners || "[]");
+    const owners = JSON.parse(req.body.owners || "[]"); 
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
 
+    // Validate ownership structure
+    if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
+      return res.status(400).json({
+        status: "error",
+        message: "የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።",
+      });
+    } else if (land_record.ownership_category === "የግል" && owners.length !== 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።",
+      });
+    }
+
     const result = await createLandRecordService(
       {
-        primary_user,
-        co_owners,
+        owners, 
         land_record,
         documents,
         land_payment,

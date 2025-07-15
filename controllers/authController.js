@@ -3,11 +3,11 @@ const { registerOfficial, login, forgotPasswordService } = require("../services/
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
-    const user = req.user; 
+    // const user = req.user; 
 
-    if (!user) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    }
+    // if (!user) {
+    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    // }
 
     const data = {
       first_name: body.first_name,
@@ -28,7 +28,7 @@ const registerOfficialController = async (req, res) => {
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
 
-    const official = await registerOfficial(data, user);
+    const official = await registerOfficial(data);
 
     return res.status(201).json({
       message: "ባለሥልጣን በተሳካ ሁኔታ ተመዝግቧል።",

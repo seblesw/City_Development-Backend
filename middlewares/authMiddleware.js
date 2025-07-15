@@ -31,7 +31,6 @@ const protect = async (req, res, next) => {
         "role_id",
         "is_active",
         "administrative_unit_id",
-        "primary_owner_id",
       ],
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
     });
@@ -51,13 +50,7 @@ const protect = async (req, res, next) => {
       role_id: user.role_id,
       role_name: user.role ? user.role.name : null,
       administrative_unit_id: user.administrative_unit_id,
-      is_co_owner: !!user.primary_owner_id,
     };
-
-    // Ensure officials have administrative_unit_id
-    if (!req.user.is_co_owner && !req.user.administrative_unit_id) {
-      throw Object.assign(new Error("ተጠቃሚው አስተዳደራዊ ክፍል መግለጽ አለበት።"), { status: 403 });
-    }
 
     next();
   } catch (error) {
@@ -78,10 +71,7 @@ const restrictTo = (...allowedRoles) => {
       });
     }
 
-    // Allow co-owners if explicitly permitted
-    if (req.user.is_co_owner && allowedRoles.includes("co_owner")) {
-      return next();
-    }
+
 
     // Check role-based access for officials
     if (!req.user.role_name || !allowedRoles.includes(req.user.role_name)) {
