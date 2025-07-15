@@ -8,85 +8,80 @@ const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, option
   const t = transaction || await sequelize.transaction();
 
   try {
-    const requiredFields = [
-      "first_name", "middle_name", "last_name", "national_id", "phone_number",
-      "marital_status", "ownership_category", "administrative_unit_id"
-    ];
-
-    for (const field of requiredFields) {
-      if (!primaryOwnerData[field]) {
-        throw new Error(`እባክዎ የመሬት ባለቤት ${field} ያስገቡ።`);
-      }
-    }
-
-    // Check ownership category
-    if (!["የግል", "የጋራ"].includes(primaryOwnerData.ownership_category)) {
-      throw new Error("የባለቤትነት ክፍል የግል ወይም የጋራ መሆን አለበት።");
-    }
+    // Cast critical fields
+    const nationalId = String(primaryOwnerData.national_id);
+    const phoneNumber = primaryOwnerData.phone_number ? String(primaryOwnerData.phone_number) : null;
+    const administrativeUnitId = primaryOwnerData.administrative_unit_id
+      ? parseInt(primaryOwnerData.administrative_unit_id)
+      : null;
 
     // Always hash and set default password for primary owner
     const hashedPassword = await bcrypt.hash("12345678", 10);
 
     let primaryOwner = await User.findOne({
       where: {
-        national_id: primaryOwnerData.national_id,
-        phone_number: primaryOwnerData.phone_number,
+        national_id: nationalId,
+        phone_number: phoneNumber,
         deletedAt: { [Op.eq]: null },
       },
       transaction: t,
     });
 
     if (primaryOwner) {
-      await primaryOwner.update({
-        ...primaryOwnerData,
-        updated_by: creatorId,
-      }, { transaction: t });
+      await primaryOwner.update(
+        {
+          ...primaryOwnerData,
+          national_id: nationalId,
+          phone_number: phoneNumber,
+          administrative_unit_id: administrativeUnitId,
+          updated_by: creatorId,
+        },
+        { transaction: t }
+      );
     } else {
-      primaryOwner = await User.create({
-        ...primaryOwnerData,
-        password: hashedPassword, // Set default password
-        role_id: null,
-        oversight_office_id: null,
-        primary_owner_id: null,
-        relationship_type: null,
-        created_by: creatorId,
-        is_active: true,
-      }, { transaction: t });
+      primaryOwner = await User.create(
+        {
+          ...primaryOwnerData,
+          national_id: nationalId,
+          phone_number: phoneNumber,
+          administrative_unit_id: administrativeUnitId,
+          password: hashedPassword,
+          role_id: null,
+          oversight_office_id: null,
+          primary_owner_id: null,
+          relationship_type: null,
+          created_by: creatorId,
+          is_active: true,
+        },
+        { transaction: t }
+      );
     }
 
     const coOwners = [];
 
-    // Add co-owners only if ownership is የጋራ
-    if (primaryOwnerData.ownership_category === "የጋራ") {
-      if (!coOwnersData.length) {
-        throw new Error("የጋራ ባለቤትነት ሲሆን ተጋሪ ባለቤቶችን ያስገቡ።");
-      }
-
+    // Handle co-owners
+    if (primaryOwnerData.ownership_category === "የጋራ" && coOwnersData.length) {
       for (const co of coOwnersData) {
-        const required = ["first_name", "middle_name", "last_name", "relationship_type"];
-        for (const field of required) {
-          if (!co[field]) {
-            throw new Error(`በተጋሪ ባለቤት መረጃ ውስጥ ${field} አልተሞላም።`);
-          }
-        }
+        const coNationalId = co.national_id ? String(co.national_id) : null;
+        const coPhoneNumber = co.phone_number ? String(co.phone_number) : null;
 
-        const coOwner = await User.create({
-          first_name: co.first_name,
-          middle_name: co.middle_name,
-          last_name: co.last_name,
-          phone_number: co.phone_number || null,
-          relationship_type: co.relationship_type,
-          primary_owner_id: primaryOwner.id,
-          administrative_unit_id: primaryOwner.administrative_unit_id,
-          created_by: creatorId,
-          is_active: true,
-        }, { transaction: t });
+        const coOwner = await User.create(
+          {
+            first_name: co.first_name || "መረጃ የለም",
+            middle_name: co.middle_name || null,
+            last_name: co.last_name || "መረጃ የለም",
+            phone_number: coPhoneNumber,
+            relationship_type: co.relationship_type || null,
+            primary_owner_id: primaryOwner.id,
+            administrative_unit_id: administrativeUnitId,
+            created_by: creatorId,
+            is_active: true,
+          },
+          { transaction: t }
+        );
 
         coOwners.push(coOwner);
       }
-
-    } else if (coOwnersData.length > 0) {
-      throw new Error("የግል ባለቤትነት ሲሆን ተጋሪ ባለቤት መረጃ መስጠት አይቻልም።");
     }
 
     if (!transaction) await t.commit();

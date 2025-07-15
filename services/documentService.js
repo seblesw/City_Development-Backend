@@ -2,7 +2,7 @@ const { sequelize, Document, LandRecord, User, Role } = require("../models");
 const { Op } = require("sequelize");
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
-  const { transaction } = options;
+  const { transaction, isImport = false } = options;
   let t = transaction;
 
   try {
@@ -10,17 +10,34 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የሰነድ መረጃዎች (map_number, document_type) አስፈላጊ ናቸው።");
     }
 
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መግባት  አለበት።");
+    // 🔐 File validation based on import flag
+    if (!isImport) {
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        throw new Error("ቢያንስ አንድ ፋይል መግባት አለበት።");
+      }
+      for (const file of files) {
+        if (!file.path || typeof file.path !== 'string') {
+          throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገዴ መያዝ አለበት።");
+        }
+      }
+    } else {
+      // Optional check if files provided
+      if (files && Array.isArray(files)) {
+        for (const file of files) {
+          if (file && file.path && typeof file.path !== 'string') {
+            throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገዴ መያዝ አለበት።");
+          }
+        }
+      }
     }
 
-    if (!data.land_record_id || typeof data.land_record_id !== "number") {
+    if (!data.land_record_id || typeof data.land_record_id !== 'number') {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
 
     t = t || (await sequelize.transaction());
 
-    // Check for map_number uniqueness
+    // ✅ Check for unique map number
     const existingMap = await Document.findOne({
       where: {
         map_number: data.map_number,
@@ -32,7 +49,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("ይህ የካርታ ቁጥር ቀድሞውኑ ተመዝግቧል።");
     }
 
-    // Check reference_number uniqueness
+    // ✅ Check for unique reference number if provided
     if (data.reference_number) {
       const existingRef = await Document.findOne({
         where: {
@@ -42,11 +59,11 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       });
       if (existingRef) {
-        throw new Error("ይህ የሰነድ አመልካች ወይም reference ተመዝግቧል።");
+        throw new Error("ይህ የሰነድ አመልካች ቁጥር ተመዝግቧል።");
       }
     }
 
-    // Document versioning (optional enhancement)
+    // ✅ Document versioning
     const existingDocs = await Document.findAll({
       where: {
         land_record_id: data.land_record_id,
@@ -58,15 +75,17 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     });
     const version = existingDocs.length + 1;
 
-    // Build file metadata
-    const fileMetadata = files.map((file) => ({
-      file_path: file.path,
-      file_name: file.originalname,
-      mime_type: file.mimetype,
-      file_size: file.size,
-    }));
+    // ✅ Build file metadata if files exist
+    const fileMetadata = files && files.length > 0
+      ? files.map((file) => ({
+          file_path: file?.path || null,
+          file_name: file?.originalname || null,
+          mime_type: file?.mimetype || null,
+          file_size: file?.size || null,
+        }))
+      : [];
 
-    // Create the document record
+    // ✅ Create document record
     const documentData = {
       map_number: data.map_number,
       document_type: data.document_type,
@@ -85,7 +104,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
 
     const document = await Document.create(documentData, { transaction: t });
 
-    // Log the document upload on LandRecord action_log
+    // ✅ Log document upload in action_log of LandRecord
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
     });
@@ -114,6 +133,8 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };
+
+
 
 const addFilesToDocumentService = async (
   id,
