@@ -17,7 +17,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     }
 
     if (files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መግባት አለበት።");
+      throw new Error("ቢያንስ አንድ ፋይል መግባት �ለበት።");
     }
 
     // Validate file paths
@@ -95,21 +95,27 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       uploaded_by: creatorId
     }, { transaction: t });
 
-    // Update land record action log
+    // Get the current land record to update action log
+    const landRecord = await LandRecord.findByPk(data.land_record_id, { 
+      transaction: t,
+      lock: true // Add lock to prevent concurrent modifications
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    // Update action log
+    const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+    const newLog = [...currentLog, {
+      action: `DOCUMENT_UPLOAD_${data.document_type}`,
+      document_id: document.id,
+      changed_by: creatorId,
+      changed_at: new Date()
+    }];
+
     await LandRecord.update(
-      {
-        action_log: sequelize.fn(
-          'JSON_ARRAY_APPEND',
-          sequelize.col('action_log'),
-          '$',
-          JSON.stringify({
-            action: `DOCUMENT_UPLOAD_${data.document_type}`,
-            document_id: document.id,
-            changed_by: creatorId,
-            changed_at: new Date()
-          })
-        )
-      },
+      { action_log: newLog },
       {
         where: { id: data.land_record_id },
         transaction: t
@@ -139,7 +145,7 @@ const addFilesToDocumentService = async (
     // Validate updater role
     // Assume updaterId is the req user object, not a DB id
     const updater = updaterId;
-    if (!updater ) {
+    if (!updater ) {L
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 

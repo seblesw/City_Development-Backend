@@ -67,10 +67,6 @@ module.exports = (db, DataTypes) => {
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
           len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50  መሆን አለበት።" },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "የመሬት ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
-          },
         },
       },
       administrative_unit_id: {
@@ -100,30 +96,13 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 100], msg: "የሰሜን አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
-          isValidNeighbor(value) {
-            if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የሰሜን አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
-            }
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የሰሜን አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
         },
       },
       east_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isValidNeighbor(value) {
-            if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የምሥራቅ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
-            }
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የምሥራቅ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
+         validate: {
+          len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
       south_neighbor: {
@@ -131,15 +110,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 100], msg: "የደቡብ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
-          isValidNeighbor(value) {
-            if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የደቡብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
-            }
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የደቡብ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
         },
       },
       west_neighbor: {
@@ -147,15 +117,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 100], msg: "የምዕራብ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
-          isValidNeighbor(value) {
-            if (value && !/^[a-zA-Z0-9\s-]+$/.test(value)) {
-              throw new Error("የምዕራብ አዋሳኝ ፊደል፣ ቁጥር፣ ክፍተት ወይም ሰረዝ ብቻ መያዝ አለበት።");
-            }
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የምዕራብ አዋሳኝ ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
         },
       },
       notes:{
@@ -167,14 +128,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 50], msg: "የብሎክ ቁጥር ከ0 እስከ 50  መሆን አለበት።" },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "የቦታ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የቦታ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
         },
       },
       block_special_name: {
@@ -182,14 +135,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 100], msg: "የብሎክ ልዩ ስም ከ0 እስከ 100  መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s-]+$/,
-            msg: "የብሎክ ልዩ ስም ፊደል፣ ቁጥር፣ ክፍተት ወዯም ሰረዝ ብቻ መያዝ አለበት።",
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የብሎክ ልዩ ስም ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
-          },
         },
       },
       land_level: {
@@ -228,10 +173,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           len: { args: [0, 200], msg: "የአድራሻ መረጃ ከ0 እስከ 200  መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s,.-]+$/,
-            msg: "የአድራሻ መረጃ ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
-          },
         },
       },
       ownership_type: {

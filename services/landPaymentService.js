@@ -56,13 +56,15 @@ const createLandPaymentService = async (data, options = {}) => {
     }
 
     if (data.paid_amount > data.total_amount) {
-      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ አይችልም።");
+      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ �ይችልም።");
     }
 
     // Auto-set payment status based on amounts
     const payment_status = data.paid_amount >= data.total_amount
       ? PAYMENT_STATUSES.COMPLETED
-      : PAYMENT_STATUSES.PENDING;
+      : data.paid_amount > 0
+        ? PAYMENT_STATUSES.PARTIAL
+        : PAYMENT_STATUSES.PENDING;
 
     // Create payment record
     const payment = await LandPayment.create({
@@ -80,23 +82,30 @@ const createLandPaymentService = async (data, options = {}) => {
       is_draft: false
     }, { transaction: t });
 
-    // Update land record action log
+    // Get the current land record to update action log
+    const landRecord = await LandRecord.findByPk(data.land_record_id, { 
+      transaction: t,
+      lock: true
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    // Update action log - PostgreSQL compatible approach
+    const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+    const newLog = [...currentLog, {
+      action: 'PAYMENT_CREATED',
+      payment_id: payment.id,
+      amount: payment.paid_amount,
+      currency: payment.currency,
+      payment_type: payment.payment_type,
+      changed_by: data.created_by,
+      changed_at: new Date()
+    }];
+
     await LandRecord.update(
-      {
-        action_log: sequelize.fn(
-          'JSON_ARRAY_APPEND',
-          sequelize.col('action_log'),
-          '$',
-          JSON.stringify({
-            action: 'PAYMENT_CREATED',
-            payment_id: payment.id,
-            amount: payment.paid_amount,
-            currency: payment.currency,
-            changed_by: data.created_by,
-            changed_at: new Date()
-          })
-        )
-      },
+      { action_log: newLog },
       {
         where: { id: data.land_record_id },
         transaction: t

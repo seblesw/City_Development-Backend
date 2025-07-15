@@ -14,6 +14,8 @@ const {
   Document,
   LandOwner,
   LandPayment,
+  PAYMENT_TYPES,
+  PAYMENT_STATUSES,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -28,14 +30,24 @@ const createLandRecordService = async (data, files, user) => {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
 
-    // 1. Validate ownership structure
+    // 1. Validate Input Data Structure
+    if (!land_record || !land_record.parcel_number || !land_record.ownership_category) {
+      throw new Error("የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።");
+    }
+
+    // 2. Validate Ownership Structure
     if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
       throw new Error("የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።");
     } else if (land_record.ownership_category === "የግል" && owners.length !== 1) {
       throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
     }
 
-    // 2. Check for duplicate parcel number
+    // 3. Validate Parcel Number Format
+    if (!/^[A-Za-z0-9-]+$/.test(land_record.parcel_number)) {
+      throw new Error("የመሬት ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።");
+    }
+
+    // 4. Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -49,7 +61,7 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
     }
 
-    // 3. Create land record metadata
+    // 5. Create Land Record
     const landRecord = await LandRecord.create({
       ...land_record,
       administrative_unit_id: adminunit,
@@ -67,10 +79,9 @@ const createLandRecordService = async (data, files, user) => {
         changed_by: user.id,
         changed_at: new Date()
       }],
-      coordinates: land_record.coordinates ? JSON.stringify(land_record.coordinates) : null
     }, { transaction: t });
 
-    // 4. Create owners through userService
+    // 6. Create and Link Owners
     const createdOwners = await userService.createLandOwner(
       owners,
       adminunit,
@@ -78,7 +89,6 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // 5. Link owners to land record
     await Promise.all(
       createdOwners.map(owner => 
         LandOwner.create({
@@ -87,40 +97,55 @@ const createLandRecordService = async (data, files, user) => {
           ownership_percentage: land_record.ownership_category === "የጋራ" 
             ? (100 / createdOwners.length) 
             : 100,
-          verified: true 
+          verified: true
         }, { transaction: t })
       )
     );
 
-    // 6. Create documents through documentService
+    // 7. Handle Documents
     let documentResults = [];
     if (documents.length > 0) {
+      if (!files || files.length !== documents.length) {
+        throw new Error("ለእያንዳንዱ ሰነድ ተዛማጅ ፋይል መግባት አለበት።");
+      }
+
       documentResults = await Promise.all(
-        documents.map((doc, index) => 
-          documentService.createDocumentService(
+        documents.map((doc, index) => {
+          if (!files[index]?.path) {
+            throw new Error(`ለሰነድ ${doc.document_type || index + 1} ፋይል የለም።`);
+          }
+          
+          return documentService.createDocumentService(
             {
               ...doc,
               land_record_id: landRecord.id,
-              preparer_name: doc.preparer_name || `${user.id}`,
-              file_path: files[index]?.path || doc.file_path
+              preparer_name: doc.preparer_name || `${user.first_name} ${user.last_name}`,
+              file_path: files[index].path
             },
-            [files[index] || { path: doc.file_path }],
+            [files[index]],
             user.id,
             { transaction: t }
-          )
-        )
+          );
+        })
       );
     }
 
-    // 7. Create payment through landPaymentService
+    // 8. Handle Payment
     let landPayment = null;
     if (land_payment && land_payment.total_amount > 0) {
+      if (!land_payment.payment_type || !Object.values(PAYMENT_TYPES).includes(land_payment.payment_type)) {
+        throw new Error("የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።");
+      }
+
       landPayment = await landPaymentService.createLandPaymentService(
         {
           ...land_payment,
           land_record_id: landRecord.id,
-          payer_id: createdOwners[0].id, // First owner as payer
-          created_by: user.id
+          payer_id: createdOwners[0].id,
+          created_by: user.id,
+          payment_status: land_payment.paid_amount >= land_payment.total_amount
+            ? PAYMENT_STATUSES.COMPLETED
+            : PAYMENT_STATUSES.PENDING
         },
         { transaction: t }
       );
