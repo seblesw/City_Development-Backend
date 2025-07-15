@@ -5,6 +5,7 @@ const DOCUMENT_TYPES = {
   TRANSFER_DOCUMENT: "የማስተላለፍ ሰነድ",
   SURVEY_PLAN: "የመሬት መለኪያ ፕላን",
   RECIEPT: "የክፍያ ደረሰኝ",
+  OTHER: "ሌላ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -17,7 +18,7 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      map_number: {
+      plot_number: {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
@@ -44,18 +45,28 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      other_document_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "ሌላ የሰነድ አይነት ከ0 እስከ 100 ፊደል መሆን አለበት።" },
+          is: {
+            args: /^[a-zA-Z0-9\s,.-]+$/,
+            msg: "ሌላ የሰነድ አይነት ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
+          },
+        },
+      },
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 50], msg: "የሰነድ ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።" },
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ አመላካች ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
           is: {
             args: /^[A-Za-z0-9-]+$/,
-            msg: "የሰነድ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የሰነድ ቁጥር ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
+            msg: "የሰነድ አመላካች ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
           },
         },
       },
@@ -72,37 +83,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.JSONB,
         allowNull: false,
         defaultValue: [],
-        validate: {
-          isValidFiles(value) {
-            if (!Array.isArray(value) || value.length === 0) {
-              throw new Error("ቢያንስ አንዴ ፋይል መግለጥ አለበት።");
-            }
-            for (const file of value) {
-              if (!file.file_path || typeof file.file_path !== "string") {
-                throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገዴ መያዝ አለበት።");
-              }
-              if (file.file_name && typeof file.file_name !== "string") {
-                throw new Error("የፋይል ስም ትክክለኛ ሕብረቁምፊ መሆን አለበት።");
-              }
-              if (
-                !file.mime_type ||
-                !["application/pdf", "image/jpeg", "image/png"].includes(
-                  file.mime_type
-                )
-              ) {
-                throw new Error("የፋይል አይነት PDF፣ JPEG ወይም PNG መሆን አለበት።");
-              }
-              if (
-                !file.file_size ||
-                typeof file.file_size !== "number" ||
-                file.file_size <= 0 ||
-                file.file_size > 50 * 1024 * 1024
-              ) {
-                throw new Error("የፋይል መጠን ከ0 ባይት እስከ 50MB መሆን አለበት።");
-              }
-            }
-          },
-        },
       },
       issue_date: {
         type: DataTypes.DATE,
@@ -131,10 +111,10 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          notEmpty: { msg: "የሰነዴ አዘጋጅ ስም ባዶ መሆን አይችልም።" },
+          notEmpty: { msg: "የሰነድ አዘጋጅ ስም ባዶ መሆን አይችልም።" },
           len: {
             args: [1, 100],
-            msg: "የሰነዴ አዘጋጅ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
+            msg: "የሰነድ አዘጋጅ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
           },
         },
       },
@@ -144,11 +124,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: {
             args: [0, 100],
-            msg: "የሰነዴ አጽዳቂ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
-          },
-          notEmptyString(value) {
-            if (value === "")
-              throw new Error("የሰነዴ አጽዳቂ ስም ባዶ መሆን አይችልም። ካልተገለጸ null ይጠቀሙ።");
+            msg: "የሰነድ አጽዳቂ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
           },
         },
       },
@@ -175,13 +151,14 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { unique: true, fields: ["map_number", "land_record_id"] },
+        { unique: true, fields: ["plot_number", "land_record_id"] },
         { fields: ["reference_number", "land_record_id"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
+        { fields: ["other_document_type"] },
       ],
     }
   );
 
-  return {Document, DOCUMENT_TYPES};
+  return { Document, DOCUMENT_TYPES };
 };
