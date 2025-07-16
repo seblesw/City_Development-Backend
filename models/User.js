@@ -19,7 +19,6 @@ module.exports = (db, DataTypes) => {
           len: { args: [2, 50], msg: "ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
         },
       },
-
       middle_name: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -35,7 +34,6 @@ module.exports = (db, DataTypes) => {
           len: { args: [2, 50], msg: "የ አያት ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
         },
       },
-
       email: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -48,12 +46,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         unique: { msg: "ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።" },
-        validate: {
-          is: {
-            args: [/^\+251[79]\d{8}$/],
-            msg: "ትክክለኛ ስልክ ቁጥር ያስገቡ (+2517... ወይም +2519...)።",
-          },
-        },
       },
       password: {
         type: DataTypes.STRING,
@@ -81,12 +73,8 @@ module.exports = (db, DataTypes) => {
         validate: {
           notEmpty: { msg: "ብሔራዊ መታወቂያ ቁጥር ባዶ መሆን አይችልም።" },
           len: {
-            args: [5, 50],
-            msg: "ብሔራዊ መታወቂያ ቁጥር ከ5 እስከ 50 ቁምፊዎች መሆን አለበት።",
-          },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "ብሔራዊ መታወቂያ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መሆን አለበት።",
+            args: [3, 50],
+            msg: "ብሔራዊ መታወቂያ ቁጥር ከ3 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
         },
       },
@@ -99,8 +87,8 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ወንድ", "ሴት", "ሌላ"]],
-            msg: "ጾታ ከተፈቀዱት (ወንድ, ሴት, ሌላ) ውስጥ አንዱ መሆን አለበት።",
+            args: [["ወንድ", "ሴት"]],
+            msg: "ጾታ ከተፈቀዱት (ወንድ, ሴት) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -119,26 +107,10 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ነጠላ", "ባለትዳር",]],
+            args: [["ነጠላ", "ባለትዳር"]],
             msg: "የጋብቻ ሁኔታ ከተፈቀዱት  (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
           },
         },
-      },
-      ownership_category: {
-        type: DataTypes.STRING, 
-        allowNull: true,
-        validate: {
-          isIn: {
-            args: [["የግል", "የጋራ"]],
-            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ ) ውስጥ አንዱ መሆን አለበት።",
-          },
-        },
-      },
-      
-      primary_owner_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
       },
       is_active: {
         type: DataTypes.BOOLEAN,
@@ -175,10 +147,6 @@ module.exports = (db, DataTypes) => {
         {
           fields: ["oversight_office_id"],
           where: { oversight_office_id: { [Op.ne]: null } },
-        },
-        {
-          fields: ["primary_owner_id"],
-          where: { primary_owner_id: { [Op.ne]: null } },
         },
         { fields: ["is_active"] },
         { fields: ["createdAt"] },

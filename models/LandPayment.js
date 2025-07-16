@@ -1,4 +1,3 @@
-
 const PAYMENT_TYPES = {
   LEASE_PAYMENT: "የኪራይ ክፍያ",
   TAX: "ግብር",
@@ -6,6 +5,7 @@ const PAYMENT_TYPES = {
   COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
   YENEGADA_AMETAWI_KFYA: "የንግድ አስተዋጽኦ",
+  OTHER: "ሌላ",
 };
 
 const PAYMENT_STATUSES = {
@@ -37,6 +37,17 @@ module.exports = (db, DataTypes) => {
           isIn: {
             args: [Object.values(PAYMENT_TYPES)],
             msg: "የክፍያ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
+      },
+      other_payment_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "ሌላ የክፍያ አይነት ከ0 እስከ 100 ፊደል መሆን አለበት።" },
+          is: {
+            args: /^[a-zA-Z0-9\s,.-]+$/,
+            msg: "ሌላ የክፍያ አይነት ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
           },
         },
       },
@@ -93,7 +104,10 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isRequiredForPenalty() {
-            if (this.payment_type === PAYMENT_TYPES.PENALTY && !this.penalty_reason) {
+            if (
+              this.payment_type === PAYMENT_TYPES.PENALTY &&
+              !this.penalty_reason
+            ) {
               throw new Error("የቅጣት ክፍያ የቅጣት ምክንያት መግለፅ አለበት።");
             }
           },
@@ -113,14 +127,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: true,
         defaultValue: false,
-        validate: {
-          isBoolean(value) {
-            if (typeof value !== "boolean") {
-              throw new Error("is_draft የተለያዩ እሴቶች መሆን አለበት (true ወይም false)።");
-            }
-          },
-        },
-
       },
       payer_id: {
         type: DataTypes.INTEGER,
@@ -136,10 +142,11 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { fields: ["land_record_id"] },
         { fields: ["payment_type"] },
+        { fields: ["other_payment_type"] },
         { fields: ["payment_status"] },
       ],
     }
   );
 
-  return {LandPayment, PAYMENT_TYPES, PAYMENT_STATUSES};
+  return { LandPayment, PAYMENT_TYPES, PAYMENT_STATUSES };
 };

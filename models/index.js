@@ -18,6 +18,7 @@ const {
   OWNERSHIP_TYPES,
   ZONING_TYPES,
 } = require("./LandRecord")(db, DataTypes);
+const LandOwner = require("./LandOwner")(db, DataTypes);
 const {LandPayment,PAYMENT_STATUSES, PAYMENT_TYPES} = require("./LandPayment")(db, DataTypes);
 const {Document, DOCUMENT_TYPES} = require("./Document")(db, DataTypes);
 
@@ -30,18 +31,6 @@ Role.hasMany(User, {
 });
 
 // User associations
-User.belongsTo(User, {
-  as: "primaryOwner",
-  foreignKey: "primary_owner_id",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-User.hasMany(User, {
-  as: "coOwners",
-  foreignKey: "primary_owner_id",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
 User.belongsTo(Role, {
   foreignKey: "role_id",
   as: "role",
@@ -60,9 +49,10 @@ User.hasMany(OversightOffice, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-User.hasMany(LandRecord, {
-  as: "landRecords",
+User.belongsToMany(LandRecord, {
+  through: LandOwner,
   foreignKey: "user_id",
+  as: "ownedLandRecords",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
@@ -240,9 +230,10 @@ AdministrativeUnit.hasMany(LandRecord, {
 });
 
 // LandRecord associations
-LandRecord.belongsTo(User, {
-  foreignKey: "user_id",
-  as: "user",
+LandRecord.belongsToMany(User, {
+  through: LandOwner,
+  foreignKey: "land_record_id",
+  as: "owners",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
@@ -325,7 +316,7 @@ module.exports = {
   User,
   LandRecord,
   LandPayment,
-
+  LandOwner,
   Document,
   DOCUMENT_TYPES,
   RECORD_STATUSES,

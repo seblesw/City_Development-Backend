@@ -1,114 +1,109 @@
-const { sequelize, User, Role, AdministrativeUnit, OversightOffice } = require("../models");
+const {
+  sequelize,
+  User,
+  Role,
+  AdministrativeUnit,
+  OversightOffice,
+} = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 
-
-const createLandOwner = async (primaryOwnerData, coOwnersData, creatorId, options = {}) => {
+const createLandOwner = async (
+  ownersData,
+  administrativeUnitId,
+  creatorId,
+  options = {}
+) => {
   const { transaction } = options;
-  const t = transaction || await sequelize.transaction();
+  const t = transaction || (await sequelize.transaction());
 
   try {
-    const requiredFields = [
-      "first_name", "middle_name", "last_name", "national_id", "phone_number",
-      "marital_status", "ownership_category", "administrative_unit_id"
-    ];
+    const createdOwners = await Promise.all(
+      ownersData.map(async (ownerData) => {
+        // Cast critical fields
+        const nationalId = ownerData.national_id
+          ? String(ownerData.national_id)
+          : null;
+        const phoneNumber = ownerData.phone_number
+          ? String(ownerData.phone_number)
+          : null;
 
-    for (const field of requiredFields) {
-      if (!primaryOwnerData[field]) {
-        throw new Error(`እባክዎ የመሬት ባለቤት ${field} ያስገቡ።`);
-      }
-    }
+        // Set default password if not provided
+        const password = await bcrypt.hash("12345678", 10);
 
-    // Check ownership category
-    if (!["የግል", "የጋራ"].includes(primaryOwnerData.ownership_category)) {
-      throw new Error("የባለቤትነት ክፍል የግል ወይም የጋራ መሆን አለበት።");
-    }
+        // Try to find existing user by national ID or phone number
+        const whereClause = {
+          [Op.or]: [],
+          deletedAt: { [Op.eq]: null },
+        };
 
-    // Always hash and set default password for primary owner
-    const hashedPassword = await bcrypt.hash("12345678", 10);
+        if (nationalId) whereClause[Op.or].push({ national_id: nationalId });
+        if (phoneNumber) whereClause[Op.or].push({ phone_number: phoneNumber });
 
-    let primaryOwner = await User.findOne({
-      where: {
-        national_id: primaryOwnerData.national_id,
-        phone_number: primaryOwnerData.phone_number,
-        deletedAt: { [Op.eq]: null },
-      },
-      transaction: t,
-    });
+        let owner =
+          whereClause[Op.or].length > 0
+            ? await User.findOne({ where: whereClause, transaction: t })
+            : null;
 
-    if (primaryOwner) {
-      await primaryOwner.update({
-        ...primaryOwnerData,
-        updated_by: creatorId,
-      }, { transaction: t });
-    } else {
-      primaryOwner = await User.create({
-        ...primaryOwnerData,
-        password: hashedPassword, // Set default password
-        role_id: null,
-        oversight_office_id: null,
-        primary_owner_id: null,
-        relationship_type: null,
-        created_by: creatorId,
-        is_active: true,
-      }, { transaction: t });
-    }
-
-    const coOwners = [];
-
-    // Add co-owners only if ownership is የጋራ
-    if (primaryOwnerData.ownership_category === "የጋራ") {
-      if (!coOwnersData.length) {
-        throw new Error("የጋራ ባለቤትነት ሲሆን ተጋሪ ባለቤቶችን ያስገቡ።");
-      }
-
-      for (const co of coOwnersData) {
-        const required = ["first_name", "middle_name", "last_name", "relationship_type"];
-        for (const field of required) {
-          if (!co[field]) {
-            throw new Error(`በተጋሪ ባለቤት መረጃ ውስጥ ${field} አልተሞላም።`);
-          }
+        if (owner) {
+          // Update existing user with new data
+          await owner.update(
+            {
+              ...ownerData,
+              national_id: nationalId,
+              phone_number: phoneNumber,
+              administrative_unit_id: administrativeUnitId,
+              updated_by: creatorId,
+            },
+            { transaction: t }
+          );
+        } else {
+          // Create new user
+          owner = await User.create(
+            {
+              ...ownerData,
+              national_id: nationalId,
+              phone_number: phoneNumber,
+              administrative_unit_id: administrativeUnitId,
+              password,
+              created_by: creatorId,
+              is_active: true,
+            },
+            { transaction: t }
+          );
         }
 
-        const coOwner = await User.create({
-          first_name: co.first_name,
-          middle_name: co.middle_name,
-          last_name: co.last_name,
-          phone_number: co.phone_number || null,
-          relationship_type: co.relationship_type,
-          primary_owner_id: primaryOwner.id,
-          administrative_unit_id: primaryOwner.administrative_unit_id,
-          created_by: creatorId,
-          is_active: true,
-        }, { transaction: t });
-
-        coOwners.push(coOwner);
-      }
-
-    } else if (coOwnersData.length > 0) {
-      throw new Error("የግል ባለቤትነት ሲሆን ተጋሪ ባለቤት መረጃ መስጠት አይቻልም።");
-    }
+        return owner;
+      })
+    );
 
     if (!transaction) await t.commit();
-
-    return { primaryOwner, coOwners };
+    return createdOwners;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የመሬት ባለቤት መፍጠር ስህተት: ${error.message}`);
+    throw new Error(`የመሬት ባለቤቶች መፍጠር ስህተት: ${error.message}`);
   }
 };
 
 const getAllUserService = async (options = {}) => {
   const { transaction } = options;
   try {
-    const users = await User.findAll({  
+    const users = await User.findAll({
       include: [
         { model: Role, as: "role", attributes: ["id", "name"] },
-        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"] },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: OversightOffice,
+          as: "oversightOffice",
+          attributes: ["id", "name"],
+        },
       ],
       attributes: [
-        "id", 
+        "id",
         "first_name",
         "last_name",
         "email",
@@ -130,7 +125,6 @@ const getAllUserService = async (options = {}) => {
     throw new Error(`ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-        
 
 const getUserById = async (id, options = {}) => {
   const { transaction } = options;
@@ -138,9 +132,21 @@ const getUserById = async (id, options = {}) => {
     const user = await User.findByPk(id, {
       include: [
         { model: Role, as: "role", attributes: ["id", "name"] },
-        { model: AdministrativeUnit, as: "administrativeUnit", attributes: ["id", "name"] },
-        { model: OversightOffice, as: "oversightOffice", attributes: ["id", "name"] },
-        { model: User, as: "primaryOwner", attributes: ["id", "first_name", "last_name"] },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: OversightOffice,
+          as: "oversightOffice",
+          attributes: ["id", "name"],
+        },
+        {
+          model: User,
+          as: "primaryOwner",
+          attributes: ["id", "first_name", "last_name"],
+        },
       ],
       attributes: [
         "id",
@@ -156,7 +162,6 @@ const getUserById = async (id, options = {}) => {
         "gender",
         "relationship_type",
         "marital_status",
-        "primary_owner_id",
         "is_active",
         "last_login",
         "createdAt",
@@ -195,17 +200,29 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     }
 
     // Validate administrative_unit_id if changed
-    if (data.administrative_unit_id && data.administrative_unit_id !== user.administrative_unit_id) {
-      const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });
+    if (
+      data.administrative_unit_id &&
+      data.administrative_unit_id !== user.administrative_unit_id
+    ) {
+      const adminUnit = await AdministrativeUnit.findByPk(
+        data.administrative_unit_id,
+        { transaction: t }
+      );
       if (!adminUnit) {
         throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
       }
     }
 
     // Validate oversight_office_id if changed
-    if (data.oversight_office_id !== undefined && data.oversight_office_id !== user.oversight_office_id) {
+    if (
+      data.oversight_office_id !== undefined &&
+      data.oversight_office_id !== user.oversight_office_id
+    ) {
       if (data.oversight_office_id) {
-        const office = await OversightOffice.findByPk(data.oversight_office_id, { transaction: t });
+        const office = await OversightOffice.findByPk(
+          data.oversight_office_id,
+          { transaction: t }
+        );
         if (!office) {
           throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
         }
@@ -225,7 +242,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     // Validate email uniqueness if changed
     if (data.email && data.email !== user.email) {
       const existingEmail = await User.findOne({
-        where: { email: data.email, id: { [Op.ne]: id }, deletedAt: { [Op.eq]: null } },
+        where: {
+          email: data.email,
+          id: { [Op.ne]: id },
+          deletedAt: { [Op.eq]: null },
+        },
         transaction: t,
       });
       if (existingEmail) {
@@ -236,7 +257,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     // Validate phone_number uniqueness if changed
     if (data.phone_number && data.phone_number !== user.phone_number) {
       const existingPhone = await User.findOne({
-        where: { phone_number: data.phone_number, id: { [Op.ne]: id }, deletedAt: { [Op.eq]: null } },
+        where: {
+          phone_number: data.phone_number,
+          id: { [Op.ne]: id },
+          deletedAt: { [Op.eq]: null },
+        },
         transaction: t,
       });
       if (existingPhone) {
@@ -247,7 +272,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     // Validate national_id uniqueness if changed
     if (data.national_id && data.national_id !== user.national_id) {
       const existingNationalId = await User.findOne({
-        where: { national_id: data.national_id, id: { [Op.ne]: id }, deletedAt: { [Op.eq]: null } },
+        where: {
+          national_id: data.national_id,
+          id: { [Op.ne]: id },
+          deletedAt: { [Op.eq]: null },
+        },
         transaction: t,
       });
       if (existingNationalId) {
@@ -271,7 +300,6 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       "gender",
       "relationship_type",
       "marital_status",
-      "primary_owner_id",
       "is_active",
     ];
     for (const field of updatableFields) {

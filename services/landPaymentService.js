@@ -1,58 +1,116 @@
-const { sequelize, LandPayment, LandRecord, User, Role } = require("../models");
+const { sequelize, LandPayment,PAYMENT_STATUSES,PAYMENT_TYPES, LandRecord, User, Role } = require("../models");
 const { Op } = require("sequelize");
 
-const PAYMENT_STATUSES = {
-  PENDING: "በመጠባበቅ ላይ",
-  COMPLETED: "ተጠናቋል",
-  FAILED: "አልተሳካም",
-  CANCELLED: "ተሰርዟል",
-};
+
 
 const createLandPaymentService = async (data, options = {}) => {
   const { transaction } = options;
-  
-    console.log(data)
-  let t = transaction;
+  const t = transaction || await sequelize.transaction();
+
   try {
-    if (
-      !data.payment_type ||
-      !data.total_amount ||
-      !data.paid_amount ||
-      !data.currency
-    ) {
+    // Validate required fields
+    const requiredFields = [
+      'payment_type', 
+      'total_amount', 
+      'paid_amount', 
+      'currency',
+      'land_record_id',
+      'payer_id'
+    ];
+    
+    const missingFields = requiredFields.filter(field => !data[field]);
+    if (missingFields.length > 0) {
       throw new Error(
-        "የክፍያ መረጃዎች (payment_type, total_amount, paid_amount jh, currency) መግለጽ አለባቸው።"
+        `የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(', ')}`
       );
     }
-    if (!data.land_record_id || typeof data.land_record_id !== "number") {
+
+    // Validate field types
+    if (typeof data.land_record_id !== 'number' || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    if (!data.payer_id || typeof data.payer_id !== "number") {
+
+    if (typeof data.payer_id !== 'number' || data.payer_id <= 0) {
       throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
     }
 
-    t = t || (await sequelize.transaction());
-
-    // Validate payment_type enum
-    const validPaymentTypes = ["የኪራይ ክፍያ", "የባለቤትነት ክፍያ"];
-    if (!validPaymentTypes.includes(data.payment_type)) {
+    // Validate payment type against enum
+    if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
       throw new Error(
-        `የክፍያ አይነት ከተፈቀዱቷ እሴቶች (${validPaymentTypes.join(", ")}) ውስጥ መሆን አለበት።`
+        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(', ')}`
       );
     }
 
-    // Create payment
-    const paymentData = {
+    // Validate currency against enum
+    if (!['ETB', 'USD'].includes(data.currency)) {
+      throw new Error("ምንዛሪ ከ ETB ወይም USD መሆን አለበት።");
+    }
+
+    // Validate amounts
+    if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {
+      throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
+    }
+
+    if (typeof data.paid_amount !== 'number' || data.paid_amount < 0) {
+      throw new Error("የተከፈለው መጠን ከ 0 በላይ ወይም እኩል ትክክለኛ ቁጥር መሆን አለበት።");
+    }
+
+    if (data.paid_amount > data.total_amount) {
+      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ �ይችልም።");
+    }
+
+    // Auto-set payment status based on amounts
+    const payment_status = data.paid_amount >= data.total_amount
+      ? PAYMENT_STATUSES.COMPLETED
+      : data.paid_amount > 0
+        ? PAYMENT_STATUSES.PARTIAL
+        : PAYMENT_STATUSES.PENDING;
+
+    // Create payment record
+    const payment = await LandPayment.create({
+      land_record_id: data.land_record_id,
       payment_type: data.payment_type,
+      other_payment_type: data.other_payment_type || null,
       total_amount: data.total_amount,
       paid_amount: data.paid_amount,
       currency: data.currency,
+      payment_status,
+      penalty_reason: data.penalty_reason || null,
       description: data.description || null,
-      land_record_id: data.land_record_id,
       payer_id: data.payer_id,
       created_by: data.created_by,
-    };
-    const payment = await LandPayment.create(paymentData, { transaction: t });
+      is_draft: false
+    }, { transaction: t });
+
+    // Get the current land record to update action log
+    const landRecord = await LandRecord.findByPk(data.land_record_id, { 
+      transaction: t,
+      lock: true
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    // Update action log - PostgreSQL compatible approach
+    const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+    const newLog = [...currentLog, {
+      action: 'PAYMENT_CREATED',
+      payment_id: payment.id,
+      amount: payment.paid_amount,
+      currency: payment.currency,
+      payment_type: payment.payment_type,
+      changed_by: data.created_by,
+      changed_at: new Date()
+    }];
+
+    await LandRecord.update(
+      { action_log: newLog },
+      {
+        where: { id: data.land_record_id },
+        transaction: t
+      }
+    );
 
     if (!transaction) await t.commit();
     return payment;
@@ -61,7 +119,6 @@ const createLandPaymentService = async (data, options = {}) => {
     throw new Error(`የክፍያ መፍጠር ስህተት: ${error.message}`);
   }
 };
-
 const getLandPaymentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {

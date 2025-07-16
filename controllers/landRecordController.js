@@ -1,4 +1,5 @@
 const { sequelize, RECORD_STATUSES } = require("../models");
+const fs = require("fs");
 
 const {
   createLandRecordService,
@@ -18,6 +19,7 @@ const {
   restoreFromTrashService,
   permanentlyDeleteService,
   getTrashItemsService,
+  importLandRecordsFromCSVService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -26,17 +28,28 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const primary_user = JSON.parse(req.body.data).primary_user || "{}";
-    const co_owners = JSON.parse(req.body.data).co_owners || "[]";
-    const land_record = JSON.parse(req.body.data).land_record || "{}";
-    const documents = JSON.parse(req.body.data).documents || "[]";
-    const land_payment = JSON.parse(req.body.data).land_payment || "{}";
+    const owners = JSON.parse(req.body.owners || "[]"); 
+    const land_record = JSON.parse(req.body.land_record || "{}");
+    const documents = JSON.parse(req.body.documents || "[]");
+    const land_payment = JSON.parse(req.body.land_payment || "{}");
+
+    // Validate ownership structure
+    if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
+      return res.status(400).json({
+        status: "error",
+        message: "የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።",
+      });
+    } else if (land_record.ownership_category === "የግል" && owners.length !== 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።",
+      });
+    }
 
     // console.log(req.body);
     const result = await createLandRecordService(
       {
-        primary_user,
-        co_owners,
+        owners, 
         land_record,
         documents,
         land_payment,
@@ -55,6 +68,42 @@ const createLandRecord = async (req, res) => {
     return res.status(400).json({
       status: "error",
       message: `የመዝገብ መፍጠር ስህተት: ${error.message}`,
+    });
+  }
+};
+const importLandRecordsFromCSV = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    if (!req.file) {
+      throw new Error("CSV ፋይል ያስፈልጋል።");
+    }
+
+    const results = await importLandRecordsFromCSVService(
+      req.file.path,
+      req.user,
+      { transaction: t }
+    );
+
+    await t.commit();
+    fs.unlinkSync(req.file.path); // Cleanup
+
+    res.status(201).json({
+      status: "success",
+      message: `CSV በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+      data: {
+        created: results.createdCount,
+        skipped: results.skippedCount,
+        errors: results.errors.slice(0, 10), // Show first 10 errors
+      },
+    });
+  } catch (error) {
+    await t.rollback();
+    if (req.file?.path) fs.unlinkSync(req.file.path);
+
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
     });
   }
 };
@@ -387,58 +436,36 @@ const updateLandRecord = async (req, res) => {
     });
   }
 };
-
+// Changing the status of a land record
 const changeRecordStatus = async (req, res) => {
-  const t = await sequelize.transaction();
   try {
-    const { record_status, notes, rejectionReason } = req.body;
+    const { record_status, notes, rejection_reason } = req.body;
     const { id: recordId } = req.params;
     const user = req.user;
 
-    // Validate required fields
+    // Basic validation
     if (!record_status) {
-      throw new Error("የመዝገብ ሁኔታ ያስፈልጋል።");
-    }
-
-    if (record_status === RECORD_STATUSES.REJECTED && !rejectionReason) {
-      throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
+      return res.status(400).json({ status: "error", message: "Record status is required" });
     }
 
     const updatedRecord = await changeRecordStatusService(
       recordId,
       record_status,
-      user,
-      notes,
-      rejectionReason,
-      { transaction: t }
+      user.id,
+      { notes, rejection_reason }
     );
-
-    await t.commit();
 
     res.status(200).json({
       status: "success",
-      message: getStatusChangeMessage(record_status),
-      data: updatedRecord,
+      message: `Record status updated to ${record_status}`,
+      data: updatedRecord
     });
   } catch (error) {
-    await t.rollback();
     res.status(400).json({
       status: "error",
-      message: error.message,
+      message: error.message
     });
   }
-};
-
-// Helper function for status-specific messages
-const getStatusChangeMessage = (status) => {
-  const messages = {
-    [RECORD_STATUSES.DRAFT]: "መዝገብ ወደ ረቂቅ ተመለሰ",
-    [RECORD_STATUSES.SUBMITTED]: "መዝገብ በተሳካ ሁኔታ ቀርቧል",
-    [RECORD_STATUSES.UNDER_REVIEW]: "መዝገብ በግምገማ ላይ ሆኗል",
-    [RECORD_STATUSES.APPROVED]: "መዝገብ በተሳካ ሁኔታ ጸድቋል",
-    [RECORD_STATUSES.REJECTED]: "መዝገብ በተሳካ ሁኔታ ውድቅ ተደርጓል",
-  };
-  return messages[status] || "የመዝገብ ሁኔታ ተቀይሯል";
 };
 // trash management 
 const moveToTrash = async (req, res) => {
@@ -546,6 +573,7 @@ module.exports = {
   permanentlyDelete,
   getTrash,
   createLandRecord,
+  importLandRecordsFromCSV,
   saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,
