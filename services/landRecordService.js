@@ -184,7 +184,6 @@ const createLandRecordService = async (data, files, user) => {
       documents: documentResults,
       landPayment,
     };
-  }
   } catch (error) {
     await t.rollback();
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
