@@ -24,10 +24,6 @@ module.exports = (db, DataTypes) => {
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
           len: { args: [1, 50], msg: "የካርታ ቁጥር ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።" },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "የካርታ ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
-          },
         },
       },
       land_record_id: {
@@ -81,7 +77,7 @@ module.exports = (db, DataTypes) => {
       },
       files: {
         type: DataTypes.JSONB,
-        allowNull: false,
+        allowNull: true,
         defaultValue: [],
       },
       issue_date: {

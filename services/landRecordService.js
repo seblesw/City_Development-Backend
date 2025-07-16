@@ -23,6 +23,7 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { parseCSVFile } = require("../utils/csvParser");
 
+
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
 
@@ -123,28 +124,26 @@ const createLandRecordService = async (data, files, user) => {
       )
     );
 
-    // 7. Handle Documents
+    // 7. Handle Documents - allow missing files or fewer files than documents
     let documentResults = [];
     if (documents.length > 0) {
-      if (!files || files.length !== documents.length) {
-        throw new Error("ለእያንዳንዱ ሰነድ ተዛማጅ ፋይል መግባት አለበት።");
-      }
+      // Use empty array if files is missing or not an array
+      const filesArr = Array.isArray(files) ? files : [];
 
       documentResults = await Promise.all(
         documents.map((doc, index) => {
-          if (!files[index]?.path) {
-            throw new Error(`ለሰነድ ${doc.document_type || index + 1} ፋይል የለም።`);
-          }
+          const file = filesArr[index];
+
+          // Pass empty array if no file or missing path
+          const fileForDoc = file && file.path ? [file] : [];
 
           return documentService.createDocumentService(
             {
               ...doc,
               land_record_id: landRecord.id,
-              preparer_name:
-                doc.preparer_name || `${user.first_name} ${user.last_name}`,
-              file_path: files[index].path,
+              file_path: null,
             },
-            [files[index]],
+            fileForDoc,
             user.id,
             { transaction: t }
           );
@@ -190,6 +189,7 @@ const createLandRecordService = async (data, files, user) => {
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
+
 const importLandRecordsFromCSVService = async (
   filePath,
   user,
@@ -199,6 +199,11 @@ const importLandRecordsFromCSVService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    if (!user?.administrative_unit_id) {
+      throw new Error("የተጠቃሚው administrative_unit_id አልተገኘም።");
+    }
+
+    const adminUnitId = user.administrative_unit_id;
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -207,133 +212,196 @@ const importLandRecordsFromCSVService = async (
       errorDetails: [],
     };
 
-    const csvData = await parseCSVFile(filePath);
+    // 1. Parse and validate CSV
+    const csvData = await parseAndValidateCSV(filePath);
     results.totalRows = csvData.length;
 
-    console.log(
-      "Authenticated user.administrative_unit_id:",
-      user.administrative_unit_id,
-      typeof user.administrative_unit_id
-    );
+    // 2. Group rows by parcel_number + plot_number
+    const recordsGrouped = groupCSVRows(csvData);
 
-    // Group rows by parcel_number
-    const recordsByParcel = {};
-    for (const row of csvData) {
-      const parcelNumber =
-        row.parcel_number || `unknown_${Math.random().toString(36).slice(2)}`;
-      if (!recordsByParcel[parcelNumber]) {
-        recordsByParcel[parcelNumber] = [];
-      }
-      recordsByParcel[parcelNumber].push(row);
-    }
+    // 3. Process each group
+    for (const [groupKey, rows] of Object.entries(recordsGrouped)) {
+      const rowTransaction = await sequelize.transaction();
+      const primaryRow = rows[0];
 
-    for (const [parcelNumber, rows] of Object.entries(recordsByParcel)) {
+      // ✅ Ensure rowNum is available for error handling
       const rowNum =
-        csvData.findIndex((r) => r.parcel_number === parcelNumber) + 1;
-      let rowTransaction = await sequelize.transaction();
+        csvData.findIndex(
+          (r) =>
+            r.parcel_number === primaryRow.parcel_number &&
+            r.plot_number === primaryRow.plot_number
+        ) + 1;
+
       try {
-        // Use the first row for primary user and land data
-        const row = rows[0];
+        const { owners, landRecordData, documents, payments } =
+          await transformCSVData(rows, adminUnitId);
 
-        // --- PRIMARY USER ---
-        const primary_user = {
-          first_name: row.first_name || "መረጃ የለም",
-          middle_name: row.middle_name || null,
-          last_name: row.last_name || "መረጃ የለም",
-          marital_status: row.marital_status || null,
-          national_id: String(row.national_id) || null,
-          email: row.email?.trim() || null,
-          phone_number: row.phone_number || null,
-          address: row.address || "መረጃ የለም",
-          ownership_category: row.ownership_category || "የግል",
-          administrative_unit_id: isNaN(parseInt(user.administrative_unit_id))
-            ? null
-            : parseInt(user.administrative_unit_id),
-        };
-
-        console.log(`Row ${rowNum} primary_user:`, {
-          national_id: primary_user.national_id,
-          national_id_type: typeof primary_user.national_id,
-          phone_number: primary_user.phone_number,
-          phone_number_type: typeof primary_user.phone_number,
-          administrative_unit_id: primary_user.administrative_unit_id,
-          administrative_unit_id_type:
-            typeof primary_user.administrative_unit_id,
-        });
-
-        // --- LAND RECORD ---
-        const land_record = {
-          parcel_number: row.parcel_number || null,
-          plot_number: row.plot_number || null,
-          land_level: parseInt(row.land_level) || 0,
-          administrative_unit_id: isNaN(parseInt(user.administrative_unit_id))
-            ? null
-            : parseInt(user.administrative_unit_id),
-          area: parseFloat(row.area) || 0,
-          land_use: row.land_use || null,
-          zoning_type: row.zoning_type || "የንግድ ማዕከል",
-          ownership_type: row.ownership_type || "ግል",
-          coordinates: row.coordinates ? JSON.parse(row.coordinates) : null,
-          priority: row.priority || "መካከለኛ",
-        };
-
-        // --- DOCUMENT ---
-        const documents = rows
-          .filter((r) => r.document_type)
-          .map((r) => ({
-            document_type: r.document_type || "ያልተገለጸ",
-            map_number: r.document_map_number || null,
-            file_path: null,
-            reference_number: r.document_reference_number || null,
-            description: r.document_description || null,
-            issue_date: r.document_issue_date || null,
-            preparer_name: r.document_preparer_name || null,
-            approver_name: r.document_approver_name || null,
-            isActive:
-              r.document_is_active === "true" || r.document_is_active === true,
-            inActived_reason: r.document_inactived_reason || null,
-            is_draft: false,
-          }));
-
-        // --- LAND PAYMENT ---
-        const land_payment = {
-          payment_type: row.payment_type || "የኪራይ ክፍያ",
-          total_amount: parseFloat(row.total_amount) || 0,
-          paid_amount: parseFloat(row.paid_amount) || 0,
-          currency: row.currency || "ETB",
-          payment_status: row.payment_status || "PENDING",
-          description: row.payment_description || "Imported payment",
-        };
-
-        // --- REUSE createLandRecordService ---
         await createLandRecordService(
-          { primary_user, co_owners: [], land_record, documents, land_payment },
-          [],
-          user,
-          { transaction: rowTransaction, isImport: true }
+          {
+            land_record: landRecordData,
+            owners,
+            documents,
+            land_payment: payments[0] || null, // adapt if you expect multiple
+          },
+          [], // No files for CSV import
+          user, // ✅ Pass the full user object
+          {
+            transaction: rowTransaction,
+            isImport: true,
+          }
         );
 
         results.createdCount++;
         await rowTransaction.commit();
       } catch (error) {
-        results.skippedCount++;
-        results.errors.push(`ረድፍ ${rowNum}: ${error.message}`);
-        results.errorDetails.push({
-          row: rowNum,
-          parcel_number: parcelNumber,
-          error: error.message,
-        });
         await rowTransaction.rollback();
+        handleImportError(error, primaryRow, rowNum, results);
       }
     }
 
     if (!transaction) await t.commit();
     return results;
   } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(`CSV ማስገቢያ አልተሳካም፡ ${error.message}`);
+    if (!transaction) await t.rollback();
+    throw new Error(`CSV import failed: ${error.message}`);
   }
 };
+
+// ------------------ Helper Functions ------------------
+
+async function parseAndValidateCSV(filePath) {
+  const csvData = await parseCSVFile(filePath);
+  return csvData.filter((row) => {
+    if (!row.parcel_number || !row.plot_number) {
+      throw new Error(
+        "Each row must contain both parcel_number and plot_number."
+      );
+    }
+    return true;
+  });
+}
+
+function groupCSVRows(csvData) {
+  return csvData.reduce((groups, row) => {
+    const key = `${row.parcel_number}_${row.plot_number}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {});
+}
+
+async function transformCSVData(rows, adminUnitId) {
+  const primaryRow = rows[0];
+  const ownershipCategory = primaryRow.ownership_category?.trim();
+
+  // 1. Prepare Owners
+  let owners = [];
+if (ownershipCategory === "የጋራ") {
+  owners = rows
+    .map((row) => ({
+      first_name: row.first_name || "Unknown",
+      last_name: row.last_name || "Unknown",
+      national_id: String(row.national_id || "").trim(),
+      email: row.email?.trim() || null,
+      phone_number: row.phone_number || null,
+      relationship_type: row.relationship_type || "ባለቤት",
+      address: row.address || null,
+    }))
+    .filter((owner) => owner.national_id); 
+  } else if (ownershipCategory === "የግል") {
+    owners.push({
+      first_name: primaryRow.first_name || "Unknown",
+      last_name: primaryRow.last_name || "Unknown",
+      national_id: String(primaryRow.national_id || ""),
+      email: primaryRow.email?.trim() || null,
+      phone_number: primaryRow.phone_number || null,
+      relationship_type: primaryRow.relationship_type || "ባለቤት",
+    });
+  }
+
+  // 2. Prepare Land Record
+  const landRecordData = {
+    parcel_number: primaryRow.parcel_number,
+    plot_number: primaryRow.plot_number,
+    land_level: parseInt(primaryRow.land_level) || 1,
+    area: parseFloat(primaryRow.area) || 0,
+    administrative_unit_id: adminUnitId,
+    land_use: primaryRow.land_use || "መኖሪያ",
+    ownership_type: primaryRow.ownership_type || "የግል",
+    zoning_type: primaryRow.zoning_type || "መኖሪያ",
+    priority: primaryRow.priority || "መካከለኛ",
+    block_number: primaryRow.block_number || null,
+    block_special_name: primaryRow.block_special_name || null,
+    ownership_category: ownershipCategory,
+  };
+
+  // 3. Prepare Documents (one shared for የጋራ, first row only)
+  const documentRows =
+    ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+
+  const documents = documentRows
+    .filter((row) => row.document_type)
+    .map((row) => ({
+      document_type: row.document_type,
+      other_document_type: row.other_document_type || null,
+      reference_number: row.document_reference_number || null,
+      description: row.document_description || "",
+      issue_date: row.document_issue_date
+        ? new Date(row.document_issue_date)
+        : null,
+      isActive: ["true", "yes", "1"].includes(
+        String(row.document_is_active || "").toLowerCase()
+      ),
+      plot_number: row.plot_number,
+      files: [], // No actual file uploaded for CSV
+    }));
+
+  // 4. Prepare Payments (one shared for የጋራ, from first row only)
+  const paymentRows =
+    ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+
+  const payments = paymentRows
+    .filter((row) => row.payment_type)
+    .map((row) => ({
+      payment_type: row.payment_type,
+      other_payment_type: row.other_payment_type || null,
+      total_amount: parseFloat(row.total_amount) || 0,
+      paid_amount: parseFloat(row.paid_amount) || 0,
+      currency: row.currency || "ETB",
+      payment_status: calculatePaymentStatus(row),
+      description: row.payment_description || "ከ CSV ተመጣጣኝ ክፍያ",
+    }));
+
+  return { owners, landRecordData, documents, payments };
+}
+function calculatePaymentStatus(row) {
+  const total = parseFloat(row.total_amount) || 0;
+  const paid = parseFloat(row.paid_amount) || 0;
+
+  if (paid >= total) return "ተጠናቋል";
+  if (paid > 0 && paid < total) return "በመጠባበቅ ላይ";
+  return "አልተከፈለም";
+}
+
+function handleImportError(error, row, rowNum, results) {
+  const errorMsg = `Row ${rowNum} (${row.parcel_number}): ${error.message}`;
+  results.skippedCount++;
+  results.errors.push(errorMsg);
+  results.errorDetails.push({
+    row: rowNum,
+    parcel_number: row.parcel_number,
+    plot_number: row.plot_number,
+    error: error.message,
+    stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+  });
+
+  console.error("Import error:", {
+    parcel_number: row.parcel_number,
+    error: error.message,
+  });
+}
+
+//save drafts
 const saveLandRecordAsDraftService = async (
   data,
   files,
@@ -1466,72 +1534,86 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
   if (!userId) throw new Error("User ID is required");
 
   const { transaction, page = 1, pageSize = 10 } = options;
-  const t = transaction || await sequelize.transaction();
+  const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
     // Fetch records with optimized includes
     const { count, rows: records } = await LandRecord.findAndCountAll({
-      where: { 
+      where: {
         created_by: userId,
-        deletedAt: null 
+        deletedAt: null,
       },
       include: [
         {
           model: User,
-          as: 'owners',
+          as: "owners",
           through: { attributes: [] },
-          attributes: ['id', 'first_name', 'middle_name', 'last_name', 'national_id'],
-          required: false
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "national_id",
+          ],
+          required: false,
         },
         {
           model: AdministrativeUnit,
-          as: 'administrativeUnit',
-          attributes: ['id', 'name']
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
         },
         // Include documents directly
         {
           model: Document,
-          as: 'documents',
-          attributes: ['id','plot_number', 'document_type', 'reference_number', 'createdAt'],
+          as: "documents",
+          attributes: [
+            "id",
+            "plot_number",
+            "document_type",
+            "reference_number",
+            "createdAt",
+          ],
           where: { deletedAt: null },
           required: false,
-          limit: 3 // Get only 3 most recent documents
+          limit: 3, // Get only 3 most recent documents
         },
         // Include payments directly
         {
           model: LandPayment,
-          as: 'payments',
-          attributes: ['id', 'payment_type', 'paid_amount', 'createdAt'],
+          as: "payments",
+          attributes: ["id", "payment_type", "paid_amount", "createdAt"],
           where: { deletedAt: null },
           required: false,
-          limit: 3 // Get only 3 most recent payments
-        }
+          limit: 3, // Get only 3 most recent payments
+        },
       ],
       attributes: [
-        'id',
-        'parcel_number',
-        'land_level',
-        'area',
-        'land_use',
-        'record_status',
-        'createdAt'
+        "id",
+        "parcel_number",
+        "land_level",
+        "area",
+        "land_use",
+        "record_status",
+        "createdAt",
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       offset,
       limit: pageSize,
       distinct: true, // For correct counting
-      transaction: t
+      transaction: t,
     });
 
     // Process records
-    const processedRecords = records.map(record => {
+    const processedRecords = records.map((record) => {
       const recordData = record.toJSON();
-      
+
       // Calculate total payments
-      recordData.total_payments = recordData.payments?.reduce(
-        (sum, payment) => sum + parseFloat(payment.paid_amount || 0), 0
-      ) || 0;
+      recordData.total_payments =
+        recordData.payments?.reduce(
+          (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
+          0
+        ) || 0;
 
       return recordData;
     });
@@ -1543,40 +1625,46 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       page,
       pageSize,
       totalPages: Math.ceil(count / pageSize),
-      data: processedRecords
+      data: processedRecords,
     };
-
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    console.error('Error fetching creator records:', {
+    console.error("Error fetching creator records:", {
       userId,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
     throw new Error(`Failed to get records by creator: ${error.message}`);
   }
 };
 const getMyLandRecordsService = async (userId, options = {}) => {
-  const { transaction, page = 1, pageSize = 10, includeDeleted = false } = options;
-  const t = transaction || await sequelize.transaction();
+  const {
+    transaction,
+    page = 1,
+    pageSize = 10,
+    includeDeleted = false,
+  } = options;
+  const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
     // 1. First find all land records where user is an owner
     const userLandRecords = await LandRecord.findAll({
-      attributes: ['id'],
-      include: [{
-        model: User,
-        as: 'owners',
-        through: { where: { user_id: userId } },
-        attributes: [],
-        required: true
-      }],
+      attributes: ["id"],
+      include: [
+        {
+          model: User,
+          as: "owners",
+          through: { where: { user_id: userId } },
+          attributes: [],
+          required: true,
+        },
+      ],
       transaction: t,
-      raw: true
+      raw: true,
     });
 
-    const landRecordIds = userLandRecords.map(record => record.id);
+    const landRecordIds = userLandRecords.map((record) => record.id);
     if (landRecordIds.length === 0) {
       await t.commit();
       return {
@@ -1584,7 +1672,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         page,
         pageSize,
         totalPages: 0,
-        data: []
+        data: [],
       };
     }
 
@@ -1592,107 +1680,105 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     const { count, rows } = await LandRecord.findAndCountAll({
       where: {
         id: { [Op.in]: landRecordIds },
-        ...(!includeDeleted && { deletedAt: null })
+        ...(!includeDeleted && { deletedAt: null }),
       },
       include: [
         {
           model: User,
-          as: 'owners',
+          as: "owners",
           through: { attributes: [] },
           attributes: [
-            'id',
-            'first_name',
-            'middle_name',
-            'last_name',
-            'email',
-            'phone_number',
-            'national_id'
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "national_id",
           ],
-          paranoid: !includeDeleted
+          paranoid: !includeDeleted,
         },
         {
           model: AdministrativeUnit,
-          as: 'administrativeUnit',
-          attributes: ['id', 'name']
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
         },
         {
           model: Document,
-          as: 'documents',
-          attributes: [
-            'id',
-            'document_type',
-            'reference_number',
-            'createdAt'
-          ],
+          as: "documents",
+          attributes: ["id", "document_type", "reference_number", "createdAt"],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
           limit: 3,
-          paranoid: !includeDeleted
+          paranoid: !includeDeleted,
         },
         {
           model: LandPayment,
-          as: 'payments',
+          as: "payments",
           attributes: [
-            'id',
-            'payment_type',
-            'total_amount',
-            'paid_amount',
-            'currency',
-            'payment_status',
-            'createdAt'
+            "id",
+            "payment_type",
+            "total_amount",
+            "paid_amount",
+            "currency",
+            "payment_status",
+            "createdAt",
           ],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
           limit: 3,
-          paranoid: !includeDeleted
-        }
+          paranoid: !includeDeleted,
+        },
       ],
       attributes: [
-        'id',
-        'parcel_number',
-        'block_number',
-        'land_use',
-        'ownership_type',
-        'area',
-        'record_status',
-        'priority',
-        'createdAt',
-        'updatedAt'
+        "id",
+        "parcel_number",
+        "block_number",
+        "land_use",
+        "ownership_type",
+        "area",
+        "record_status",
+        "priority",
+        "createdAt",
+        "updatedAt",
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       distinct: true,
       offset,
       limit: pageSize,
       paranoid: !includeDeleted,
-      transaction: t
+      transaction: t,
     });
     // console.log(records)
 
     // 3. Process and transform the data
-    const processedRecords = rows.map(record => {
+    const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
-      
+
       // Mark the logged-in user among owners
-      const owners = (recordData.owners || []).map(owner => ({
+      const owners = (recordData.owners || []).map((owner) => ({
         ...owner,
-        is_current_user: owner.id === userId
+        is_current_user: owner.id === userId,
       }));
 
       // Parse coordinates safely
       try {
-        recordData.coordinates = recordData.coordinates 
-          ? JSON.parse(recordData.coordinates) 
+        recordData.coordinates = recordData.coordinates
+          ? JSON.parse(recordData.coordinates)
           : null;
       } catch (e) {
         recordData.coordinates = null;
       }
 
       // Calculate payment summary
-      const paymentSummary = recordData.payments?.reduce((acc, payment) => {
-        acc.total += parseFloat(payment.total_amount || 0);
-        acc.paid += parseFloat(payment.paid_amount || 0);
-        return acc;
-      }, { total: 0, paid: 0, balance: 0 });
+      const paymentSummary = recordData.payments?.reduce(
+        (acc, payment) => {
+          acc.total += parseFloat(payment.total_amount || 0);
+          acc.paid += parseFloat(payment.paid_amount || 0);
+          return acc;
+        },
+        { total: 0, paid: 0, balance: 0 }
+      );
 
       if (paymentSummary) {
         paymentSummary.balance = paymentSummary.total - paymentSummary.paid;
@@ -1704,7 +1790,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         payment_summary: paymentSummary,
         administrative_unit: recordData.administrativeUnit || null,
         documents: recordData.documents || [],
-        payments: recordData.payments || []
+        payments: recordData.payments || [],
       };
     });
 
@@ -1715,16 +1801,15 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       page,
       pageSize,
       totalPages: Math.ceil(count / pageSize),
-      data: processedRecords
+      data: processedRecords,
     };
-
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    
-    console.error('Error fetching user land records:', {
+
+    console.error("Error fetching user land records:", {
       userId,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
 
     throw new Error(`Failed to get user land records: ${error.message}`);
