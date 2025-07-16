@@ -1,89 +1,71 @@
-const { sequelize, Document, LandRecord, User, Role } = require("../models");
+const { sequelize, Document, DOCUMENT_TYPES,LandRecord, User, Role } = require("../models");
 const { Op } = require("sequelize");
+
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
   const t = transaction || await sequelize.transaction();
 
   try {
-    // Validate required fields
+    //  Validate required fields
     if (!data.plot_number || !data.document_type) {
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
     }
 
-    // Validate file uploads
-    if (!files || !Array.isArray(files)) {
-      throw new Error("Invalid files array provided");
-    }
-
-    if (files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መግባት �ለበት።");
-    }
-
-    // Validate file paths
-    for (const file of files) {
-      if (!file?.path || typeof file.path !== 'string') {
-        throw new Error("እያንዳንዱ ፋይል ትክክለኛ የፋይል መንገድ መያዝ አለበት።");
-      }
-    }
-
-    // Validate land record ID
     if (!data.land_record_id || typeof data.land_record_id !== 'number') {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
 
-    // Check for duplicate plot number
-    const existingMap = await Document.findOne({
-      where: {
-        plot_number: data.plot_number,
-        deletedAt: null
-      },
-      transaction: t
-    });
-
-    if (existingMap) {
-      throw new Error("ይህ የካርታ ቁጥር ቀድሞውኑ ተመዝግቧል።");
+    //  If document_type is OTHER, use other_document_type
+    if (data.document_type === DOCUMENT_TYPES.OTHER) {
+      if (!data.other_document_type || data.other_document_type.trim() === "") {
+        throw new Error("ሌላ አማራጭ የተመረጠ ከሆነ፣ ሌላውን የሰነድ አይነት ያስገቡ።");
+      }
+      data.document_type = data.other_document_type.trim();
     }
 
-    // Check for duplicate reference number if provided
+    //  Check for duplicate reference number per land record
     if (data.reference_number) {
       const existingRef = await Document.findOne({
         where: {
           reference_number: data.reference_number,
-          deletedAt: null
+          land_record_id: data.land_record_id,
+          deletedAt: null,
         },
-        transaction: t
+        transaction: t,
       });
 
       if (existingRef) {
-        throw new Error("ይህ የሰነድ አመልካች ቁጥር ተመዝግቧል።");
+        throw new Error("ይህ የሰነድ አመልካች ቁጥር በዚህ መሬት መዝገብ ላይ አስቀድሞ ተመዝግቧል።");
       }
     }
 
-    // Document versioning
+    //  Document versioning per land record + plot + document_type
     const version = await Document.count({
       where: {
         land_record_id: data.land_record_id,
         plot_number: data.plot_number,
         document_type: data.document_type,
-        deletedAt: null
+        deletedAt: null,
       },
-      transaction: t
+      transaction: t,
     }) + 1;
 
-    // Prepare file metadata
-    const fileMetadata = files.map(file => ({
-      file_path: file.path,
-      file_name: file.originalname || `document_${Date.now()}`,
-      mime_type: file.mimetype || 'application/octet-stream',
-      file_size: file.size || 0
-    }));
+    //Prepare file metadata if any
+    const fileMetadata = (Array.isArray(files) && files.length > 0)
+      ? files.map(file => ({
+          file_path: file.path,
+          file_name: file.originalname || `document_${Date.now()}`,
+          mime_type: file.mimetype || 'application/octet-stream',
+          file_size: file.size || 0,
+        }))
+      : [];
 
     // Create document
     const document = await Document.create({
       plot_number: data.plot_number,
       document_type: data.document_type,
-      other_document_type: data.other_document_type,
+      other_document_type: data.other_document_type || null,
       reference_number: data.reference_number,
       description: data.description,
       files: fileMetadata,
@@ -92,34 +74,30 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       preparer_name: data.preparer_name || `User_${creatorId}`,
       approver_name: data.approver_name || null,
       issue_date: data.issue_date || new Date(),
-      uploaded_by: creatorId
+      uploaded_by: creatorId,
     }, { transaction: t });
 
-    // Get the current land record to update action log
-    const landRecord = await LandRecord.findByPk(data.land_record_id, { 
+    // Log document upload to land record
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: true // Add lock to prevent concurrent modifications
+      lock: true,
     });
 
     if (!landRecord) {
-      throw new Error("Land record not found");
+      throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
 
-    // Update action log
     const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
     const newLog = [...currentLog, {
       action: `DOCUMENT_UPLOAD_${data.document_type}`,
       document_id: document.id,
       changed_by: creatorId,
-      changed_at: new Date()
+      changed_at: new Date(),
     }];
 
     await LandRecord.update(
       { action_log: newLog },
-      {
-        where: { id: data.land_record_id },
-        transaction: t
-      }
+      { where: { id: data.land_record_id }, transaction: t }
     );
 
     if (!transaction) await t.commit();
@@ -129,6 +107,8 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };
+
+
 
 
 const addFilesToDocumentService = async (

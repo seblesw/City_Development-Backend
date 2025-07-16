@@ -56,6 +56,7 @@ User.belongsToMany(LandRecord, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+
 User.hasMany(LandRecord, {
   as: "createdLandRecords",
   foreignKey: "created_by",
