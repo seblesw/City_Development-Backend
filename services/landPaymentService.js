@@ -13,7 +13,6 @@ const createLandPaymentService = async (data, options = {}) => {
       'payment_type', 
       'total_amount', 
       'paid_amount', 
-      'currency',
       'land_record_id',
       'payer_id'
     ];
@@ -42,9 +41,9 @@ const createLandPaymentService = async (data, options = {}) => {
     }
 
     // Validate currency against enum
-    if (!['ETB', 'USD'].includes(data.currency)) {
-      throw new Error("ምንዛሪ ከ ETB ወይም USD መሆን አለበት።");
-    }
+    // if (!['ETB', 'USD'].includes(data.currency)) {
+    //   throw new Error("ምንዛሪ ከ ETB ወይም USD መሆን አለበት።");
+    // }
 
     // Validate amounts
     if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {

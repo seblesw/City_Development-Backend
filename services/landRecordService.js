@@ -36,6 +36,7 @@ const createLandRecordService = async (data, files, user) => {
       !land_record.parcel_number ||
       !land_record.ownership_category
     ) {
+      // console.log("land_record data:", land_record);
       throw new Error(
         "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
       );
