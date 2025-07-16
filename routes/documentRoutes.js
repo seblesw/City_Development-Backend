@@ -14,9 +14,7 @@ const getLimiter = rateLimit({
 // Create a document (requires authentication, multiple file upload, restricted to መዝጋቢ)
 router.post(
   "/",
-  // authMiddleware.protect,
-//   authMiddleware.restrictTo("መዝጋቢ"),
-  upload.array("documents", 10), // Allow up to 10 files
+  upload.array("documents", 10), // This matches the field name we're using
   documentController.createDocumentController
 );
 

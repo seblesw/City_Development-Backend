@@ -10,13 +10,15 @@ const PAYMENT_STATUSES = {
 
 const createLandPaymentService = async (data, options = {}) => {
   const { transaction } = options;
+  
+    console.log(data)
   let t = transaction;
   try {
     if (
       !data.payment_type ||
       !data.total_amount ||
       !data.paid_amount ||
-      !data.Currency
+      !data.currency
     ) {
       throw new Error(
         "የክፍያ መረጃዎች (payment_type, total_amount, paid_amount jh, currency) መግለጽ አለባቸው።"

@@ -32,7 +32,7 @@ const createLandRecord = async (req, res) => {
     const documents = JSON.parse(req.body.data).documents || "[]";
     const land_payment = JSON.parse(req.body.data).land_payment || "{}";
 
-    console.log(req.body);
+    // console.log(req.body);
     const result = await createLandRecordService(
       {
         primary_user,
