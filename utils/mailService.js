@@ -13,18 +13,18 @@ exports.sendPasswordResetEmail = async (email, name, resetToken) => {
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
   const mailOptions = {
-    from: `"Your App Name" <${process.env.EMAIL_FROM || process.env.EMAIL_USERNAME}>`,
+    from: `"City Developmen system" <${process.env.EMAIL_FROM || process.env.EMAIL_USERNAME}>`,
     to: email,
-    subject: "Password Reset Request",
+    subject: "የፓሥዎርድ መቀየሪያ ሊንክ",
     html: `
       <div style="font-family: Arial, sans-serif; padding: 20px;">
         <h2>Hello ${name},</h2>
-        <p>You requested a password reset. Click the link below to set a new password:</p>
+        <p>የፓስዎርድ መቀየሪያ ጠይቀዋል. ከታች ያለዉን አረንጓዴ ማስፈንጠሊያ በመንካት ፓሥዎርድ ይቀይሩ:</p>
         <a href="${resetUrl}" style="background: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-          Reset Password
+          ፓስዎርድ መቀየሪያ ሊንክ
         </a>
-        <p><small>This link expires in 1 hour.</small></p>
-        <p>If you didn't request this, please ignore this email.</p>
+        <p><small>ይህ ማስፈንጠሪያ በ 1 ሰዓት ዉስጥ ይቋረጣል.</small></p>
+        <p>ጥያቄ ካላቀረቡ ይህን ኢሜል ችላ ይበሉ</p>
       </div>
     `,
   };

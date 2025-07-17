@@ -204,7 +204,7 @@ const resetPasswordService = async (token, newPassword) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+  
     if (!decoded.userId) {  // Check for userId instead of id
       throw new Error("Invalid token: missing user ID");
     }
