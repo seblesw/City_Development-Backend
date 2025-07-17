@@ -130,6 +130,7 @@ router.put(
 );
 
 //trash management
+// This route is used to move a land record to the trash
 router.delete(
   '/:id',
   authMiddleware.protect,
