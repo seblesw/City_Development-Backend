@@ -4,7 +4,9 @@ const {
   getDocumentByIdService,
   updateDocumentService,
   deleteDocumentService,
+  importPDFs,
 } = require("../services/documentService");
+const path = require("path");
 
 const createDocumentController = async (req, res) => {
   try {
@@ -38,15 +40,40 @@ const createDocumentController = async (req, res) => {
   }
 };
 
+
+const importPDFDocuments = async (req, res) => {
+  try {
+    const uploaderId = req.user?.id;
+    const files = req.files || [];
+
+    const result = await importPDFs({ files, uploaderId });
+
+    return res.status(200).json({
+      status: "success",
+      message: result.message,
+      updatedCount: result.updatedDocuments.length,
+      updatedDocuments: result.updatedDocuments,
+      unmatchedLogs: result.unmatchedLogs, 
+    });
+  } catch (error) {
+    console.error("PDF Import Error:", error.message);
+    return res.status(500).json({
+      status: "error",
+      message: "PDF import failed",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
 const addFilesToDocumentController = async (req, res) => {
   try {
     const { id } = req.params;
     const { files, user } = req;
     if (!user) {
       return res.status(401).json({ error: "ይህን ስራ ለመስራት ሎግ ኢን ያድርጉ!" });
-    }
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "ቢያንስ አንድ ፋይል መጨመር አለበት።" });
     }
     const document = await addFilesToDocumentService(id, files, user.id);
     return res.status(200).json({
@@ -118,6 +145,7 @@ const deleteDocumentController = async (req, res) => {
 
 module.exports = {
   createDocumentController,
+  importPDFDocuments,
   addFilesToDocumentController,
   getDocumentByIdController,
   updateDocumentController,

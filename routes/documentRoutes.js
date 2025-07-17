@@ -14,8 +14,16 @@ const getLimiter = rateLimit({
 // Create a document (requires authentication, multiple file upload, restricted to መዝጋቢ)
 router.post(
   "/",
-  upload.array("documents", 10), // This matches the field name we're using
+  // authMiddleware.protect,
+  //   authMiddleware.restrictTo("መዝጋቢ"),
+  upload.array("documents", 10), // Allow up to 10 files
   documentController.createDocumentController
+);
+router.post(
+  "/import-pdfs",
+  authMiddleware.protect,
+  upload.array("documents", 20),
+  documentController.importPDFDocuments
 );
 
 // Add files to an existing document (requires authentication, multiple file upload, restricted to መዝጋቢ)
@@ -31,7 +39,7 @@ router.post(
 router.get(
   "/:id",
   authMiddleware.protect,
-//   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   documentController.getDocumentByIdController
 );
@@ -40,7 +48,7 @@ router.get(
 router.put(
   "/:id",
   authMiddleware.protect,
-//   authMiddleware.restrictTo("አስተዳደር"),
+  //   authMiddleware.restrictTo("አስተዳደር"),
   upload.array("documents", 10),
   documentController.updateDocumentController
 );
@@ -49,7 +57,7 @@ router.put(
 router.delete(
   "/:id",
   authMiddleware.protect,
-//   authMiddleware.restrictTo("አስተዳደር"),
+  //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.deleteDocumentController
 );
 

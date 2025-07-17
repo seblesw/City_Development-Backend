@@ -26,13 +26,6 @@ const registerOfficial = async (data, options = {}) => {
     }
 
     t = t || (await sequelize.transaction());
-
-    // Validate Administrative Unit
-    // const adminUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t });
-    // if (!adminUnit) {
-    //   throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
-    // }
-
     // Validate Oversight Office (optional)
     if (data.oversight_office_id) {
       const office = await OversightOffice.findByPk(data.oversight_office_id, { transaction: t });
@@ -40,12 +33,6 @@ const registerOfficial = async (data, options = {}) => {
         throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
       }
     }
-
-    // Validate Role
-    // const role = await Role.findByPk(data.role_id, { transaction: t });
-    // if (!role || !["መዝጋቢ", "አስተዳደር", "ዳታ ኢንኮደር"].includes(role.name)) {
-    //   throw new Error("ትክክለኛ ሚና ይምረጡ (መዝጋቢ ወይም አስተዳደር)።");
-    // }
 
     // Check for unique email (if provided)
     if (data.email) {
@@ -146,6 +133,7 @@ const login = async ({ email, phone_number, password }, options = {}) => {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
+        middle_name: user.middle_name,
         email: user.email,
         phone_number: user.phone_number,
         role: user.role?.name,

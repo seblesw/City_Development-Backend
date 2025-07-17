@@ -1815,10 +1815,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     throw new Error(`Failed to get user land records: ${error.message}`);
   }
 };
-const getLandRecordsByUserAdminUnitService = async (
-  adminUnitId,
-  options = {}
-) => {
+const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) => {
   const { transaction } = options;
 
   try {
@@ -1830,38 +1827,27 @@ const getLandRecordsByUserAdminUnitService = async (
       include: [
         {
           model: User,
-          as: "user",
+          as: "owners",
+          through: { attributes: ["ownership_percentage", "verified"] },
           attributes: [
             "id",
             "first_name",
             "middle_name",
             "last_name",
             "email",
-            "ownership_category",
-          ],
-          include: [
-            {
-              model: User,
-              as: "coOwners",
-              attributes: [
-                "id",
-                "first_name",
-                "middle_name",
-                "last_name",
-                "relationship_type",
-              ],
-            },
+            "phone_number",
+            "national_id"
           ],
         },
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "max_land_levels"],
         },
         {
           model: Document,
           as: "documents",
-          attributes: ["id", "document_type", "files", "createdAt"],
+          attributes: ["id", "document_type", "files", "plot_number", "createdAt"],
         },
         {
           model: LandPayment,
@@ -1871,7 +1857,9 @@ const getLandRecordsByUserAdminUnitService = async (
             "payment_type",
             "total_amount",
             "paid_amount",
-            "createdAt",
+            "payment_status",
+            "currency",
+            "createdAt"
           ],
         },
       ],
@@ -1884,7 +1872,7 @@ const getLandRecordsByUserAdminUnitService = async (
         "area",
         "record_status",
         "priority",
-        "coordinates",
+        "ownership_category",
         "administrative_unit_id",
         "createdAt",
         "updatedAt",
@@ -1902,24 +1890,21 @@ const getLandRecordsByUserAdminUnitService = async (
       area: record.area,
       record_status: record.record_status,
       priority: record.priority,
-      coordinates: record.coordinates ? JSON.parse(record.coordinates) : null,
+      ownership_category: record.ownership_category,
       administrative_unit: record.administrativeUnit
         ? {
             id: record.administrativeUnit.id,
             name: record.administrativeUnit.name,
+            max_land_levels: record.administrativeUnit.max_land_levels
           }
         : null,
-      primary_owner: record.user
-        ? {
-            id: record.user.id,
-            first_name: record.user.first_name,
-            middle_name: record.user.middle_name,
-            last_name: record.user.last_name,
-            email: record.user.email,
-            ownership_category: record.user.ownership_category,
-            co_owners: record.user.coOwners || [],
-          }
-        : null,
+      owners: record.owners
+        ? record.owners.map(owner => ({
+            ...owner.get({ plain: true }),
+            ownership_percentage: owner.LandOwner.ownership_percentage,
+            verified: owner.LandOwner.verified
+          }))
+        : [],
       documents: record.documents || [],
       payments: record.payments || [],
       createdAt: record.createdAt,

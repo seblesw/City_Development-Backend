@@ -42,7 +42,7 @@ const registerOfficialController = async (req, res) => {
 const loginController = async (req, res) => {
   try {
     const { email, phone_number, password } = req.body;
-    if (!email && !phone_number) {
+    if (!email || !phone_number) {
       return res.status(400).json({ error: "ኢሜይል ወይም ስልክ ቁጥር መግለጽ አለበት።" });
     }
     if (!password) {
