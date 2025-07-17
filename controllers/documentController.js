@@ -52,7 +52,7 @@ const importPDFDocuments = async (req, res) => {
       message: result.message,
       updatedCount: result.updatedDocuments.length,
       updatedDocuments: result.updatedDocuments,
-      unmatchedLogs: result.unmatchedLogs, // ✅ CORRECT property name
+      unmatchedLogs: result.unmatchedLogs, 
     });
   } catch (error) {
     console.error("PDF Import Error:", error.message);
@@ -73,9 +73,6 @@ const addFilesToDocumentController = async (req, res) => {
     const { files, user } = req;
     if (!user) {
       return res.status(401).json({ error: "ይህን ስራ ለመስራት ሎግ ኢን ያድርጉ!" });
-    }
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "ቢያንስ አንድ ፋይል መጨመር አለበት።" });
     }
     const document = await addFilesToDocumentService(id, files, user.id);
     return res.status(200).json({
