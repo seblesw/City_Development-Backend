@@ -1,4 +1,4 @@
-const { registerOfficial, login, forgotPasswordService } = require("../services/authServices");
+const { registerOfficial, login, forgotPasswordService, changePasswordService } = require("../services/authServices");
 
 const registerOfficialController = async (req, res) => {
   try {
@@ -87,10 +87,31 @@ const forgotPasswordController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+const changePasswordController = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user.id; // Assuming user ID is available in the request
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
+    }
+
+    // Call the service to change the password
+    const result = await changePasswordService(userId, oldPassword, newPassword);
+    
+    return res.status(200).json({
+      message: "የይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል።",
+      data: result,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
 
 module.exports = {
   registerOfficialController,
   loginController,
   logoutController,
   forgotPasswordController,
+  changePasswordController,
 };

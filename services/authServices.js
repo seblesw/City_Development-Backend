@@ -173,8 +173,29 @@ const forgotPasswordService = async (email, options = {}) => {
   }
 };
 
+const changePasswordService= async (userId, oldPassword, newPassword, options = {}) => {
+  const { transaction } = options;
+  try {
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      throw new Error("ተጠቃሚው አልተገኘም።");
+    }
+    if (!(await user.validatePassword(oldPassword))) {
+      throw new Error("የተሳሳተ የይለፍ ቃል።");
+    }
+    
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await user.update({ password: hashedNewPassword }, { transaction });
+
+    return { message: "የይለፍ ቃል በተሳካ ሁኔታ ተመለውጧል።" };
+  } catch (error) {
+    throw new Error(`የይለፍ ቃል መለወጫ ስህተት: ${error.message}`);
+  }
+}
+
 module.exports = {
   registerOfficial,
+  changePasswordService,
   login,
   logoutService,
   forgotPasswordService,
