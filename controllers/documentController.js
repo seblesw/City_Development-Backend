@@ -4,7 +4,9 @@ const {
   getDocumentByIdService,
   updateDocumentService,
   deleteDocumentService,
+  importPDFs,
 } = require("../services/documentService");
+const path = require("path");
 
 const createDocumentController = async (req, res) => {
   try {
@@ -36,6 +38,33 @@ const createDocumentController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+
+
+const importPDFDocuments = async (req, res) => {
+  try {
+    const uploaderId = req.user?.id;
+    const files = req.files || [];
+    const result = await importPDFs({
+      files,
+      uploaderId,
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: result.message,
+      updatedCount: result.updatedDocuments.length,
+      updatedDocuments: result.updatedDocuments,
+    });
+  } catch (error) {
+    console.error("PDF Import Error:", error.message);
+    return res.status(500).json({
+      status: "error",
+      message: "PDF import failed",
+      error: error.message,
+    });
+  }
+};
+
 
 const addFilesToDocumentController = async (req, res) => {
   try {
@@ -117,6 +146,7 @@ const deleteDocumentController = async (req, res) => {
 
 module.exports = {
   createDocumentController,
+  importPDFDocuments,
   addFilesToDocumentController,
   getDocumentByIdController,
   updateDocumentController,

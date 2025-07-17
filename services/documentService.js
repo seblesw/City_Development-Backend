@@ -1,10 +1,18 @@
-const { sequelize, Document, DOCUMENT_TYPES,LandRecord, User, Role } = require("../models");
+const {
+  sequelize,
+  Document,
+  DOCUMENT_TYPES,
+  LandRecord,
+  User,
+  Role,
+} = require("../models");
 const { Op } = require("sequelize");
-
+const path = require("path");
+const fs = require("fs").promises;
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
-  const t = transaction || await sequelize.transaction();
+  const t = transaction || (await sequelize.transaction());
 
   try {
     //  Validate required fields
@@ -12,7 +20,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
     }
 
-    if (!data.land_record_id || typeof data.land_record_id !== 'number') {
+    if (!data.land_record_id || typeof data.land_record_id !== "number") {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
 
@@ -41,41 +49,46 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     }
 
     //  Document versioning per land record + plot + document_type
-    const version = await Document.count({
-      where: {
-        land_record_id: data.land_record_id,
-        plot_number: data.plot_number,
-        document_type: data.document_type,
-        deletedAt: null,
-      },
-      transaction: t,
-    }) + 1;
+    const version =
+      (await Document.count({
+        where: {
+          land_record_id: data.land_record_id,
+          plot_number: data.plot_number,
+          document_type: data.document_type,
+          deletedAt: null,
+        },
+        transaction: t,
+      })) + 1;
 
     //Prepare file metadata if any
-    const fileMetadata = (Array.isArray(files) && files.length > 0)
-      ? files.map(file => ({
-          file_path: file.path,
-          file_name: file.originalname || `document_${Date.now()}`,
-          mime_type: file.mimetype || 'application/octet-stream',
-          file_size: file.size || 0,
-        }))
-      : [];
+    const fileMetadata =
+      Array.isArray(files) && files.length > 0
+        ? files.map((file) => ({
+            file_path: file.path,
+            file_name: file.originalname || `document_${Date.now()}`,
+            mime_type: file.mimetype || "application/octet-stream",
+            file_size: file.size || 0,
+          }))
+        : [];
 
     // Create document
-    const document = await Document.create({
-      plot_number: data.plot_number,
-      document_type: data.document_type,
-      other_document_type: data.other_document_type || null,
-      reference_number: data.reference_number,
-      description: data.description,
-      files: fileMetadata,
-      version,
-      land_record_id: data.land_record_id,
-      preparer_name: data.preparer_name || `User_${creatorId}`,
-      approver_name: data.approver_name || null,
-      issue_date: data.issue_date || new Date(),
-      uploaded_by: creatorId,
-    }, { transaction: t });
+    const document = await Document.create(
+      {
+        plot_number: data.plot_number,
+        document_type: data.document_type,
+        other_document_type: data.other_document_type || null,
+        reference_number: data.reference_number,
+        description: data.description,
+        files: fileMetadata,
+        version,
+        land_record_id: data.land_record_id,
+        preparer_name: data.preparer_name || `User_${creatorId}`,
+        approver_name: data.approver_name || null,
+        issue_date: data.issue_date || new Date(),
+        uploaded_by: creatorId,
+      },
+      { transaction: t }
+    );
 
     // Log document upload to land record
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
@@ -87,13 +100,18 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
 
-    const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-    const newLog = [...currentLog, {
-      action: `DOCUMENT_UPLOAD_${data.document_type}`,
-      document_id: document.id,
-      changed_by: creatorId,
-      changed_at: new Date(),
-    }];
+    const currentLog = Array.isArray(landRecord.action_log)
+      ? landRecord.action_log
+      : [];
+    const newLog = [
+      ...currentLog,
+      {
+        action: `DOCUMENT_UPLOAD_${data.document_type}`,
+        document_id: document.id,
+        changed_by: creatorId,
+        changed_at: new Date(),
+      },
+    ];
 
     await LandRecord.update(
       { action_log: newLog },
@@ -108,7 +126,52 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   }
 };
 
+const importPDFs = async ({ files, uploaderId }) => {
+  const updatedDocuments = [];
 
+  for (const file of files) {
+    const basePlotNumber = path.basename(
+      file.originalname,
+      path.extname(file.originalname)
+    );
+
+    const document = await Document.findOne({
+      where: {
+        plot_number: basePlotNumber,
+      },
+    });
+
+    if (!document) {
+      console.warn(`No document found for plot_number: ${basePlotNumber}`);
+      continue;
+    }
+
+    const relativePath = path.relative(path.join(__dirname, ".."), file.path);
+
+    const filesArray = Array.isArray(document.files) ? document.files : [];
+    if (!filesArray.includes(relativePath)) {
+      filesArray.push(relativePath);
+    }
+
+    document.files = filesArray;
+    document.set('files', filesArray);       
+    document.changed('files', true);         
+    document.uploaded_by = uploaderId;
+
+    await document.save(); 
+
+    updatedDocuments.push({
+      id: document.id,
+      plot_number: document.plot_number,
+      files: document.files,
+    });
+  }
+
+  return {
+    message: `${updatedDocuments.length} document(s) linked successfully.`,
+    updatedDocuments,
+  };
+};
 
 
 const addFilesToDocumentService = async (
@@ -125,7 +188,8 @@ const addFilesToDocumentService = async (
     // Validate updater role
     // Assume updaterId is the req user object, not a DB id
     const updater = updaterId;
-    if (!updater ) {L
+    if (!updater) {
+      L;
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
@@ -266,8 +330,8 @@ const updateDocumentService = async (
     t = t || (await sequelize.transaction());
 
     // Validate updater role
-      const updater = updaterId;
-    if (!updater ) {
+    const updater = updaterId;
+    if (!updater) {
       throw new Error("ፋይሎችን መቀየር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
@@ -455,6 +519,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
 
 module.exports = {
   createDocumentService,
+  importPDFs,
   addFilesToDocumentService,
   getDocumentByIdService,
   updateDocumentService,
