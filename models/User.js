@@ -51,6 +51,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      resetPasswordToken: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      resetPasswordExpires: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       role_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -158,6 +166,15 @@ module.exports = (db, DataTypes) => {
   User.prototype.validatePassword = async function (password) {
     return await bcrypt.compare(password, this.password);
   };
-
+  User.beforeCreate(async (user) => {
+    if (user.password) {
+      user.password = await bcrypt.hash(user.password, 10);
+    }
+  });
+  User.beforeUpdate(async (user) => {
+    if (user.changed("password")) {
+      user.password = await bcrypt.hash(user.password, 10);
+    }
+  });
   return User;
 };

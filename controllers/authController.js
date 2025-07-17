@@ -1,9 +1,15 @@
-const { registerOfficial, login, forgotPasswordService, changePasswordService } = require("../services/authServices");
+const {
+  registerOfficial,
+  login,
+  forgotPasswordService,
+  changePasswordService,
+  resetPasswordService,
+} = require("../services/authServices");
 
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
-    // const user = req.user; 
+    // const user = req.user;
 
     // if (!user) {
     //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
@@ -13,9 +19,9 @@ const registerOfficialController = async (req, res) => {
       first_name: body.first_name,
       last_name: body.last_name,
       middle_name: body.middle_name || null,
-      email: body.email ,
+      email: body.email,
       phone_number: body.phone_number,
-      password: body.password || "12345678", 
+      password: body.password || "12345678",
       role_id: body.role_id,
       administrative_unit_id: body.administrative_unit_id,
       oversight_office_id: body.oversight_office_id || null,
@@ -82,9 +88,23 @@ const forgotPasswordController = async (req, res) => {
     }
     // Assuming you have a service to handle password reset logic
     await forgotPasswordService(email);
-    return res.status(200).json({ message: "የይለፍ ቃል እንደገና ማስተካከያ እባኮትን ይመልከቱ።" });
+    return res
+      .status(200)
+      .json({ message: "የይለፍ ቃል እንደገና ማስተካከያ እባኮትን ይመልከቱ።" });
   } catch (error) {
     return res.status(400).json({ error: error.message });
+  }
+};
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    const result = await resetPasswordService(token, newPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
 const changePasswordController = async (req, res) => {
@@ -97,8 +117,12 @@ const changePasswordController = async (req, res) => {
     }
 
     // Call the service to change the password
-    const result = await changePasswordService(userId, oldPassword, newPassword);
-    
+    const result = await changePasswordService(
+      userId,
+      oldPassword,
+      newPassword
+    );
+
     return res.status(200).json({
       message: "የይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል።",
       data: result,
@@ -110,6 +134,7 @@ const changePasswordController = async (req, res) => {
 
 module.exports = {
   registerOfficialController,
+  resetPassword,
   loginController,
   logoutController,
   forgotPasswordController,

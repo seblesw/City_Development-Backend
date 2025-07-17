@@ -14,7 +14,7 @@ const getLimiter = rateLimit({
 
 const postLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
 // Import Land Records from CSV
