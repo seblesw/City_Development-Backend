@@ -8,7 +8,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const path = require("path");
-const fs = require("fs").promises;
+const fs = require("fs/promises");
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
@@ -126,8 +126,10 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   }
 };
 
+
 const importPDFs = async ({ files, uploaderId }) => {
   const updatedDocuments = [];
+  const unmatchedLogs = [];
 
   for (const file of files) {
     const basePlotNumber = path.basename(
@@ -136,42 +138,77 @@ const importPDFs = async ({ files, uploaderId }) => {
     );
 
     const document = await Document.findOne({
-      where: {
-        plot_number: basePlotNumber,
-      },
+      where: { plot_number: basePlotNumber },
     });
 
     if (!document) {
-      console.warn(`No document found for plot_number: ${basePlotNumber}`);
+      const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
+      console.warn(logMsg);
+      unmatchedLogs.push(logMsg);
+
+      // Delete unmatched file
+      try {
+        fs.unlink(file.path);
+      } catch (err) {
+        const unlinkMsg = `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`;
+        unmatchedLogs.push(unlinkMsg);
+        console.warn(unlinkMsg);
+      }
+
       continue;
     }
 
     const relativePath = path.relative(path.join(__dirname, ".."), file.path);
-
     const filesArray = Array.isArray(document.files) ? document.files : [];
+
     if (!filesArray.includes(relativePath)) {
       filesArray.push(relativePath);
     }
 
     document.files = filesArray;
-    document.set('files', filesArray);       
-    document.changed('files', true);         
+    document.set("files", filesArray);
+    document.changed("files", true);
     document.uploaded_by = uploaderId;
 
-    await document.save(); 
+    await document.save();
 
     updatedDocuments.push({
       id: document.id,
       plot_number: document.plot_number,
       files: document.files,
     });
+
+    //  Push log to LandRecord.action_log
+    const landRecord = await LandRecord.findByPk(document.land_record_id);
+    if (landRecord) {
+      const actionLog = Array.isArray(landRecord.action_log)
+        ? landRecord.action_log
+        : [];
+
+      actionLog.push({
+        action: `DOCUMENT_UPLOAD_${document.document_type}`,
+        document_id: document.id,
+        changed_by: uploaderId,
+        changed_at: new Date().toISOString(),
+      });
+
+      landRecord.action_log = actionLog;
+      landRecord.set("action_log", actionLog);
+      landRecord.changed("action_log", true);
+      await landRecord.save();
+    }
   }
 
   return {
     message: `${updatedDocuments.length} document(s) linked successfully.`,
     updatedDocuments,
+    unmatchedLogs,
   };
 };
+
+
+
+
 
 
 const addFilesToDocumentService = async (

@@ -44,16 +44,15 @@ const importPDFDocuments = async (req, res) => {
   try {
     const uploaderId = req.user?.id;
     const files = req.files || [];
-    const result = await importPDFs({
-      files,
-      uploaderId,
-    });
+
+    const result = await importPDFs({ files, uploaderId });
 
     return res.status(200).json({
       status: "success",
       message: result.message,
       updatedCount: result.updatedDocuments.length,
       updatedDocuments: result.updatedDocuments,
+      unmatchedLogs: result.unmatchedLogs, // ✅ CORRECT property name
     });
   } catch (error) {
     console.error("PDF Import Error:", error.message);
@@ -64,6 +63,8 @@ const importPDFDocuments = async (req, res) => {
     });
   }
 };
+
+
 
 
 const addFilesToDocumentController = async (req, res) => {
