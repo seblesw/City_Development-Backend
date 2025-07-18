@@ -11,6 +11,7 @@ const PAYMENT_TYPES = {
 const PAYMENT_STATUSES = {
   PENDING: "በመጠባበቅ ላይ",
   COMPLETED: "ተጠናቋል",
+  PARTIAL:"ግማሽ",
   FAILED: "አልተሳካም",
   CANCELLED: "ተሰርዟል",
 };

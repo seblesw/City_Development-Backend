@@ -23,7 +23,6 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { parseCSVFile } = require("../utils/csvParser");
 
-
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
 
@@ -296,18 +295,18 @@ async function transformCSVData(rows, adminUnitId) {
 
   // 1. Prepare Owners
   let owners = [];
-if (ownershipCategory === "የጋራ") {
-  owners = rows
-    .map((row) => ({
-      first_name: row.first_name || "Unknown",
-      last_name: row.last_name || "Unknown",
-      national_id: String(row.national_id || "").trim(),
-      email: row.email?.trim() || null,
-      phone_number: row.phone_number || null,
-      relationship_type: row.relationship_type || "ባለቤት",
-      address: row.address || null,
-    }))
-    .filter((owner) => owner.national_id); 
+  if (ownershipCategory === "የጋራ") {
+    owners = rows
+      .map((row) => ({
+        first_name: row.first_name || "Unknown",
+        last_name: row.last_name || "Unknown",
+        national_id: String(row.national_id || "").trim(),
+        email: row.email?.trim() || null,
+        phone_number: row.phone_number || null,
+        relationship_type: row.relationship_type || "ባለቤት",
+        address: row.address || null,
+      }))
+      .filter((owner) => owner.national_id);
   } else if (ownershipCategory === "የግል") {
     owners.push({
       first_name: primaryRow.first_name || "Unknown",
@@ -336,8 +335,7 @@ if (ownershipCategory === "የጋራ") {
   };
 
   // 3. Prepare Documents (one shared for የጋራ, first row only)
-  const documentRows =
-    ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+  const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
 
   const documents = documentRows
     .filter((row) => row.document_type)
@@ -357,8 +355,7 @@ if (ownershipCategory === "የጋራ") {
     }));
 
   // 4. Prepare Payments (one shared for የጋራ, from first row only)
-  const paymentRows =
-    ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+  const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
 
   const payments = paymentRows
     .filter((row) => row.payment_type)
@@ -1815,12 +1812,16 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     throw new Error(`Failed to get user land records: ${error.message}`);
   }
 };
-const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) => {
+const getLandRecordsByUserAdminUnitService = async (
+  adminUnitId,
+  options = {}
+) => {
   const { transaction } = options;
 
   try {
     const records = await LandRecord.findAll({
       where: {
+        // record_status: RECORD_STATUSES.REJECTED,
         administrative_unit_id: adminUnitId,
         deletedAt: { [Op.eq]: null },
       },
@@ -1836,7 +1837,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
             "last_name",
             "email",
             "phone_number",
-            "national_id"
+            "national_id",
           ],
         },
         {
@@ -1847,7 +1848,13 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
         {
           model: Document,
           as: "documents",
-          attributes: ["id", "document_type", "files", "plot_number", "createdAt"],
+          attributes: [
+            "id",
+            "document_type",
+            "files",
+            "plot_number",
+            "createdAt",
+          ],
         },
         {
           model: LandPayment,
@@ -1859,7 +1866,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
             "paid_amount",
             "payment_status",
             "currency",
-            "createdAt"
+            "createdAt",
           ],
         },
       ],
@@ -1895,14 +1902,123 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
         ? {
             id: record.administrativeUnit.id,
             name: record.administrativeUnit.name,
-            max_land_levels: record.administrativeUnit.max_land_levels
+            max_land_levels: record.administrativeUnit.max_land_levels,
           }
         : null,
       owners: record.owners
-        ? record.owners.map(owner => ({
+        ? record.owners.map((owner) => ({
             ...owner.get({ plain: true }),
             ownership_percentage: owner.LandOwner.ownership_percentage,
-            verified: owner.LandOwner.verified
+            verified: owner.LandOwner.verified,
+          }))
+        : [],
+      documents: record.documents || [],
+      payments: record.payments || [],
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    }));
+  } catch (error) {
+    throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+const getRejectedLandRecordsService = async (
+  adminUnitId,
+  options = {}
+) => {
+  const { transaction } = options;
+
+  try {
+    const records = await LandRecord.findAll({
+      where: {
+        record_status: RECORD_STATUSES.REJECTED,
+        administrative_unit_id: adminUnitId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: ["ownership_percentage", "verified"] },
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "national_id",
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name", "max_land_levels"],
+        },
+        {
+          model: Document,
+          as: "documents",
+          attributes: [
+            "id",
+            "document_type",
+            "files",
+            "plot_number",
+            "createdAt",
+          ],
+        },
+        {
+          model: LandPayment,
+          as: "payments",
+          attributes: [
+            "id",
+            "payment_type",
+            "total_amount",
+            "paid_amount",
+            "payment_status",
+            "currency",
+            "createdAt",
+          ],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "block_number",
+        "land_use",
+        "ownership_type",
+        "area",
+        "record_status",
+        "priority",
+        "ownership_category",
+        "administrative_unit_id",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      parcel_number: record.parcel_number,
+      block_number: record.block_number,
+      land_use: record.land_use,
+      ownership_type: record.ownership_type,
+      area: record.area,
+      record_status: record.record_status,
+      priority: record.priority,
+      ownership_category: record.ownership_category,
+      administrative_unit: record.administrativeUnit
+        ? {
+            id: record.administrativeUnit.id,
+            name: record.administrativeUnit.name,
+            max_land_levels: record.administrativeUnit.max_land_levels,
+          }
+        : null,
+      owners: record.owners
+        ? record.owners.map((owner) => ({
+            ...owner.get({ plain: true }),
+            ownership_percentage: owner.LandOwner.ownership_percentage,
+            verified: owner.LandOwner.verified,
           }))
         : [],
       documents: record.documents || [],
@@ -1932,8 +2048,12 @@ const updateLandRecordService = async (
       include: [
         {
           model: User,
-          as: "user",
-          include: [{ model: User, as: "coOwners" }],
+          through: {
+            attributes: ["ownership_percentage", "verified"],
+          },
+          as: "owners",
+          where: { deletedAt: null },
+          required: false,
         },
         {
           model: Document,
@@ -2365,6 +2485,7 @@ module.exports = {
   moveToTrashService,
   restoreFromTrashService,
   permanentlyDeleteService,
+getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,
   importLandRecordsFromCSVService,

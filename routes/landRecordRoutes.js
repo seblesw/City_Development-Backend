@@ -14,7 +14,7 @@ const getLimiter = rateLimit({
 
 const postLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
 // Import Land Records from CSV
@@ -98,6 +98,13 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
+router.get(
+  "/admin-unit-records/rejected",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getRejectedLandRecords
+);
+
 // This route is used to get land records created by the logged-in user only records he created
 router.get(
   "/my-records",
