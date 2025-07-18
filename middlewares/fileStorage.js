@@ -33,16 +33,16 @@ const fileFilter = (req, file, cb) => {
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("ፋይሉ PDF፣ JPEG ወይም PNG አይነት መሆን አለበት።"), false);
+    cb(new Error("ፋይሉ PDF፣ CSV፣ JPEG ወይም PNG አይነት መሆን አለበት።"), false);
   }
 };
 
 const upload = multer({
-  storage,
-  fileFilter,
+  storage: storage,
+  fileFilter: fileFilter,
   limits: {
-    fileSize: 20 * 1024 * 1024, 
-  },
+    fileSize: 10 * 1024 * 1024, // 10MB
+  }
 });
 
 module.exports = upload;

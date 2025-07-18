@@ -35,9 +35,9 @@ const protect = async (req, res, next) => {
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
     });
 
-    if (!user || !user.is_active) {
-      throw Object.assign(new Error(`ተጠቃሚ ከመለያ ቁጥር ${decoded.id} ጋር አልተገኘም ወይም እንቅስቃሴ-አልባ ነው።`), { status: 401 });
-    }
+    // if (!user || !user.is_active) {
+    //   throw Object.assign(new Error(`ተጠቃሚ ከመለያ ቁጥር ${decoded.id} `), { status: 401 });
+    // }
 
     // Attach user data to request
     req.user = {

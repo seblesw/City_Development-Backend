@@ -1,10 +1,5 @@
-const {
-  sequelize,
-  User,
-  Role,
-  AdministrativeUnit,
-  OversightOffice,
-} = require("../models");
+
+const { sequelize, User, Role, AdministrativeUnit, Region, Zone, Woreda, OversightOffice } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -16,7 +11,7 @@ const registerOfficial = async (data, options = {}) => {
 
   try {
     // Basic required fields check
-    console.log("Registering official with data:", data);
+    // console.log("Registering official with data:", data);
     if (
       !data.first_name ||
       !data.last_name ||
@@ -132,6 +127,16 @@ const login = async ({ email, phone_number, password }, options = {}) => {
       { expiresIn: "1d" }
     );
 
+    const unit = await AdministrativeUnit.findByPk(user.administrative_unit_id, {
+    where: { deleted_at: null },
+    include: [
+      { model: Region, as: "region" },
+      { model: Zone, as: "zone" },
+      { model: Woreda, as: "woreda" },
+      { model: OversightOffice, as: "oversightOffice" },
+    ],
+  })
+
     return {
       user: {
         id: user.id,
@@ -141,7 +146,7 @@ const login = async ({ email, phone_number, password }, options = {}) => {
         email: user.email,
         phone_number: user.phone_number,
         role: user.role?.name,
-        administrative_unit_id: user.administrative_unit_id,
+        administrative_unit: unit,
         oversight_office_id: user.oversight_office_id,
         national_id: user.national_id,
         is_active: user.is_active,

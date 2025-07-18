@@ -36,6 +36,7 @@ const createLandRecordService = async (data, files, user) => {
       !land_record.parcel_number ||
       !land_record.ownership_category
     ) {
+      // console.log("land_record data:", land_record);
       throw new Error(
         "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
       );
@@ -1681,7 +1682,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       include: [
         {
           model: User,
-          as: "owners",
+          as: "owners", // CORRECT: Alias for the User model
           through: { attributes: [] },
           attributes: [
             "id",
@@ -1696,12 +1697,12 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         },
         {
           model: AdministrativeUnit,
-          as: "administrativeUnit",
+          as: "administrativeUnit", // CORRECT: Alias for AdministrativeUnit
           attributes: ["id", "name"],
         },
         {
           model: Document,
-          as: "documents",
+          as: "documents", // CORRECT: Alias for Document
           attributes: ["id", "document_type", "reference_number", "createdAt"],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
@@ -1710,7 +1711,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         },
         {
           model: LandPayment,
-          as: "payments",
+          as: "payments", // CORRECT: Alias for LandPayment
           attributes: [
             "id",
             "payment_type",
@@ -1745,6 +1746,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       paranoid: !includeDeleted,
       transaction: t,
     });
+    // console.log(records)
 
     // 3. Process and transform the data
     const processedRecords = rows.map((record) => {

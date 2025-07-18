@@ -13,7 +13,7 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
 
     // Validate region
     const region = await Region.findByPk(region_id, { transaction });
-    console.log("region_id", region);
+    // console.log("region_id", region);
     if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
 
     // Validate zone if provided

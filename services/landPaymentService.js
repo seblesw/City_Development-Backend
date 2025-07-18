@@ -40,6 +40,10 @@ const createLandPaymentService = async (data, options = {}) => {
       );
     }
 
+    // Validate currency against enum
+    // if (!['ETB', 'USD'].includes(data.currency)) {
+    //   throw new Error("ምንዛሪ ከ ETB ወይም USD መሆን አለበት።");
+    // }
 
     // Validate amounts
     if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {

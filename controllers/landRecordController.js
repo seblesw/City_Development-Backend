@@ -48,6 +48,7 @@ const createLandRecord = async (req, res) => {
       });
     }
 
+    // console.log(req.body);
     const result = await createLandRecordService(
       {
         owners, 
@@ -58,6 +59,7 @@ const createLandRecord = async (req, res) => {
       req.files,
       user
     );
+    
 
     return res.status(201).json({
       status: "success",
