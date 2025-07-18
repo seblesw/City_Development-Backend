@@ -95,67 +95,77 @@ const registerOfficial = async (data, options = {}) => {
   }
 };
 
-const login = async ({ email, phone_number, password }, options = {}) => {
+const login = async ({ phone_number, password }, options = {}) => {
   const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
   try {
+    // Validate inputs
+    if (!phone_number) throw new Error("Phone number is required");
+    if (!password) throw new Error("Password is required");
+
+    // Find active user by phone number
     const user = await User.findOne({
       where: {
-        [Op.or]: [{ email }, { phone_number }],
-        deletedAt: { [Op.eq]: null },
+        phone_number,
+        deletedAt: null,
+        is_active: true
       },
-      include: [{ model: Role, as: "role" }],
-      transaction,
+      include: [{ 
+        model: Role, 
+        as: "role",
+        attributes: ['id', 'name']
+      }],
+      transaction: t,
+      attributes: [
+        'id', 'first_name', 'last_name', 'phone_number',
+        'password', 'national_id'
+      ]
     });
 
     if (!user) {
-      throw new Error("ተጠቃሚ አልተገኘም።");
+      throw new Error("Invalid phone number or password");
     }
 
-    // Check if password matches
+    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new Error("የተሳሳተ የይለፍ ቃል።");
+      throw new Error("Invalid phone number or password");
     }
 
-    // Update last_login
-    await user.update({ last_login: new Date() }, { transaction });
+    // Update last login
+    await user.update({ last_login: new Date() }, { transaction: t });
 
-    // Generate JWT
+    // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, role: user.role?.name },
+      { 
+        id: user.id,
+        phone: user.phone_number,
+        role: user.role?.name 
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    const unit = await AdministrativeUnit.findByPk(user.administrative_unit_id, {
-    where: { deleted_at: null },
-    include: [
-      { model: Region, as: "region" },
-      { model: Zone, as: "zone" },
-      { model: Woreda, as: "woreda" },
-      { model: OversightOffice, as: "oversightOffice" },
-    ],
-  })
+    if (!transaction) await t.commit();
 
     return {
+      token,
       user: {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
-        middle_name: user.middle_name,
-        email: user.email,
         phone_number: user.phone_number,
-        role: user.role?.name,
-        administrative_unit: unit,
-        oversight_office_id: user.oversight_office_id,
         national_id: user.national_id,
-        is_active: user.is_active,
-        last_login: user.last_login,
-      },
-      token,
+        role: user.role?.name
+      }
     };
   } catch (error) {
-    throw new Error(`መግባት ስህተት: ${error.message}`);
+    if (!transaction && t) await t.rollback();
+    throw new Error(error.message.includes("Invalid") ? 
+      "Invalid phone number or password" : 
+      error.message
+    );
   }
 };
 // logoute service

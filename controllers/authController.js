@@ -19,7 +19,7 @@ const registerOfficialController = async (req, res) => {
       first_name: body.first_name,
       last_name: body.last_name,
       middle_name: body.middle_name || null,
-      email: body.email,
+      email: body.email || null, 
       phone_number: body.phone_number,
       password: body.password || "12345678",
       role_id: body.role_id,
@@ -47,14 +47,14 @@ const registerOfficialController = async (req, res) => {
 
 const loginController = async (req, res) => {
   try {
-    const { email, phone_number, password } = req.body;
-    if (!email || !phone_number) {
+    const {phone_number, password } = req.body;
+    if (!phone_number) {
       return res.status(400).json({ error: "ኢሜይል ወይም ስልክ ቁጥር መግለጽ አለበት።" });
     }
     if (!password) {
       return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
     }
-    const result = await login({ email, phone_number, password });
+    const result = await login({phone_number, password });
     return res.status(200).json({
       message: "መግባት ተሳክቷል።",
       data: result,
