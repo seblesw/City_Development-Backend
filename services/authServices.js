@@ -1,10 +1,4 @@
-const {
-  sequelize,
-  User,
-  Role,
-  AdministrativeUnit,
-  OversightOffice,
-} = require("../models");
+
 const { sequelize, User, Role, AdministrativeUnit, Region, Zone, Woreda, OversightOffice } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
