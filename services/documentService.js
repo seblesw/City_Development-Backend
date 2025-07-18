@@ -368,200 +368,35 @@ const updateDocumentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate inputs
-    if (!landRecordId) throw new Error("Land record ID is required");
-    if (!Array.isArray(newDocumentsData)) throw new Error("Documents data must be an array");
-    if (!updater?.id) throw new Error("Updater information is required");
-
-    // Verify land record exists
-    const landRecord = await LandRecord.findByPk(landRecordId, { transaction: t });
-    if (!landRecord) {
-      throw new Error("Land record not found");
-    }
-
-    // Process document updates
     await Promise.all(
       newDocumentsData.map(async (docData, index) => {
+        const document = existingDocuments.find(d => d.id === docData.id);
+        if (!document) {
+          throw new Error(`Document ${docData.id} not found in this land record`);
+        }
+
         const file = files[index] ? [files[index]] : [];
-        
-        // Validate document type
-        if (docData.document_type === DOCUMENT_TYPES.OTHER && !docData.other_document_type) {
-          throw new Error("Other document type is required when document type is 'OTHER'");
-        }
-
-        // Prepare update payload with only allowed attributes
-        const updatePayload = {
-          plot_number: docData.plot_number,
-          document_type: docData.document_type,
-          other_document_type: docData.document_type === DOCUMENT_TYPES.OTHER 
-            ? docData.other_document_type 
-            : null,
-          reference_number: docData.reference_number,
-          isActive: docData.isActive,
-          inActived_reason: docData.inActived_reason,
-          issue_date: docData.issue_date,
-          description: docData.description,
-          is_draft: docData.is_draft,
-          preparer_name: docData.preparer_name,
-          approver_name: docData.approver_name,
-          version: docData.version,
-          updated_by: updater.id,
-          land_record_id: landRecordId
-        };
-
-        if (docData.id) {
-          // Verify document belongs to this land record
-          const existingDoc = existingDocuments.find(d => d.id === docData.id);
-          if (!existingDoc) {
-            throw new Error(`Document ${docData.id} not associated with this land record`);
-          }
-
-          // Validate plot_number uniqueness if changed
-          if (docData.plot_number && docData.plot_number !== existingDoc.plot_number) {
-            const existingPlot = await Document.findOne({
-              where: {
-                plot_number: docData.plot_number,
-                land_record_id: landRecordId,
-                id: { [Op.ne]: docData.id },
-                deletedAt: null
-              },
-              transaction: t
-            });
-            if (existingPlot) {
-              throw new Error("Plot number already exists for this land record");
-            }
-          }
-
-          // Validate reference_number uniqueness if changed
-          if (docData.reference_number && docData.reference_number !== existingDoc.reference_number) {
-            const existingRef = await Document.findOne({
-              where: {
-                reference_number: docData.reference_number,
-                land_record_id: landRecordId,
-                id: { [Op.ne]: docData.id },
-                deletedAt: null
-              },
-              transaction: t
-            });
-            if (existingRef) {
-              throw new Error("Reference number already exists for this land record");
-            }
-          }
-
-          // Update document
-          await Document.update(updatePayload, {
-            where: { id: docData.id },
-            transaction: t
-          });
-
-          // Handle file upload if present
-          if (file.length > 0) {
-            await DocumentFile.create({
-              document_id: docData.id,
-              file_path: file[0].path,
-              file_name: file[0].originalname,
-              mime_type: file[0].mimetype,
-              file_size: file[0].size,
-              created_by: updater.id
-            }, { transaction: t });
-          }
-
-          // Log action
-          landRecord.action_log = [
-            ...(landRecord.action_log || []),
-            {
-              action: `DOCUMENT_UPDATED_${docData.document_type || existingDoc.document_type}`,
-              changed_by: updater.id,
-              changed_at: new Date(),
-              document_id: docData.id,
-              changes: Object.keys(docData).filter(key => docData[key] !== existingDoc[key])
-            }
-          ];
-        } else {
-          // Validate required fields for new document
-          if (!docData.plot_number) throw new Error("Plot number is required");
-          if (!docData.document_type) throw new Error("Document type is required");
-          if (!docData.preparer_name) throw new Error("Preparer name is required");
-
-          // Validate plot_number uniqueness for new document
-          const existingPlot = await Document.findOne({
-            where: {
-              plot_number: docData.plot_number,
-              land_record_id: landRecordId,
-              deletedAt: null
-            },
-            transaction: t
-          });
-          if (existingPlot) {
-            throw new Error("Plot number already exists for this land record");
-          }
-
-          // Create new document
-          const newDoc = await Document.create({
-            ...updatePayload,
-            created_by: updater.id,
-            uploaded_by: updater.id
-          }, { transaction: t });
-
-          // Handle file upload if present
-          if (file.length > 0) {
-            await DocumentFile.create({
-              document_id: newDoc.id,
-              file_path: file[0].path,
-              file_name: file[0].originalname,
-              mime_type: file[0].mimetype,
-              file_size: file[0].size,
-              created_by: updater.id
-            }, { transaction: t });
-          }
-
-          // Log action
-          landRecord.action_log = [
-            ...(landRecord.action_log || []),
-            {
-              action: `DOCUMENT_CREATED_${docData.document_type}`,
-              changed_by: updater.id,
-              changed_at: new Date(),
-              document_id: newDoc.id
-            }
-          ];
-        }
-      })
-    );
-
-    // Soft delete documents not in the new list
-    const documentsToRemove = existingDocuments.filter(
-      ed => !newDocumentsData.some(nd => nd.id === ed.id)
-    );
-    
-    await Promise.all(
-      documentsToRemove.map(async (doc) => {
-        await doc.update({ 
-          deletedAt: new Date(),
-          updated_by: updater.id 
+        await document.update({
+          ...docData,
+          updated_by: updater.id
         }, { transaction: t });
 
-        // Log deletion
-        landRecord.action_log = [
-          ...(landRecord.action_log || []),
-          {
-            action: `DOCUMENT_DELETED_${doc.document_type}`,
-            changed_by: updater.id,
-            changed_at: new Date(),
-            document_id: doc.id
-          }
-        ];
+        if (file.length > 0) {
+          await DocumentFile.create({
+            document_id: document.id,
+            file_path: file[0].path,
+            file_name: file[0].originalname,
+            mime_type: file[0].mimetype,
+            created_by: updater.id
+          }, { transaction: t });
+        }
       })
     );
 
-    // Save all action logs
-    await landRecord.save({ transaction: t });
-
     if (!transaction) await t.commit();
-    return await landRecord.getDocuments({ transaction: t });
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`Documents update failed: ${error.message}`);
+    throw error;
   }
 };
 

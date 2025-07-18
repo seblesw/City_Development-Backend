@@ -1921,10 +1921,7 @@ const getLandRecordsByUserAdminUnitService = async (
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-const getRejectedLandRecordsService = async (
-  adminUnitId,
-  options = {}
-) => {
+const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
   const { transaction } = options;
 
   try {
@@ -2043,13 +2040,13 @@ const updateLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 2. Get the complete land record with all associations
+    // 1. Get the complete land record with all associations
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
         {
           model: User,
-          through: { attributes: ["ownership_percentage", "verified"] },
+          through: { attributes: [] },
           as: "owners",
           where: { deletedAt: null },
           required: false,
@@ -2071,11 +2068,27 @@ const updateLandRecordService = async (
     });
 
     if (!existingRecord) {
-      throw new Error("የመሬት መዝገብ አልተገኘም");
+      throw new Error("Land record not found");
     }
 
-    // 3. Process owner updates if provided
-    if (data.owners) {
+    // 2. Process land record updates (if any fields provided)
+    if (data.land_record && Object.keys(data.land_record).length > 0) {
+      const updatePayload = {
+        ...data.land_record,
+        updated_by: updater.id,
+      };
+
+      if (data.land_record.coordinates) {
+        updatePayload.coordinates = JSON.stringify(
+          data.land_record.coordinates
+        );
+      }
+
+      await existingRecord.update(updatePayload, { transaction: t });
+    }
+
+    // 3. Process owner updates (if owners array provided)
+    if (data.owners && data.owners.length > 0) {
       await userService.updateLandOwnersService(
         recordId,
         existingRecord.owners,
@@ -2085,41 +2098,24 @@ const updateLandRecordService = async (
       );
     }
 
-    // 4. Process document updates if provided
-    if (data.documents) {
-      await updateDocumentsService(
+    // 4. Process document updates (if documents array provided)
+    if (data.documents && data.documents.length > 0) {
+      await documentService.updateDocumentsService(
         recordId,
         existingRecord.documents,
         data.documents,
-        files,
+        files || [],
         updater,
         { transaction: t }
       );
     }
 
-    // 5. Update main land record fields if provided
-    if (data.land_record) {
-      const updatePayload = {
-        ...data.land_record,
-        updated_by: updater.id,
-      };
-
-      if (data.land_record.coordinates) {
-        try {
-          updatePayload.coordinates = JSON.stringify(data.land_record.coordinates);
-        } catch (e) {
-          throw new Error("Invalid coordinates format");
-        }
-      }
-
-      await existingRecord.update(updatePayload, { transaction: t });
-    }
-
-    // 6. Process payment updates if provided
-    if (data.land_payment) {
-      await updateLandPaymentService(
+    // 5. Process payment updates (if payment data provided)
+    if (data.payments && data.payments.length > 0) {
+      await landPaymentService.updateLandPaymentsService(
         recordId,
-        data.land_payment,
+        existingRecord.payments,
+        data.payments, 
         updater,
         { transaction: t }
       );
@@ -2127,14 +2123,13 @@ const updateLandRecordService = async (
 
     if (!transaction) await t.commit();
 
-    // 7. Return the fully updated record with fresh data
-    return await getLandRecordByIdService(recordId, { 
+    // Return the fully updated record with fresh associations
+    return await getLandRecordByIdService(recordId, {
+      transaction: t,
       includeAll: true,
-      transaction: t 
     });
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    console.error("Update service error:", error);
     throw new Error(`Land record update failed: ${error.message}`);
   }
 };
@@ -2465,7 +2460,7 @@ module.exports = {
   moveToTrashService,
   restoreFromTrashService,
   permanentlyDeleteService,
-getRejectedLandRecordsService,
+  getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,
   importLandRecordsFromCSVService,

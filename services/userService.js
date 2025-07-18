@@ -96,87 +96,46 @@ const updateLandOwnersService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate inputs
-    // if (!landRecordId) throw new Error("Land record ID is required");
-    // if (!Array.isArray(newOwnersData)) throw new Error("Owners data must be an array");
-    // if (!updater?.id) throw new Error("Updater information is required");
-
-    // Get current ownership associations
-    const currentOwnerships = await LandOwner.findAll({
-      where: { land_record_id: landRecordId },
-      transaction: t
-    });
-
-    // Process owner updates
-    const updatedOwners = await Promise.all(
+    // Process only provided owner updates
+    await Promise.all(
       newOwnersData.map(async (ownerData) => {
-        let owner;
-        
-        // Update existing owner or create new one
-        if (ownerData.id) {
-          owner = await User.findByPk(ownerData.id, { transaction: t });
-          if (!owner) throw new Error(`Owner with ID ${ownerData.id} not found`);
-          
-          await owner.update({
-            first_name: ownerData.first_name,
-            last_name: ownerData.last_name,
-            phone: ownerData.phone,
-            email: ownerData.email,
-            id_number: ownerData.id_number,
-            updated_by: updater.id
-          }, { transaction: t });
-        } else {
-          owner = await User.create({
-            ...ownerData,
-            created_by: updater.id,
-            updated_by: updater.id
-          }, { transaction: t });
+        // Verify owner exists in this land record
+        const existingOwner = existingOwners.find(o => o.id === ownerData.id);
+        if (!existingOwner) {
+          throw new Error(`Owner ${ownerData.id} not found in this land record`);
         }
 
-        // Update ownership association
-        const ownership = currentOwnerships.find(o => o.user_id === owner.id) || 
-          await LandRecordOwner.create({
-            land_record_id: landRecordId,
-            user_id: owner.id,
-            ownership_percentage: ownerData.ownership_percentage || 0,
-            verified: false,
-            created_by: updater.id
-          }, { transaction: t });
-
-        await ownership.update({
-          ownership_percentage: ownerData.ownership_percentage || ownership.ownership_percentage,
-          updated_by: updater.id
-        }, { transaction: t });
-
-        return owner;
+        // Partial update - only change provided fields
+        await User.update(
+          {
+            first_name: ownerData.first_name ?? existingOwner.first_name,
+            middle_name: ownerData.middle_name ?? existingOwner.middle_name,
+            last_name: ownerData.last_name ?? existingOwner.last_name,
+            phone_number: ownerData.phone_number ?? existingOwner.phone_number,
+            email: ownerData.email ?? existingOwner.email,
+            national_id: ownerData.national_id ?? existingOwner.national_id,
+            address:ownerData.address ?? existingOwner.address,
+            updated_by: updater.id
+          },
+          {
+            where: { id: ownerData.id },
+            transaction: t
+          }
+        );
       })
     );
-
-    // Remove owners no longer in the list
-    const ownersToRemove = currentOwnerships.filter(
-      o => !newOwnersData.some(no => no.id === o.user_id)
-    );
-    
-    await Promise.all(
-      ownersToRemove.map(async (ownership) => {
-        await ownership.destroy({ transaction: t });
-      })
-    );
-
-    // Verify total ownership percentage equals 100%
-    const totalPercentage = newOwnersData.reduce(
-      (sum, owner) => sum + (owner.ownership_percentage || 0), 0
-    );
-    
-    if (totalPercentage !== 100) {
-      throw new Error("Total ownership percentage must equal 100%");
-    }
 
     if (!transaction) await t.commit();
-    return updatedOwners;
+    return await User.findAll({
+      where: { 
+        id: newOwnersData.map(o => o.id),
+        deletedAt: null 
+      },
+      transaction: t
+    });
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`Owner update failed: ${error.message}`);
+    throw error;
   }
 };
 

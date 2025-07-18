@@ -30,7 +30,7 @@ const createLandRecord = async (req, res) => {
     const user = req.user;
 
     // Parse string fields from form-data/request body
-    const owners = JSON.parse(req.body.owners || "[]"); 
+    const owners = JSON.parse(req.body.owners || "[]");
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
@@ -41,7 +41,10 @@ const createLandRecord = async (req, res) => {
         status: "error",
         message: "የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።",
       });
-    } else if (land_record.ownership_category === "የግል" && owners.length !== 1) {
+    } else if (
+      land_record.ownership_category === "የግል" &&
+      owners.length !== 1
+    ) {
       return res.status(400).json({
         status: "error",
         message: "የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።",
@@ -51,7 +54,7 @@ const createLandRecord = async (req, res) => {
     // console.log(req.body);
     const result = await createLandRecordService(
       {
-        owners, 
+        owners,
         land_record,
         documents,
         land_payment,
@@ -59,7 +62,6 @@ const createLandRecord = async (req, res) => {
       req.files,
       user
     );
-    
 
     return res.status(201).json({
       status: "success",
@@ -443,28 +445,28 @@ const updateLandRecord = async (req, res) => {
 
     // Parse and validate request data
     const updateData = {
-      owners: req.body.owners ? safeJsonParse(req.body.owners, 'owners') : undefined,
-      land_record: req.body.land_record ? safeJsonParse(req.body.land_record, 'land_record') : {},
-      documents: req.body.documents ? safeJsonParse(req.body.documents, 'documents') : undefined,
-      land_payment: req.body.land_payment ? safeJsonParse(req.body.land_payment, 'land_payment') : undefined,
+      owners: req.body.owners
+        ? safeJsonParse(req.body.owners, "owners")
+        : undefined,
+      land_record: req.body.land_record
+        ? safeJsonParse(req.body.land_record, "land_record")
+        : {},
+      documents: req.body.documents
+        ? safeJsonParse(req.body.documents, "documents")
+        : undefined,
+      payments: req.body.payments
+        ? safeJsonParse(req.body.payments, "payments")
+        : undefined,
     };
 
     // Validate at least one update field exists
     const hasUpdates = Object.values(updateData).some(
-      field => field !== undefined && (!Array.isArray(field) || field.length > 0)
+      (field) =>
+        field !== undefined && (!Array.isArray(field) || field.length > 0)
     );
     if (!hasUpdates) {
       throw new Error("ቢያንስ አንድ የሚያዘምኑ መረጃ አለብዎት።");
     }
-
-    // Validate document count matches files count if documents are being updated
-    // if (updateData.documents && updateData.documents.length > 0) {
-    //   const docCount = updateData.documents.length;
-    //   const fileCount = req.files?.length || 0;
-    //   if (fileCount > 0 && docCount !== fileCount) {
-    //     throw new Error("Number of document entries must match number of uploaded files");
-    //   }
-    // }
 
     // Process the update
     const updatedRecord = await updateLandRecordService(
@@ -476,7 +478,7 @@ const updateLandRecord = async (req, res) => {
     );
 
     await t.commit();
-    
+
     return res.status(200).json({
       status: "success",
       message: "Land record updated successfully",
@@ -485,8 +487,8 @@ const updateLandRecord = async (req, res) => {
         owners_updated: !!updateData.owners,
         land_record_updated: !!updateData.land_record,
         documents_updated: !!updateData.documents,
-        payment_updated: !!updateData.land_payment
-      }
+        payment_updated: !!updateData.payments,
+      },
     });
   } catch (error) {
     await t.rollback();
@@ -496,10 +498,13 @@ const updateLandRecord = async (req, res) => {
     return res.status(statusCode).json({
       status: "error",
       message: error.message,
-      details: process.env.NODE_ENV === 'development' ? {
-        stack: error.stack,
-        error: error.message
-      } : undefined,
+      details:
+        process.env.NODE_ENV === "development"
+          ? {
+              stack: error.stack,
+              error: error.message,
+            }
+          : undefined,
     });
   }
 };
@@ -508,7 +513,7 @@ const updateLandRecord = async (req, res) => {
 const safeJsonParse = (str, fieldName) => {
   try {
     const parsed = JSON.parse(str);
-    if (fieldName === 'documents' && !Array.isArray(parsed)) {
+    if (fieldName === "documents" && !Array.isArray(parsed)) {
       throw new Error(`Documents data must be an array`);
     }
     return parsed;
@@ -519,11 +524,17 @@ const safeJsonParse = (str, fieldName) => {
 
 const getStatusCodeForError = (error) => {
   if (error.message.includes("not found")) return 404;
-  if (error.message.includes("invalid") || 
-      error.message.includes("required") ||
-      error.message.includes("must be")) return 400;
-  if (error.message.includes("unauthorized") || 
-      error.message.includes("permission")) return 403;
+  if (
+    error.message.includes("invalid") ||
+    error.message.includes("required") ||
+    error.message.includes("must be")
+  )
+    return 400;
+  if (
+    error.message.includes("unauthorized") ||
+    error.message.includes("permission")
+  )
+    return 403;
   return 500;
 };
 // Changing the status of a land record
@@ -535,7 +546,9 @@ const changeRecordStatus = async (req, res) => {
 
     // Basic validation
     if (!record_status) {
-      return res.status(400).json({ status: "error", message: "Record status is required" });
+      return res
+        .status(400)
+        .json({ status: "error", message: "Record status is required" });
     }
 
     const updatedRecord = await changeRecordStatusService(
@@ -548,16 +561,16 @@ const changeRecordStatus = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: `Record status updated to ${record_status}`,
-      data: updatedRecord
+      data: updatedRecord,
     });
   } catch (error) {
     res.status(400).json({
       status: "error",
-      message: error.message
+      message: error.message,
     });
   }
 };
-// trash management 
+// trash management
 const moveToTrash = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -569,12 +582,9 @@ const moveToTrash = async (req, res) => {
       throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
     }
 
-    const result = await moveToTrashService(
-      id,
-      user,
-      deletionReason,
-      { transaction: t }
-    );
+    const result = await moveToTrashService(id, user, deletionReason, {
+      transaction: t,
+    });
 
     await t.commit();
     res.status(200).json({

@@ -177,10 +177,10 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
 };
 
 // Update Land Payment Service
-// Enhanced Update Land Payment Service
-const updateLandPaymentService = async (
+const updateLandPaymentsService = async (
   landRecordId,
-  paymentData,
+  existingPayments,
+  newPaymentsData,
   updater,
   options = {}
 ) => {
@@ -189,139 +189,59 @@ const updateLandPaymentService = async (
 
   try {
     // Validate inputs
-    if (!landRecordId) throw new Error("Land record ID is required");
-    if (!paymentData) throw new Error("Payment data is required");
-    if (!updater?.id) throw new Error("Updater information is required");
+    // if (!landRecordId) throw new Error("Land record ID is required");
+    // if (!Array.isArray(newPaymentsData)) throw new Error("Payments data must be an array");
+    // if (!updater?.id) throw new Error("Updater information is required");
 
-    // Get land record with existing payment
-    const landRecord = await LandRecord.findByPk(landRecordId, {
-      include: [{
-        model: LandPayment,
-        as: 'payments',
-        where: { deletedAt: null },
-        required: false
-      }],
-      transaction: t
-    });
-
-    if (!landRecord) {
-      throw new Error("Land record not found");
-    }
-
-    // Get existing payment or create new if none exists
-    let payment = landRecord.payments?.[0];
-    const isNewPayment = !payment;
-
-    // Prepare update payload with only allowed attributes
-    const allowedAttributes = {
-      payment_type: paymentData.payment_type,
-      other_payment_type: paymentData.other_payment_type,
-      total_amount: paymentData.total_amount,
-      paid_amount: paymentData.paid_amount,
-      currency: paymentData.currency,
-      payment_status: paymentData.payment_status,
-      penalty_reason: paymentData.penalty_reason,
-      description: paymentData.description,
-      is_draft: paymentData.is_draft,
-      payer_id: paymentData.payer_id,
-      updated_by: updater.id
-    };
-
-    // Validate payment type and status against enums
-    if (allowedAttributes.payment_type && 
-        !Object.values(PAYMENT_TYPES).includes(allowedAttributes.payment_type)) {
-      throw new Error("Invalid payment type");
-    }
-
-    if (allowedAttributes.payment_status && 
-        !Object.values(PAYMENT_STATUSES).includes(allowedAttributes.payment_status)) {
-      throw new Error("Invalid payment status");
-    }
-
-    // Special validation for penalty payments
-    if (allowedAttributes.payment_type === PAYMENT_TYPES.PENALTY && 
-        !allowedAttributes.penalty_reason) {
-      throw new Error("Penalty reason is required for penalty payments");
-    }
-
-    // Validate amounts
-    if (allowedAttributes.total_amount !== undefined && 
-        allowedAttributes.total_amount < 0) {
-      throw new Error("Total amount cannot be negative");
-    }
-
-    if (allowedAttributes.paid_amount !== undefined && 
-        allowedAttributes.paid_amount < 0) {
-      throw new Error("Paid amount cannot be negative");
-    }
-
-    if (allowedAttributes.paid_amount !== undefined && 
-        allowedAttributes.total_amount !== undefined && 
-        allowedAttributes.paid_amount > allowedAttributes.total_amount) {
-      throw new Error("Paid amount cannot exceed total amount");
-    }
-
-    if (isNewPayment) {
-      // Required fields for new payment
-      if (!allowedAttributes.total_amount) {
-        throw new Error("Total amount is required for new payments");
-      }
-      if (!allowedAttributes.payment_type) {
-        throw new Error("Payment type is required for new payments");
-      }
-
-      payment = await LandPayment.create({
-        ...allowedAttributes,
-        land_record_id: landRecordId,
-        created_by: updater.id
-      }, { transaction: t });
-    } else {
-      // Update existing payment
-      await payment.update(allowedAttributes, { transaction: t });
-    }
-
-    // Determine payment status based on amounts if not explicitly set
-    if (!allowedAttributes.payment_status) {
-      let calculatedStatus = PAYMENT_STATUSES.PENDING;
-      
-      if (payment.paid_amount === payment.total_amount) {
-        calculatedStatus = PAYMENT_STATUSES.COMPLETED;
-      } else if (payment.paid_amount > 0) {
-        calculatedStatus = PAYMENT_STATUSES.PARTIAL;
-      }
-
-      await payment.update({ 
-        payment_status: calculatedStatus 
-      }, { transaction: t });
-    }
-
-    // Log payment action
-    landRecord.action_log = [
-      ...(landRecord.action_log || []),
-      {
-        action: isNewPayment ? "PAYMENT_CREATED" : "PAYMENT_UPDATED",
-        changed_by: updater.id,
-        changed_at: new Date(),
-        payment_id: payment.id,
-        details: {
-          type: payment.payment_type,
-          total_amount: payment.total_amount,
-          paid_amount: payment.paid_amount,
-          status: payment.payment_status
+    // Process each payment update
+    const updatedPayments = await Promise.all(
+      newPaymentsData.map(async (paymentData) => {
+        // Find the payment in existing payments
+        const paymentToUpdate = existingPayments.find(p => p.id === paymentData.id);
+        
+        if (!paymentToUpdate) {
+          throw new Error(`Payment with ID ${paymentData.id} not found for this land record`);
         }
-      }
-    ];
 
-    await landRecord.save({ transaction: t });
+        // Prepare update payload
+        const updatePayload = {
+          payment_type: paymentData.payment_type || paymentToUpdate.payment_type,
+          total_amount: paymentData.total_amount !== undefined 
+            ? paymentData.total_amount 
+            : paymentToUpdate.total_amount,
+          paid_amount: paymentData.paid_amount !== undefined 
+            ? paymentData.paid_amount 
+            : paymentToUpdate.paid_amount,
+          payment_status: paymentData.payment_status || paymentToUpdate.payment_status,
+          currency: paymentData.currency || paymentToUpdate.currency,
+          description: paymentData.description || paymentToUpdate.description,
+          updated_by: updater.id
+        };
+
+        // Auto-calculate status if amount changed
+        if (paymentData.paid_amount !== undefined) {
+          if (updatePayload.paid_amount >= updatePayload.total_amount) {
+            updatePayload.payment_status = PAYMENT_STATUSES.COMPLETED;
+          } else if (updatePayload.paid_amount > 0) {
+            updatePayload.payment_status = PAYMENT_STATUSES.PARTIAL;
+          } else {
+            updatePayload.payment_status = PAYMENT_STATUSES.PENDING;
+          }
+        }
+
+        // Perform the update
+        await paymentToUpdate.update(updatePayload, { transaction: t });
+        return paymentToUpdate;
+      })
+    );
 
     if (!transaction) await t.commit();
-    return payment;
+    return updatedPayments;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`Payment update failed: ${error.message}`);
+    throw error;
   }
 };
-
 const deleteLandPaymentService = async (id, deleterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -371,7 +291,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
 module.exports = {
   createLandPaymentService,
   getLandPaymentByIdService,
-  updateLandPaymentService,
+  updateLandPaymentsService,
   deleteLandPaymentService,
   getPaymentsByLandRecordId,
 };
