@@ -20,6 +20,8 @@ const {
   permanentlyDeleteService,
   getTrashItemsService,
   importLandRecordsFromCSVService,
+  rejectedLandRecords,
+  getRejectedLandRecordsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -384,6 +386,44 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
     });
   }
 };
+const getRejectedLandRecords = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || !user.id || !user.administrative_unit_id) {
+      return res.status(401).json({
+        status: "error",
+        message: "ያልተፈቀደ መዳረሻ ወይም የአስተዳደር ክፍል አልተገለጸም። እባክዎ ይግቡ።",
+        code: "unauthorized",
+      });
+    }
+
+    const records = await getRejectedLandRecordsService(
+      user.administrative_unit_id
+    );
+
+    // Try to get the admin unit name from the first record, fallback if not found
+    const adminUnitName =
+      records.length > 0 &&
+      records[0].administrative_unit &&
+      records[0].administrative_unit.name
+        ? records[0].administrative_unit.name
+        : "አስተዳደር ክፍል";
+
+    return res.status(200).json({
+      status: "success",
+      count: records.length,
+      message: `የ ${adminUnitName} መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።`,
+      data: records,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: "error",
+      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
+      code: "error",
+    });
+  }
+};
 // Updating an existing land record
 const updateLandRecord = async (req, res) => {
   const t = await sequelize.transaction();
@@ -575,6 +615,7 @@ module.exports = {
   saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,
+  getRejectedLandRecords,
   getLandRecordById,
   getMyLandRecords,
   getLandRecordByUserId,

@@ -98,6 +98,13 @@ router.get(
   getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
+router.get(
+  "/admin-unit-records/rejected",
+  authMiddleware.protect,
+  getLimiter,
+  landRecordController.getRejectedLandRecords
+);
+
 // This route is used to get land records created by the logged-in user only records he created
 router.get(
   "/my-records",

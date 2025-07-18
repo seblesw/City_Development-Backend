@@ -1919,6 +1919,115 @@ const getLandRecordsByUserAdminUnitService = async (
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
+const getRejectedLandRecordsService = async (
+  adminUnitId,
+  options = {}
+) => {
+  const { transaction } = options;
+
+  try {
+    const records = await LandRecord.findAll({
+      where: {
+        record_status: RECORD_STATUSES.REJECTED,
+        administrative_unit_id: adminUnitId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: ["ownership_percentage", "verified"] },
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "national_id",
+          ],
+        },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name", "max_land_levels"],
+        },
+        {
+          model: Document,
+          as: "documents",
+          attributes: [
+            "id",
+            "document_type",
+            "files",
+            "plot_number",
+            "createdAt",
+          ],
+        },
+        {
+          model: LandPayment,
+          as: "payments",
+          attributes: [
+            "id",
+            "payment_type",
+            "total_amount",
+            "paid_amount",
+            "payment_status",
+            "currency",
+            "createdAt",
+          ],
+        },
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "block_number",
+        "land_use",
+        "ownership_type",
+        "area",
+        "record_status",
+        "priority",
+        "ownership_category",
+        "administrative_unit_id",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      parcel_number: record.parcel_number,
+      block_number: record.block_number,
+      land_use: record.land_use,
+      ownership_type: record.ownership_type,
+      area: record.area,
+      record_status: record.record_status,
+      priority: record.priority,
+      ownership_category: record.ownership_category,
+      administrative_unit: record.administrativeUnit
+        ? {
+            id: record.administrativeUnit.id,
+            name: record.administrativeUnit.name,
+            max_land_levels: record.administrativeUnit.max_land_levels,
+          }
+        : null,
+      owners: record.owners
+        ? record.owners.map((owner) => ({
+            ...owner.get({ plain: true }),
+            ownership_percentage: owner.LandOwner.ownership_percentage,
+            verified: owner.LandOwner.verified,
+          }))
+        : [],
+      documents: record.documents || [],
+      payments: record.payments || [],
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    }));
+  } catch (error) {
+    throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
 //Updating an existing land record
 const updateLandRecordService = async (
   recordId,
@@ -2374,6 +2483,7 @@ module.exports = {
   moveToTrashService,
   restoreFromTrashService,
   permanentlyDeleteService,
+getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,
   importLandRecordsFromCSVService,
