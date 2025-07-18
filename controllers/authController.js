@@ -124,7 +124,7 @@ const changePasswordController = async (req, res) => {
     );
 
     return res.status(200).json({
-      message: "የይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል።",
+      message: result.message,
       data: result,
     });
   } catch (error) {
