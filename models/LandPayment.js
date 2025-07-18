@@ -82,12 +82,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         defaultValue: "ETB",
-        validate: {
-          isIn: {
-            args: [["ETB", "USD"]],
-            msg: "የገንዘብ አይነት ትክክለኛ መሆን አለበት (ETB ወይም USD)።",
-          },
-        },
       },
       payment_status: {
         type: DataTypes.STRING,

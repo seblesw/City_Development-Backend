@@ -111,14 +111,15 @@ const login = async ({ email, phone_number, password }, options = {}) => {
       include: [{ model: Role, as: "role" }],
       transaction,
     });
+
     if (!user) {
       throw new Error("ተጠቃሚ አልተገኘም።");
     }
-    if (!user.password || !(await user.validatePassword(password))) {
+
+    // Check if password matches
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       throw new Error("የተሳሳተ የይለፍ ቃል።");
-    }
-    if (!user.is_active) {
-      throw new Error("ተጠቃሚው ንቁ አይደለም።");
     }
 
     // Update last_login
@@ -127,7 +128,7 @@ const login = async ({ email, phone_number, password }, options = {}) => {
     // Generate JWT
     const token = jwt.sign(
       { id: user.id, role: user.role?.name },
-      process.env.JWT_SECRET || "your_jwt_secret",
+      process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
@@ -156,10 +157,7 @@ const login = async ({ email, phone_number, password }, options = {}) => {
 const logoutService = async (userId, options = {}) => {
   const { transaction } = options;
   try {
-    // Here you can implement the logic to invalidate the user's session or token
-    // For example, if you're using JWT, you might want to blacklist the token
-    // or simply remove it from the client side.
-
+ 
     // If you have a session store, you can destroy the session here.
 
     return { message: "በተሳካ ሁኔታ ወጣል።" };
@@ -247,10 +245,12 @@ const changePasswordService = async (
     if (!user) {
       throw new Error("ተጠቃሚው አልተገኘም።");
     }
-    if (!(await user.validatePassword(oldPassword))) {
+    // Check old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
       throw new Error("የተሳሳተ የይለፍ ቃል።");
     }
-
+    // Hash and update new password
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await user.update({ password: hashedNewPassword }, { transaction });
 

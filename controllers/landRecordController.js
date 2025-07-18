@@ -424,29 +424,45 @@ const getRejectedLandRecords = async (req, res) => {
     });
   }
 };
-// Updating an existing land record
+// Enhanced Controller
 const updateLandRecord = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const user = req.user;
     const recordId = req.params.id;
 
-    // Parse all fields (all optional for partial updates)
+    // Validate inputs
+    if (!recordId) {
+      throw new Error("የመሬት አይዲ ያስገቡ");
+    }
+    if (!user?.id) {
+      throw new Error("ተጠቃሚው መለያ ቁጥር አልተገለጸም።");
+    }
+
+    // Parse and validate request data
     const updateData = {
-      primary_user: req.body.primary_user
-        ? JSON.parse(req.body.primary_user)
-        : undefined,
-      co_owners: req.body.co_owners
-        ? JSON.parse(req.body.co_owners)
-        : undefined,
-      land_record: req.body.land_record ? JSON.parse(req.body.land_record) : {},
-      documents: req.body.documents
-        ? JSON.parse(req.body.documents)
-        : undefined,
-      land_payment: req.body.land_payment
-        ? JSON.parse(req.body.land_payment)
-        : undefined,
+      owners: req.body.owners ? safeJsonParse(req.body.owners, 'owners') : undefined,
+      land_record: req.body.land_record ? safeJsonParse(req.body.land_record, 'land_record') : {},
+      documents: req.body.documents ? safeJsonParse(req.body.documents, 'documents') : undefined,
+      land_payment: req.body.land_payment ? safeJsonParse(req.body.land_payment, 'land_payment') : undefined,
     };
+
+    // Validate at least one update field exists
+    const hasUpdates = Object.values(updateData).some(
+      field => field !== undefined && (!Array.isArray(field) || field.length > 0)
+    );
+    if (!hasUpdates) {
+      throw new Error("ቢያንስ አንድ የሚያዘምኑ መረጃ አለብዎት።");
+    }
+
+    // Validate document count matches files count if documents are being updated
+    // if (updateData.documents && updateData.documents.length > 0) {
+    //   const docCount = updateData.documents.length;
+    //   const fileCount = req.files?.length || 0;
+    //   if (fileCount > 0 && docCount !== fileCount) {
+    //     throw new Error("Number of document entries must match number of uploaded files");
+    //   }
+    // }
 
     // Process the update
     const updatedRecord = await updateLandRecordService(
@@ -458,21 +474,55 @@ const updateLandRecord = async (req, res) => {
     );
 
     await t.commit();
+    
     return res.status(200).json({
       status: "success",
       message: "Land record updated successfully",
       data: updatedRecord,
+      changes: {
+        owners_updated: !!updateData.owners,
+        land_record_updated: !!updateData.land_record,
+        documents_updated: !!updateData.documents,
+        payment_updated: !!updateData.land_payment
+      }
     });
   } catch (error) {
     await t.rollback();
     console.error("Update error:", error);
 
-    const statusCode = error.message.includes("not found") ? 404 : 400;
+    const statusCode = getStatusCodeForError(error);
     return res.status(statusCode).json({
       status: "error",
       message: error.message,
+      details: process.env.NODE_ENV === 'development' ? {
+        stack: error.stack,
+        error: error.message
+      } : undefined,
     });
   }
+};
+
+// Helper function for safe JSON parsing// Helper Functions
+const safeJsonParse = (str, fieldName) => {
+  try {
+    const parsed = JSON.parse(str);
+    if (fieldName === 'documents' && !Array.isArray(parsed)) {
+      throw new Error(`Documents data must be an array`);
+    }
+    return parsed;
+  } catch (e) {
+    throw new Error(`Invalid JSON format for ${fieldName}: ${e.message}`);
+  }
+};
+
+const getStatusCodeForError = (error) => {
+  if (error.message.includes("not found")) return 404;
+  if (error.message.includes("invalid") || 
+      error.message.includes("required") ||
+      error.message.includes("must be")) return 400;
+  if (error.message.includes("unauthorized") || 
+      error.message.includes("permission")) return 403;
+  return 500;
 };
 // Changing the status of a land record
 const changeRecordStatus = async (req, res) => {

@@ -1056,7 +1056,7 @@ const getAllLandRecordService = async (options = {}) => {
     transaction,
     includeDeleted = false,
     page = 1,
-    pageSize = 25,
+    pageSize = 50,
     filters = {},
   } = options;
 
@@ -2029,6 +2029,7 @@ const getRejectedLandRecordsService = async (
   }
 };
 //Updating an existing land record
+// Enhanced Service
 const updateLandRecordService = async (
   recordId,
   data,
@@ -2040,15 +2041,13 @@ const updateLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Get the complete land record with all associations
+    // 2. Get the complete land record with all associations
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
         {
           model: User,
-          through: {
-            attributes: ["ownership_percentage", "verified"],
-          },
+          through: { attributes: ["ownership_percentage", "verified"] },
           as: "owners",
           where: { deletedAt: null },
           required: false,
@@ -2070,86 +2069,67 @@ const updateLandRecordService = async (
     });
 
     if (!existingRecord) {
-      throw new Error("የመሬት መዝገቡ አልተገኘም።");
-    }
-    // 2. Process document updates
-    if (data.documents && data.documents.length > 0) {
-      await Promise.all(
-        data.documents.map(async (docData, index) => {
-          // Get the existing document ID from the land record
-          const documentId = existingRecord.documents?.[index]?.id;
-          if (!documentId) {
-            throw new Error("የሰነድ ID አልተገኘም።");
-          }
-
-          // Get files for this document (using index-based matching)
-          const file = files[index] ? [files[index]] : [];
-
-          await documentService.updateDocumentService(
-            documentId,
-            {
-              ...docData,
-              land_record_id: recordId, // Maintain association
-            },
-            file,
-            updater.id,
-            { transaction: t }
-          );
-        })
-      );
+      throw new Error("የመሬት መዝገብ አልተገኘም");
     }
 
-    // 3. Process owner updates
-    let primaryOwnerId = existingRecord.user_id;
-    if (data.primary_user) {
-      const { primaryOwner } = await userService.createLandOwner(
-        {
-          ...data.primary_user,
-          administrative_unit_id: existingRecord.administrative_unit_id,
-        },
-        data.co_owners || [],
-        updater.id,
+    // 3. Process owner updates if provided
+    if (data.owners) {
+      await userService.updateLandOwnersService(
+        recordId,
+        existingRecord.owners,
+        data.owners,
+        updater,
         { transaction: t }
       );
-      primaryOwnerId = primaryOwner.id;
     }
 
-    // 4. Update main land record fields
-    const updatePayload = {
-      ...data.land_record,
-      user_id: primaryOwnerId,
-      updated_by: updater.id,
-    };
-
-    if (data.land_record?.coordinates) {
-      updatePayload.coordinates = JSON.stringify(data.land_record.coordinates);
+    // 4. Process document updates if provided
+    if (data.documents) {
+      await updateDocumentsService(
+        recordId,
+        existingRecord.documents,
+        data.documents,
+        files,
+        updater,
+        { transaction: t }
+      );
     }
 
-    await existingRecord.update(updatePayload, { transaction: t });
+    // 5. Update main land record fields if provided
+    if (data.land_record) {
+      const updatePayload = {
+        ...data.land_record,
+        updated_by: updater.id,
+      };
 
-    // 5. Process payment updates
-    if (data.land_payment) {
-      const paymentId = existingRecord.payments?.[0]?.id;
-      if (!paymentId) {
-        throw new Error("የክፍያ መረጃ አልተገኘም።");
+      if (data.land_record.coordinates) {
+        try {
+          updatePayload.coordinates = JSON.stringify(data.land_record.coordinates);
+        } catch (e) {
+          throw new Error("Invalid coordinates format");
+        }
       }
 
-      await landPaymentService.updateLandPaymentService(
-        paymentId,
-        {
-          ...data.land_payment,
-          land_record_id: recordId,
-          payer_id: primaryOwnerId,
-        },
-        updater.id,
+      await existingRecord.update(updatePayload, { transaction: t });
+    }
+
+    // 6. Process payment updates if provided
+    if (data.land_payment) {
+      await updateLandPaymentService(
+        recordId,
+        data.land_payment,
+        updater,
         { transaction: t }
       );
     }
 
     if (!transaction) await t.commit();
 
-    // Return the fully updated record
-    return await getLandRecordByIdService(recordId, { transaction: t });
+    // 7. Return the fully updated record with fresh data
+    return await getLandRecordByIdService(recordId, { 
+      includeAll: true,
+      transaction: t 
+    });
   } catch (error) {
     if (!transaction && t) await t.rollback();
     console.error("Update service error:", error);

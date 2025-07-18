@@ -172,93 +172,149 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
   }
 };
 
-const updateLandPaymentService = async (id, data, updaterId, options = {}) => {
+// Update Land Payment Service
+// Enhanced Update Land Payment Service
+const updateLandPaymentService = async (
+  landRecordId,
+  paymentData,
+  updater,
+  options = {}
+) => {
   const { transaction } = options;
-  let t = transaction;
+  const t = transaction || (await sequelize.transaction());
+
   try {
-    t = t || (await sequelize.transaction());
+    // Validate inputs
+    if (!landRecordId) throw new Error("Land record ID is required");
+    if (!paymentData) throw new Error("Payment data is required");
+    if (!updater?.id) throw new Error("Updater information is required");
 
-    // Validate updater role
-        const updater = updaterId;
+    // Get land record with existing payment
+    const landRecord = await LandRecord.findByPk(landRecordId, {
+      include: [{
+        model: LandPayment,
+        as: 'payments',
+        where: { deletedAt: null },
+        required: false
+      }],
+      transaction: t
+    });
 
-    if (!updater) {
-      throw new Error("ክፍያ መቀየር የሚችሉት መዝጋቢ አልተገኙም");
+    if (!landRecord) {
+      throw new Error("Land record not found");
     }
 
-    const payment = await LandPayment.findByPk(id, { transaction: t });
-    if (!payment) {
-      throw new Error(`መለያ ቁጥር ${id} ያለው የመሬት ክፍያ አልተገኘም።`);
+    // Get existing payment or create new if none exists
+    let payment = landRecord.payments?.[0];
+    const isNewPayment = !payment;
+
+    // Prepare update payload with only allowed attributes
+    const allowedAttributes = {
+      payment_type: paymentData.payment_type,
+      other_payment_type: paymentData.other_payment_type,
+      total_amount: paymentData.total_amount,
+      paid_amount: paymentData.paid_amount,
+      currency: paymentData.currency,
+      payment_status: paymentData.payment_status,
+      penalty_reason: paymentData.penalty_reason,
+      description: paymentData.description,
+      is_draft: paymentData.is_draft,
+      payer_id: paymentData.payer_id,
+      updated_by: updater.id
+    };
+
+    // Validate payment type and status against enums
+    if (allowedAttributes.payment_type && 
+        !Object.values(PAYMENT_TYPES).includes(allowedAttributes.payment_type)) {
+      throw new Error("Invalid payment type");
     }
 
-    // Validate land_record_id if changed
-    if (data.land_record_id && data.land_record_id !== payment.land_record_id) {
-      const landRecord = await LandRecord.findByPk(data.land_record_id, { transaction: t });
-      if (!landRecord) {
-        throw new Error("ትክክለኛ የመሬት መዝገብ ይምረጡ።");
+    if (allowedAttributes.payment_status && 
+        !Object.values(PAYMENT_STATUSES).includes(allowedAttributes.payment_status)) {
+      throw new Error("Invalid payment status");
+    }
+
+    // Special validation for penalty payments
+    if (allowedAttributes.payment_type === PAYMENT_TYPES.PENALTY && 
+        !allowedAttributes.penalty_reason) {
+      throw new Error("Penalty reason is required for penalty payments");
+    }
+
+    // Validate amounts
+    if (allowedAttributes.total_amount !== undefined && 
+        allowedAttributes.total_amount < 0) {
+      throw new Error("Total amount cannot be negative");
+    }
+
+    if (allowedAttributes.paid_amount !== undefined && 
+        allowedAttributes.paid_amount < 0) {
+      throw new Error("Paid amount cannot be negative");
+    }
+
+    if (allowedAttributes.paid_amount !== undefined && 
+        allowedAttributes.total_amount !== undefined && 
+        allowedAttributes.paid_amount > allowedAttributes.total_amount) {
+      throw new Error("Paid amount cannot exceed total amount");
+    }
+
+    if (isNewPayment) {
+      // Required fields for new payment
+      if (!allowedAttributes.total_amount) {
+        throw new Error("Total amount is required for new payments");
       }
-    }
-
-    // Validate payment_status transitions
-    if (data.payment_status && data.payment_status !== payment.payment_status) {
-      const validTransitions = {
-        [PAYMENT_STATUSES.PENDING]: [
-          PAYMENT_STATUSES.COMPLETED,
-          PAYMENT_STATUSES.FAILED,
-          PAYMENT_STATUSES.CANCELLED,
-        ],
-        [PAYMENT_STATUSES.FAILED]: [PAYMENT_STATUSES.PENDING],
-        [PAYMENT_STATUSES.COMPLETED]: [],
-        [PAYMENT_STATUSES.CANCELLED]: [],
-      };
-      const previousStatus = payment.payment_status;
-      if (!validTransitions[previousStatus]?.includes(data.payment_status)) {
-        throw new Error(`ከ${previousStatus} ወደ ${data.payment_status} መሸጋገር አይችልም።`);
+      if (!allowedAttributes.payment_type) {
+        throw new Error("Payment type is required for new payments");
       }
+
+      payment = await LandPayment.create({
+        ...allowedAttributes,
+        land_record_id: landRecordId,
+        created_by: updater.id
+      }, { transaction: t });
+    } else {
+      // Update existing payment
+      await payment.update(allowedAttributes, { transaction: t });
     }
 
-    // Prepare update data
-    const updateData = {};
-    const updatableFields = [
-      "land_record_id",
-      "payment_type",
-      "total_amount",
-      "paid_amount",
-      "currency",
-      "payment_status",
-      "penalty_reason",
-      "description",
-      "payer_name",
+    // Determine payment status based on amounts if not explicitly set
+    if (!allowedAttributes.payment_status) {
+      let calculatedStatus = PAYMENT_STATUSES.PENDING;
+      
+      if (payment.paid_amount === payment.total_amount) {
+        calculatedStatus = PAYMENT_STATUSES.COMPLETED;
+      } else if (payment.paid_amount > 0) {
+        calculatedStatus = PAYMENT_STATUSES.PARTIAL;
+      }
+
+      await payment.update({ 
+        payment_status: calculatedStatus 
+      }, { transaction: t });
+    }
+
+    // Log payment action
+    landRecord.action_log = [
+      ...(landRecord.action_log || []),
+      {
+        action: isNewPayment ? "PAYMENT_CREATED" : "PAYMENT_UPDATED",
+        changed_by: updater.id,
+        changed_at: new Date(),
+        payment_id: payment.id,
+        details: {
+          type: payment.payment_type,
+          total_amount: payment.total_amount,
+          paid_amount: payment.paid_amount,
+          status: payment.payment_status
+        }
+      }
     ];
-    for (const field of updatableFields) {
-      if (data[field] !== undefined) {
-        updateData[field] = data[field];
-      }
-    }
 
-    // Log payment update in LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(payment.land_record_id, { transaction: t });
-    if (landRecord && Object.keys(updateData).length > 0) {
-      landRecord.action_log = [
-        ...(landRecord.action_log || []),
-        {
-          action: `PAYMENT_UPDATED_${payment.payment_type || "UNKNOWN"}`,
-          changed_by: updaterId,
-          changed_at: new Date(),
-          payment_id: payment.id,
-        },
-      ];
-      await landRecord.save({ transaction: t });
-    }
-
-    // Update payment
-    updateData.updated_at = new Date();
-    await payment.update(updateData, { transaction: t });
+    await landRecord.save({ transaction: t });
 
     if (!transaction) await t.commit();
     return payment;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የመሬት ክፍያ መቀየር ስህተት: ${error.message}`);
+    throw new Error(`Payment update failed: ${error.message}`);
   }
 };
 

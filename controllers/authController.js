@@ -110,7 +110,7 @@ const resetPassword = async (req, res) => {
 const changePasswordController = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
-    const userId = req.user.id; // Assuming user ID is available in the request
+    const userId = req.user.id; 
 
     if (!oldPassword || !newPassword) {
       return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
