@@ -40,6 +40,7 @@ const createLandPaymentService = async (data, options = {}) => {
       );
     }
 
+
     // Validate amounts
     if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {
       throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
