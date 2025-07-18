@@ -13,7 +13,6 @@ const createLandPaymentService = async (data, options = {}) => {
       'payment_type', 
       'total_amount', 
       'paid_amount', 
-      'currency',
       'land_record_id',
       'payer_id'
     ];
