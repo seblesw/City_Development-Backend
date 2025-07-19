@@ -2456,6 +2456,202 @@ const getTrashItemsService = async (user, options = {}) => {
   }
 };
 
+//stats
+//stats
+const getLandRecordStats = async (adminUnitId, options = {}) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    // Base where clause
+    const baseWhere = { deletedAt: null };
+    if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
+
+    // 1. System-wide totals
+    const systemTotals = {
+      all_records: await LandRecord.count({ where: baseWhere, transaction: t }),
+      all_documents: await Document.count({
+        where: { deletedAt: null },
+        include: adminUnitId ? [{
+          model: LandRecord,
+          as: 'landRecord', // Add this alias to match your association
+          where: { administrative_unit_id: adminUnitId },
+          attributes: []
+        }] : [],
+        transaction: t
+      }),
+      all_owners: await User.count({
+        include: [{
+          model: LandRecord,
+          as: 'ownedLandRecords',
+          where: baseWhere,
+          attributes: [],
+          through: {
+            model: LandOwner,
+            attributes: []
+          }
+        }],
+        transaction: t
+      })
+    };
+
+    // 2. Administrative unit specific stats (if adminUnitId provided)
+    const adminUnitStats = adminUnitId ? {
+      // Records by status
+      by_status: await Promise.all(
+        Object.values(RECORD_STATUSES).map(async status => ({
+          status,
+          count: await LandRecord.count({
+            where: { ...baseWhere, record_status: status },
+            transaction: t
+          })
+        }))
+      ),
+      
+      // Records by zoning type
+      by_zoning: await Promise.all(
+        Object.values(ZONING_TYPES).map(async zone => ({
+          zoning_type: zone,
+          count: await LandRecord.count({
+            where: { ...baseWhere, zoning_type: zone },
+            transaction: t
+          })
+        }))
+      ),
+      
+      // Records by ownership type (including other)
+      by_ownership: [
+        ...await Promise.all(
+          Object.values(OWNERSHIP_TYPES).map(async type => ({
+            ownership_type: type,
+            count: await LandRecord.count({
+              where: { ...baseWhere, ownership_type: type },
+              transaction: t
+            })
+          }))
+        ),
+        {
+          ownership_type: 'OTHER',
+          count: await LandRecord.count({
+            where: { 
+              ...baseWhere, 
+              ownership_type: { [Op.notIn]: Object.values(OWNERSHIP_TYPES) }
+            },
+            transaction: t
+          })
+        }
+      ],
+      
+      // Records by land use (including other)
+      by_land_use: [
+        ...await Promise.all(
+          Object.values(LAND_USE_TYPES).map(async use => ({
+            land_use: use,
+            count: await LandRecord.count({
+              where: { ...baseWhere, land_use: use },
+              transaction: t
+            })
+          }))
+        ),
+        {
+          land_use: 'OTHER',
+          count: await LandRecord.count({
+            where: { 
+              ...baseWhere, 
+              land_use: { [Op.notIn]: Object.values(LAND_USE_TYPES) }
+            },
+            transaction: t
+          })
+        }
+      ],
+      
+      // Owners count in this admin unit
+      owners_count: await User.count({
+        include: [{
+          model: LandRecord,
+          as: 'ownedLandRecords',
+          where: baseWhere,
+          attributes: [],
+          through: { 
+        model: LandOwner,
+        attributes: [] 
+          }
+        }],
+        transaction: t
+      }),
+      // Temporal records
+      temporal: {
+        last_30_days: await LandRecord.count({
+          where: { 
+            ...baseWhere,
+            createdAt: { [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+          },
+          transaction: t
+        }),
+        last_7_days: await LandRecord.count({
+          where: { 
+            ...baseWhere,
+            createdAt: { [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+          },
+          transaction: t
+        }),
+        today: await LandRecord.count({
+          where: { 
+            ...baseWhere,
+            createdAt: { [Op.gte]: new Date().setHours(0, 0, 0, 0) }
+          },
+          transaction: t
+        })
+      },
+      
+      // Documents in admin unit
+      documents: await Document.count({
+        include: [{
+          model: LandRecord,
+          as: 'landRecord',
+          where: baseWhere,
+          attributes: []
+        }],
+        transaction: t
+      }),
+      
+      // Records by ownership category
+      by_ownership_category: await LandRecord.findAll({
+        attributes: [
+          'ownership_category',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        ],
+        where: baseWhere,
+        group: ['ownership_category'],
+        transaction: t,
+        raw: true
+      }),
+      
+      // Records by land level
+      by_land_level: await LandRecord.findAll({
+        attributes: [
+          'land_level',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        ],
+        where: baseWhere,
+        group: ['land_level'],
+        order: [['land_level', 'ASC']],
+        transaction: t,
+        raw: true
+      })
+    } : null;
+
+    if (!transaction) await t.commit();
+
+    return {
+      system: systemTotals,
+      ...(adminUnitId ? { administrative_unit: adminUnitStats } : {})
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();    
+  }
+};
+
 module.exports = {
   moveToTrashService,
   restoreFromTrashService,
@@ -2476,4 +2672,5 @@ module.exports = {
   submitDraftLandRecordService,
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
+  getLandRecordStats,
 };

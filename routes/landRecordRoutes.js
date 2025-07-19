@@ -25,19 +25,20 @@ router.post(
   upload.single("file"),
   landRecordController.importLandRecordsFromCSV
 );
+router.get("/trash", authMiddleware.protect, landRecordController.getTrash);
 router.get(
-  '/trash',
+  "/stats",
   authMiddleware.protect,
-  landRecordController.getTrash
-);
-// Draft Management Routes
-router.post(
-  "/drafts",
-  authMiddleware.protect,
-  postLimiter,
-  upload.array("documents", 20),
-  landRecordController.saveLandRecordAsDraft
-);
+  landRecordController.getLandRecordStatsController
+),
+  // Draft Management Routes
+  router.post(
+    "/drafts",
+    authMiddleware.protect,
+    postLimiter,
+    upload.array("documents", 20),
+    landRecordController.saveLandRecordAsDraft
+  );
 
 router.get(
   "/drafts/:id",
@@ -138,24 +139,19 @@ router.put(
 
 //trash management
 // This route is used to move a land record to the trash
-router.delete(
-  '/:id',
-  authMiddleware.protect,
-  landRecordController.moveToTrash
-);
+router.delete("/:id", authMiddleware.protect, landRecordController.moveToTrash);
 
 router.post(
-  '/:id/restore',
+  "/:id/restore",
   authMiddleware.protect,
   landRecordController.restoreFromTrash
 );
 
 router.delete(
-  '/:id/permanent',
+  "/:id/permanent",
   authMiddleware.protect,
   // authMiddleware.restrictTo('admin'),
   landRecordController.permanentlyDelete
 );
-
 
 module.exports = router;

@@ -22,6 +22,7 @@ const {
   importLandRecordsFromCSVService,
   rejectedLandRecords,
   getRejectedLandRecordsService,
+  getLandRecordStats,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -666,9 +667,33 @@ const getTrash = async (req, res) => {
     });
   }
 };
+const getLandRecordStatsController = async (req, res, next) => {
+  try {
+    // Get the admin unit ID from the authenticated user
+    const adminUnitId = req.user.administrative_unit_id || null;
+    
+    // Get optional transaction from request if needed
+    const options = {};
+    if (req.transaction) options.transaction = req.transaction;
+    
+    const stats = await getLandRecordStats(adminUnitId, options);
+    
+     res.status(200).json({
+      status: "success",
+      message: "የመሬት መዝገብ ስታቲስቲክስ በተሳካ ሁኔታ ተገኝቷል።",
+      data: stats,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   moveToTrash,
+  getLandRecordStatsController,
   restoreFromTrash,
   permanentlyDelete,
   getTrash,
