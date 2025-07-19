@@ -2114,9 +2114,7 @@ const updateLandRecordService = async (
       );
     }
 
-    console.log("About to commit transaction");
     if (!transaction) await t.commit();
-    console.log("Transaction committed successfully");
 
     // Return the fully updated record with fresh associations
     return await getLandRecordByIdService(recordId, {
