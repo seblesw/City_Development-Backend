@@ -375,21 +375,31 @@ const updateDocumentsService = async (
           throw new Error(`Document ${docData.id} not found in this land record`);
         }
 
-        const file = files[index] ? [files[index]] : [];
-        await document.update({
+        // Prepare update payload
+        const updatePayload = {
           ...docData,
           updated_by: updater.id
-        }, { transaction: t });
+        };
 
-        if (file.length > 0) {
-          await DocumentFile.create({
-            document_id: document.id,
-            file_path: file[0].path,
-            file_name: file[0].originalname,
-            mime_type: file[0].mimetype,
-            created_by: updater.id
-          }, { transaction: t });
+        // Handle file upload if present
+        if (files[index]) {
+          // Get existing files or initialize empty array
+          const existingFiles = document.files ? [...document.files] : [];
+          
+          // Add new file to the array
+          existingFiles.push({
+            file_path: files[index].path,
+            file_name: files[index].originalname,
+            mime_type: files[index].mimetype,
+            uploaded_at: new Date(),
+            uploaded_by: updater.id
+          });
+
+          // Assign the updated files array to the payload
+          updatePayload.files = existingFiles;
         }
+
+        await document.update(updatePayload, { transaction: t });
       })
     );
 

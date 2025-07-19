@@ -188,11 +188,6 @@ const updateLandPaymentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate inputs
-    // if (!landRecordId) throw new Error("Land record ID is required");
-    // if (!Array.isArray(newPaymentsData)) throw new Error("Payments data must be an array");
-    // if (!updater?.id) throw new Error("Updater information is required");
-
     // Process each payment update
     const updatedPayments = await Promise.all(
       newPaymentsData.map(async (paymentData) => {
