@@ -2484,21 +2484,10 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
           : [],
         transaction: t,
       }),
-      all_users: await User.count({ transaction: t }), 
-      all_owners: await User.count({
+      all_system_users: await User.count({ transaction: t }),
+      all_land_owners: await LandOwner.count({
         distinct: true,
-        include: [
-          {
-            model: LandRecord,
-            as: "ownedLandRecords",
-            where: baseWhere,
-            attributes: [],
-            through: {
-              model: LandOwner,
-              attributes: [],
-            },
-          },
-        ],
+        col: "user_id",
         transaction: t,
       }),
     };
