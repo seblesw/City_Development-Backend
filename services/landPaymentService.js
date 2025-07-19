@@ -188,43 +188,31 @@ const updateLandPaymentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Process each payment update
     const updatedPayments = await Promise.all(
       newPaymentsData.map(async (paymentData) => {
-        // Find the payment in existing payments
         const paymentToUpdate = existingPayments.find(p => p.id === paymentData.id);
         
         if (!paymentToUpdate) {
-          throw new Error(`Payment with ID ${paymentData.id} not found for this land record`);
+          throw new Error(`ይህ የክፍያ አይዲ ${paymentData.id} ያለው ክፍያ አልተገኘም።`);
         }
 
-        // Prepare update payload
+        // Directly use the paymentData from body, only adding updated_by
         const updatePayload = {
-          payment_type: paymentData.payment_type || paymentToUpdate.payment_type,
-          total_amount: paymentData.total_amount !== undefined 
-            ? paymentData.total_amount 
-            : paymentToUpdate.total_amount,
-          paid_amount: paymentData.paid_amount !== undefined 
-            ? paymentData.paid_amount 
-            : paymentToUpdate.paid_amount,
-          payment_status: paymentData.payment_status || paymentToUpdate.payment_status,
-          currency: paymentData.currency || paymentToUpdate.currency,
-          description: paymentData.description || paymentToUpdate.description,
+          ...paymentData,
           updated_by: updater.id
         };
 
-        // Auto-calculate status if amount changed
+        // Auto-calculate status if paid_amount was provided
         if (paymentData.paid_amount !== undefined) {
-          if (updatePayload.paid_amount >= updatePayload.total_amount) {
+          if (paymentData.paid_amount >= (paymentData.total_amount || paymentToUpdate.total_amount)) {
             updatePayload.payment_status = PAYMENT_STATUSES.COMPLETED;
-          } else if (updatePayload.paid_amount > 0) {
+          } else if (paymentData.paid_amount > 0) {
             updatePayload.payment_status = PAYMENT_STATUSES.PARTIAL;
           } else {
             updatePayload.payment_status = PAYMENT_STATUSES.PENDING;
           }
         }
 
-        // Perform the update
         await paymentToUpdate.update(updatePayload, { transaction: t });
         return paymentToUpdate;
       })

@@ -2077,13 +2077,6 @@ const updateLandRecordService = async (
         ...data.land_record,
         updated_by: updater.id,
       };
-
-      if (data.land_record.coordinates) {
-        updatePayload.coordinates = JSON.stringify(
-          data.land_record.coordinates
-        );
-      }
-
       await existingRecord.update(updatePayload, { transaction: t });
     }
 

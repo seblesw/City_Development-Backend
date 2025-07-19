@@ -96,8 +96,7 @@ const updateLandOwnersService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Process only provided owner updates
-    await Promise.all(
+    const updatedOwners = await Promise.all(
       newOwnersData.map(async (ownerData) => {
         // Verify owner exists in this land record
         const existingOwner = existingOwners.find(o => o.id === ownerData.id);
@@ -105,40 +104,28 @@ const updateLandOwnersService = async (
           throw new Error(`Owner ${ownerData.id} not found in this land record`);
         }
 
-        // Partial update - only change provided fields
-        await User.update(
-          {
-            first_name: ownerData.first_name ?? existingOwner.first_name,
-            middle_name: ownerData.middle_name ?? existingOwner.middle_name,
-            last_name: ownerData.last_name ?? existingOwner.last_name,
-            phone_number: ownerData.phone_number ?? existingOwner.phone_number,
-            email: ownerData.email ?? existingOwner.email,
-            national_id: ownerData.national_id ?? existingOwner.national_id,
-            address:ownerData.address ?? existingOwner.address,
-            updated_by: updater.id
-          },
-          {
-            where: { id: ownerData.id },
-            transaction: t
-          }
-        );
+        // Directly use ownerData from body, only adding updated_by
+        const updatePayload = {
+          ...ownerData,
+          updated_by: updater.id
+        };
+
+        await User.update(updatePayload, {
+          where: { id: ownerData.id },
+          transaction: t
+        });
+
+        return await User.findByPk(ownerData.id, { transaction: t });
       })
     );
 
     if (!transaction) await t.commit();
-    return await User.findAll({
-      where: { 
-        id: newOwnersData.map(o => o.id),
-        deletedAt: null 
-      },
-      transaction: t
-    });
+    return updatedOwners;
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw error;
   }
 };
-
 const getAllUserService = async (options = {}) => {
   const { transaction } = options;
   try {
