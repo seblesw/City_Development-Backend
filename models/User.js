@@ -129,6 +129,16 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      otp: {
+        type: DataTypes.STRING,
+      }, // Stores the OTP
+      otpExpiry: {
+        type: DataTypes.DATE,
+      }, // OTP expiry time
+      isFirstLogin: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      }, 
     },
     {
       tableName: "users",

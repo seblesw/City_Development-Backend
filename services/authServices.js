@@ -4,6 +4,10 @@ const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendPasswordResetEmail } = require("../utils/mailService");
+const axios = require('axios');
+const qs = require('querystring');
+
+
 
 const registerOfficial = async (data, options = {}) => {
   const { transaction } = options;
@@ -95,77 +99,152 @@ const registerOfficial = async (data, options = {}) => {
   }
 };
 
-const login = async ({ phone_number, password }, options = {}) => {
+const login = async ({ phone_number, password, otp }, options = {}) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate inputs
     if (!phone_number) throw new Error("Phone number is required");
-    if (!password) throw new Error("Password is required");
 
-    // Find active user by phone number
+    // Find user
     const user = await User.findOne({
-      where: {
-        phone_number,
-        deletedAt: null,
-        is_active: true
-      },
-      include: [{ 
-        model: Role, 
-        as: "role",
-        attributes: ['id', 'name']
-      }],
+      where: { phone_number, deletedAt: null, is_active: true },
+      include: [{ model: Role, as: "role", attributes: ['id', 'name'] }],
       transaction: t,
-      attributes: [
-        'id', 'first_name', 'last_name', 'phone_number',
-        'password', 'national_id'
-      ]
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
     });
 
-    if (!user) {
-      throw new Error("Invalid phone number or password");
-    }
+    if (!user) throw new Error("Invalid phone number or password");
 
-    // Verify password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      throw new Error("Invalid phone number or password");
-    }
-
-    // Update last login
-    await user.update({ last_login: new Date() }, { transaction: t });
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        id: user.id,
-        phone: user.phone_number,
-        role: user.role?.name 
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    if (!transaction) await t.commit();
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        phone_number: user.phone_number,
-        national_id: user.national_id,
-        role: user.role?.name
+    // Case 1: First-time login (use OTP)
+    if (user.isFirstLogin) {
+      if (!otp) throw new Error("OTP is required for first login");
+      if (user.otp !== otp || new Date() > user.otpExpiry) {
+        throw new Error("Invalid or expired OTP");
       }
-    };
+
+      // OTP is valid → allow login (no password check)
+      await user.update({ 
+        last_login: new Date(),
+        isFirstLogin: false 
+      }, { transaction: t });
+
+      const token = jwt.sign(
+        { id: user.id, phone: user.phone_number, role: user.role?.name },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      if (!transaction) await t.commit();
+
+      return {
+        token,
+        user: {
+          id: user.id,
+          first_name: user.first_name,
+          middle_name:user.middle_name,
+          national_id:user.national_id,
+
+          last_name: user.last_name,
+          phone_number: user.phone_number,
+          role: user.role?.name
+        },
+        requiresPasswordChange: true 
+      };
+    }
+    // Case 2: Normal login (use password)
+    else {
+      if (!password) throw new Error("የይለፍ ቃል ያስፈሊጋል");
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) throw new Error("ማይመሳሰል ፓስዎርድ ተጠቅመዋል");
+
+      await user.update({ last_login: new Date() }, { transaction: t });
+
+      const token = jwt.sign(
+        { id: user.id, phone: user.phone_number, role: user.role?.name },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      if (!transaction) await t.commit();
+      return { token, user}; 
+    }
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw new Error(error.message.includes("Invalid") ? 
-      "Invalid phone number or password" : 
+      "Invalid credentials" : 
       error.message
     );
+  }
+};
+const sendOTP = async (phone_number, options = {}) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    // 1. Find user (existing logic remains)
+    const user = await User.findOne({
+      where: { phone_number, deletedAt: null, is_active: true },
+      transaction: t
+    });
+
+    if (!user) throw new Error("User not found");
+    if (user.last_login) throw new Error("User already logged in. Use password.");
+
+    // 2. Generate OTP (existing logic remains)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await user.update({ otp, otpExpiry }, { transaction: t });
+
+    // 3. Prepare Afromessaging variables
+    const IDENTIFIER_ID = process.env.AFROMESSAGING_IDENTIFIER_ID;
+    const SENDER_NAME = 'Teamwork'; 
+    const RECIPIENT = phone_number;
+    const MESSAGE = `Your OTP is: ${otp}. Valid for 10 minutes.`;
+    const CALLBACK_URL = process.env.SMS_CALLBACK_URL || ''; // Optional
+
+    // 4. Construct URL exactly as per documentation
+    const baseUrl = 'https://api.afromessage.com/api/send';
+    const queryParams = [
+      `from=${encodeURIComponent(IDENTIFIER_ID)}`,
+      `sender=${encodeURIComponent(SENDER_NAME)}`,
+      `to=${encodeURIComponent(RECIPIENT)}`,
+      `message=${encodeURIComponent(MESSAGE)}`
+    ];
+    
+    if (CALLBACK_URL) {
+      queryParams.push(`callback=${encodeURIComponent(CALLBACK_URL)}`);
+    }
+
+    const apiUrl = `${baseUrl}?${queryParams.join('&')}`;
+
+    // 5. Execute request
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${process.env.AFROMESSAGING_API_KEY.trim()}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to send OTP');
+    }
+
+    await t.commit();
+    return { 
+      success: true,
+      messageId: response.data.messageId,
+      credits: response.data.credits 
+    };
+
+  } catch (error) {
+    await t.rollback();
+    console.error('SMS API Failure:', {
+      error: error.message,
+      requestUrl: error.config?.url, // Logs the exact URL sent
+      responseData: error.response?.data
+    });
+    throw new Error(`OTP sending failed: ${error.message}`);
   }
 };
 // logoute service
@@ -280,6 +359,7 @@ module.exports = {
   changePasswordService,
   resetPasswordService,
   login,
+  sendOTP,
   logoutService,
   forgotPasswordService,
 };

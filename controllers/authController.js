@@ -4,6 +4,7 @@ const {
   forgotPasswordService,
   changePasswordService,
   resetPasswordService,
+  sendOTP,
 } = require("../services/authServices");
 
 const registerOfficialController = async (req, res) => {
@@ -47,23 +48,52 @@ const registerOfficialController = async (req, res) => {
 
 const loginController = async (req, res) => {
   try {
-    const {phone_number, password } = req.body;
+    const { phone_number, password, otp } = req.body;
+
     if (!phone_number) {
-      return res.status(400).json({ error: "ኢሜይል ወይም ስልክ ቁጥር መግለጽ አለበት።" });
+      return res.status(400).json({ error: "ስልክ ቁጥር መግለጽ አለበት።" });
     }
-    if (!password) {
-      return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
-    }
-    const result = await login({phone_number, password });
+
+
+    // Proceed with login (OTP or password)
+    const result = await login({ phone_number, password, otp });
+
     return res.status(200).json({
-      message: "መግባት ተሳክቷል።",
+      message: "መግባት ተሳክቷል።", 
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({ 
+      error: error.message.includes("Invalid") 
+        ? "የስልክ ቁጥር፣ OTP ወይም �ስተኝጋሌ ትክክል አይደለም።" // "Invalid credentials"
+        : error.message 
+    });
   }
 };
+const sendOTPController = async (req, res) => {
+  try {
+    const { phone_number } = req.body;
+    console.log("[API] /send-otp request:", phone_number);
 
+    if (!phone_number) {
+      console.log("[Validation] Phone number missing");
+      return res.status(400).json({ error: "ስልክ ቁጥር መግለጽ አለበት።" });
+    }
+
+    const result = await sendOTP(phone_number);
+    console.log("[API] OTP sent successfully:", phone_number);
+    return res.status(200).json({
+      message: "OTP በተሳካ ሁኔታ ተልኳል።",
+      data: result,
+    });
+
+  } catch (error) {
+    console.error("[API] OTP send error:", error.message);
+    return res.status(400).json({ 
+      error: "የስልክ ቁጥር ልክ አይደለም።" 
+    });
+  }
+};
 //logout controller
 const logoutController = (req, res) => {
   try {
@@ -136,6 +166,7 @@ module.exports = {
   registerOfficialController,
   resetPassword,
   loginController,
+  sendOTPController,
   logoutController,
   forgotPasswordController,
   changePasswordController,

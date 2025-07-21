@@ -129,11 +129,11 @@ const updateUserController = async (req, res) => {
 const deleteUserController = async (req, res) => {
   try {
     const { id } = req.params;
-    const { user: authUser } = req;
-    if (!authUser) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    }
-    const result = await deleteUser(id, authUser.id);
+    // const { user: authUser } = req;
+    // if (!authUser) {
+    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    // }
+    const result = await deleteUser(id,);
     return res.status(200).json({
       message: result.message,
     });

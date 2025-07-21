@@ -182,12 +182,8 @@ const getUserById = async (id, options = {}) => {
           model: OversightOffice,
           as: "oversightOffice",
           attributes: ["id", "name"],
-        },
-        {
-          model: User,
-          as: "primaryOwner",
-          attributes: ["id", "first_name", "last_name"],
-        },
+        }
+        
       ],
       attributes: [
         "id",
@@ -371,13 +367,13 @@ const deleteUser = async (id, deleterId, options = {}) => {
     t = t || (await sequelize.transaction());
 
     // Validate deleter role
-    const deleter = await User.findByPk(deleterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-      throw new Error("ተጠቃሚ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    }
+    // const deleter = await User.findByPk(deleterId, {
+    //   include: [{ model: Role, as: "role" }],
+    //   transaction: t,
+    // });
+    // if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
+    //   throw new Error("ተጠቃሚ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
+    // }
 
     const user = await User.findByPk(id, { transaction: t });
     if (!user) {
