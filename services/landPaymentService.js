@@ -188,6 +188,16 @@ const updateLandPaymentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // First get the current land record to maintain its action log
+    const landRecord = await LandRecord.findOne({
+      where: { id: landRecordId },
+      transaction: t
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
     const updatedPayments = await Promise.all(
       newPaymentsData.map(async (paymentData) => {
         const paymentToUpdate = existingPayments.find(p => p.id === paymentData.id);
@@ -195,6 +205,19 @@ const updateLandPaymentsService = async (
         if (!paymentToUpdate) {
           throw new Error(`ይህ የክፍያ አይዲ ${paymentData.id} ያለው ክፍያ አልተገኘም።`);
         }
+
+        // Capture changes for logging
+        const changes = {};
+        Object.keys(paymentData).forEach(key => {
+          if (paymentToUpdate[key] !== paymentData[key] && 
+              key !== 'updated_at' && 
+              key !== 'created_at') {
+            changes[key] = {
+              from: paymentToUpdate[key],
+              to: paymentData[key]
+            };
+          }
+        });
 
         // Directly use the paymentData from body, only adding updated_by
         const updatePayload = {
@@ -214,6 +237,30 @@ const updateLandPaymentsService = async (
         }
 
         await paymentToUpdate.update(updatePayload, { transaction: t });
+
+        // Only log if there were actual changes
+        if (Object.keys(changes).length > 0) {
+          const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+          const newLog = [...currentLog, {
+            action: 'PAYMENT_UPDATED',
+            payment_id: paymentToUpdate.id,
+            amount: paymentData.paid_amount !== undefined ? paymentData.paid_amount : paymentToUpdate.paid_amount,
+            currency: paymentData.currency || paymentToUpdate.currency,
+            payment_type: paymentData.payment_type || paymentToUpdate.payment_type,
+            changes: changes, // Detailed changes object
+            changed_by: updater.id,
+            changed_at: new Date()
+          }];
+
+          await LandRecord.update(
+            { action_log: newLog },
+            {
+              where: { id: landRecordId },
+              transaction: t
+            }
+          );
+        }
+
         return paymentToUpdate;
       })
     );

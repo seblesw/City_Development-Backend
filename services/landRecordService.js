@@ -223,7 +223,7 @@ const importLandRecordsFromCSVService = async (
       const rowTransaction = await sequelize.transaction();
       const primaryRow = rows[0];
 
-      // ✅ Ensure rowNum is available for error handling
+      // Ensure rowNum is available for error handling
       const rowNum =
         csvData.findIndex(
           (r) =>
@@ -243,7 +243,7 @@ const importLandRecordsFromCSVService = async (
             land_payment: payments[0] || null, // adapt if you expect multiple
           },
           [], // No files for CSV import
-          user, // ✅ Pass the full user object
+          user, // Pass the full user object
           {
             transaction: rowTransaction,
             isImport: true,
@@ -2071,13 +2071,70 @@ const updateLandRecordService = async (
       throw new Error("Land record not found");
     }
 
-    // 2. Process land record updates (if any fields provided)
+      // Process land record updates if provided
     if (data.land_record && Object.keys(data.land_record).length > 0) {
+      const previousStatus = existingRecord.record_status;
+      const newStatus = RECORD_STATUSES.SUBMITTED;
+      
+      // Track changes for logging
+      const changes = {};
+      Object.keys(data.land_record).forEach(key => {
+        if (existingRecord[key] !== data.land_record[key] && 
+            key !== 'updated_at' && 
+            key !== 'created_at') {
+          changes[key] = {
+            from: existingRecord[key],
+            to: data.land_record[key]
+          };
+        }
+      });
+
+      // Prepare update payload
       const updatePayload = {
         ...data.land_record,
         updated_by: updater.id,
+        record_status: newStatus
       };
+
+      // Update status history if status changed
+      if (newStatus !== previousStatus) {
+        const currentStatusHistory = Array.isArray(existingRecord.status_history) 
+          ? existingRecord.status_history 
+          : [];
+        
+        updatePayload.status_history = [
+          ...currentStatusHistory,
+          {
+            status: newStatus,
+            changed_at: new Date(),
+            changed_by: updater.id,
+            notes: data.land_record.status_notes || null
+          }
+        ];
+      }
+
       await existingRecord.update(updatePayload, { transaction: t });
+
+      // Always log the land record update action
+      const currentLog = Array.isArray(existingRecord.action_log) ? existingRecord.action_log : [];
+      const newLog = [...currentLog, {
+        action: 'LAND_RECORD_UPDATED',
+        changes: Object.keys(changes).length > 0 ? changes : undefined,
+        status_change: newStatus !== previousStatus ? {
+          from: previousStatus,
+          to: newStatus
+        } : undefined,
+        changed_by: updater.id,
+        changed_at: new Date()
+      }];
+
+      await LandRecord.update(
+        { action_log: newLog },
+        {
+          where: { id: recordId },
+          transaction: t
+        }
+      );
     }
 
     // 3. Process owner updates (if owners array provided)

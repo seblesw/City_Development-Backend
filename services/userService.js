@@ -5,6 +5,7 @@ const {
   AdministrativeUnit,
   OversightOffice,
   LandOwner,
+  LandRecord,
 } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
@@ -96,6 +97,16 @@ const updateLandOwnersService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // First get the current land record to maintain its action log
+    const landRecord = await LandRecord.findOne({
+      where: { id: landRecordId },
+      transaction: t
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
     const updatedOwners = await Promise.all(
       newOwnersData.map(async (ownerData) => {
         // Verify owner exists in this land record
@@ -103,6 +114,19 @@ const updateLandOwnersService = async (
         if (!existingOwner) {
           throw new Error(`Owner ${ownerData.id} not found in this land record`);
         }
+
+        // Capture changes for logging
+        const changes = {};
+        Object.keys(ownerData).forEach(key => {
+          if (existingOwner[key] !== ownerData[key] && 
+              key !== 'updated_at' && 
+              key !== 'created_at') {
+            changes[key] = {
+              from: existingOwner[key],
+              to: ownerData[key]
+            };
+          }
+        });
 
         // Directly use ownerData from body, only adding updated_by
         const updatePayload = {
@@ -115,7 +139,30 @@ const updateLandOwnersService = async (
           transaction: t
         });
 
-        return await User.findByPk(ownerData.id, { transaction: t });
+        const updatedOwner = await User.findByPk(ownerData.id, { transaction: t });
+
+        // Only log if there were actual changes
+        if (Object.keys(changes).length > 0) {
+          const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+          const newLog = [...currentLog, {
+            action: 'OWNER_UPDATED',
+            owner_id: updatedOwner.id,
+            owner_name: `${updatedOwner.first_name} ${updatedOwner.middle_name || ''} ${updatedOwner.last_name}`,
+            changes: changes, 
+            changed_by: updater.id,
+            changed_at: new Date()
+          }];
+
+          await LandRecord.update(
+            { action_log: newLog },
+            {
+              where: { id: landRecordId },
+              transaction: t
+            }
+          );
+        }
+
+        return updatedOwner;
       })
     );
 

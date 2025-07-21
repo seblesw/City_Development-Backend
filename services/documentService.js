@@ -368,12 +368,39 @@ const updateDocumentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // First get the current land record to maintain its action log
+    const landRecord = await LandRecord.findOne({
+      where: { id: landRecordId },
+      transaction: t
+    });
+
+    if (!landRecord) {
+      throw new Error("የመሬት መዝገብ አልተገኘም።");
+    }
+
     await Promise.all(
       newDocumentsData.map(async (docData, index) => {
         const document = existingDocuments.find(d => d.id === docData.id);
         if (!document) {
-          throw new Error(`Document ${docData.id} not found in this land record`);
+          throw new Error(`አይዲ ${docData.id} ያለው ሰነድ በዚህ መዝገብ አልተገኘም`);
         }
+
+        // Capture changes for logging
+        const changes = {};
+        const fileChanges = [];
+        
+        // Track document field changes
+        Object.keys(docData).forEach(key => {
+          if (document[key] !== docData[key] && 
+              key !== 'updated_at' && 
+              key !== 'created_at' &&
+              key !== 'files') {
+            changes[key] = {
+              from: document[key],
+              to: docData[key]
+            };
+          }
+        });
 
         // Prepare update payload
         const updatePayload = {
@@ -386,6 +413,13 @@ const updateDocumentsService = async (
           // Get existing files or initialize empty array
           const existingFiles = document.files ? [...document.files] : [];
           
+          // Record file being added
+          fileChanges.push({
+            action: 'FILE_ADDED',
+            file_name: files[index].originalname,
+            mime_type: files[index].mimetype
+          });
+
           // Add new file to the array
           existingFiles.push({
             file_path: files[index].path,
@@ -400,6 +434,28 @@ const updateDocumentsService = async (
         }
 
         await document.update(updatePayload, { transaction: t });
+
+        // Only log if there were actual changes
+        if (Object.keys(changes).length > 0 || fileChanges.length > 0) {
+          const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+          const newLog = [...currentLog, {
+            action: 'DOCUMENT_UPDATED',
+            document_id: document.id,
+            document_type: docData.document_type || document.document_type,
+            changes: Object.keys(changes).length > 0 ? changes : undefined,
+            file_changes: fileChanges.length > 0 ? fileChanges : undefined,
+            changed_by: updater.id,
+            changed_at: new Date()
+          }];
+
+          await LandRecord.update(
+            { action_log: newLog },
+            {
+              where: { id: landRecordId },
+              transaction: t
+            }
+          );
+        }
       })
     );
 
