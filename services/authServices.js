@@ -1,12 +1,18 @@
-
-const { sequelize, User, Role, AdministrativeUnit, Region, Zone, Woreda, OversightOffice } = require("../models");
+const {
+  sequelize,
+  User,
+  Role,
+  AdministrativeUnit,
+  Region,
+  Zone,
+  Woreda,
+  OversightOffice,
+} = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendPasswordResetEmail } = require("../utils/mailService");
-const axios = require('axios');
-const qs = require('querystring');
-
+const nodemailer = require('nodemailer');
 
 
 const registerOfficial = async (data, options = {}) => {
@@ -14,21 +20,16 @@ const registerOfficial = async (data, options = {}) => {
   let t = transaction;
 
   try {
-    // Basic required fields check
-    // console.log("Registering official with data:", data);
     if (
       !data.first_name ||
       !data.last_name ||
       !data.middle_name ||
-      !data.email ||
       !data.phone_number ||
       !data.national_id ||
-      !data.administrative_unit_id ||
-      !data.role_id ||
-      !data.gender
+      !data.role_id
     ) {
       throw new Error(
-        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ሚና፣ እና ጾታ መግለጽ አለባቸው።"
+        "ስም፣ የአባት ስም፣ የአያት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር፣ ኢሜል መግለጽ አለባቸው።"
       );
     }
 
@@ -40,6 +41,18 @@ const registerOfficial = async (data, options = {}) => {
       });
       if (!office) {
         throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
+      }
+    }
+    //validate Administrative Unit(optional)
+    if (data.administrative_unit_id) {
+      const administrativeUnit = await AdministrativeUnit.findByPk(
+        data.administrative_unit_id,
+        {
+          transaction: t,
+        }
+      );
+      if (!administrativeUnit) {
+        throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
       }
     }
 
@@ -99,159 +112,191 @@ const registerOfficial = async (data, options = {}) => {
   }
 };
 
-const login = async ({ phone_number, password, otp }, options = {}) => {
-  const { transaction } = options;
-  const t = transaction || (await sequelize.transaction());
+const login = async ({ email, password }, options = {}) => {
+  // Use provided transaction or create new one
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction; // Only commit if we created the transaction
 
   try {
-    if (!phone_number) throw new Error("Phone number is required");
+    // Validate inputs
+    if (!email) throw new Error("ኢሜል ያስፈልጋል");
+    if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል");
 
-    // Find user
+    // Find user with transaction
     const user = await User.findOne({
-      where: { phone_number, deletedAt: null, is_active: true },
-      include: [{ model: Role, as: "role", attributes: ['id', 'name'] }],
+      where: { email, deletedAt: null, is_active: true },
+      include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
       transaction: t,
       attributes: ['id', 'first_name', 'last_name', 'phone_number','email','national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
     });
 
-    if (!user) throw new Error("Invalid phone number or password");
+    if (!user) throw new Error("ተጠቃሚ አልተገኘም");
 
-    // Case 1: First-time login (use OTP)
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) throw new Error("የተሳሳተ የይለፍ ቃል");
+
+    // First-time login flow
     if (user.isFirstLogin) {
-      if (!otp) throw new Error("OTP is required for first login");
-      if (user.otp !== otp || new Date() > user.otpExpiry) {
-        throw new Error("Invalid or expired OTP");
-      }
-
-      // OTP is valid → allow login (no password check)
-      await user.update({ 
-        last_login: new Date(),
-        isFirstLogin: false 
-      }, { transaction: t });
-
-      const token = jwt.sign(
-        { id: user.id, phone: user.phone_number, role: user.role?.name },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
-
-      if (!transaction) await t.commit();
-
-      return {
-        token,
-        user: {
-          id: user.id,
-          first_name: user.first_name,
-          middle_name:user.middle_name,
-          national_id:user.national_id,
-
-          last_name: user.last_name,
-          phone_number: user.phone_number,
-          role: user.role?.name
-        },
-        requiresPasswordChange: true 
+      await sendOTP(user.email, { transaction: t });
+      
+      if (shouldCommit) await t.commit();
+      return { 
+        success: true, 
+        message: "OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
+        requiresOTPVerification: true 
       };
     }
-    // Case 2: Normal login (use password)
-    else {
-      if (!password) throw new Error("የይለፍ ቃል ያስፈሊጋል");
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) throw new Error("ማይመሳሰል ፓስዎርድ ተጠቅመዋል");
 
-      await user.update({ last_login: new Date() }, { transaction: t });
+    // Regular login flow
+    await user.update({ last_login: new Date() }, { transaction: t });
 
-      const token = jwt.sign(
-        { id: user.id, phone: user.phone_number, role: user.role?.name },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
-
-      if (!transaction) await t.commit();
-      return { token, user}; 
-    }
-  } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(error.message.includes("Invalid") ? 
-      "Invalid credentials" : 
-      error.message
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        role: user.role?.name,
+        administrative_unit_id: user.administrative_unit_id,
+        oversight_office_id: user.oversight_office_id 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
     );
+
+    if (shouldCommit) await t.commit();
+    return { 
+      token, 
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        middle_name: user.middle_name,
+        last_name: user.last_name,
+        email: user.email,
+        phone_number: user.phone_number,
+        role: user.role?.name,
+      },
+      message: "በተሳካ ሁኔታ ገብተዋል"
+    };
+  } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
+    throw error;
   }
 };
-const sendOTP = async (phone_number, options = {}) => {
-  const { transaction } = options;
-  const t = transaction || (await sequelize.transaction());
+
+const sendOTP = async (email, options = {}) => {
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
 
   try {
-    // 1. Find user (existing logic remains)
     const user = await User.findOne({
-      where: { phone_number, deletedAt: null, is_active: true },
-      transaction: t
+      where: { email, deletedAt: null, is_active: true },
+      transaction: t,
     });
 
-    if (!user) throw new Error("User not found");
-    if (user.last_login) throw new Error("User already logged in. Use password.");
+    if (!user) throw new Error("ተጠቃሚ አልተገኘም");
+    
+    // Check for existing valid OTP
+    if (user.otpExpiry && user.otpExpiry > new Date()) {
+      const remainingMinutes = Math.ceil((user.otpExpiry - new Date()) / (1000 * 60));
+      throw new Error(`እባክዎ ቀድሞ የተላከውን OTP ይጠቀሙ (${remainingMinutes} ደቂቃ ይቀራል)`);
+    }
 
-    // 2. Generate OTP (existing logic remains)
+    // Generate and save new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
     await user.update({ otp, otpExpiry }, { transaction: t });
 
-    // 3. Prepare Afromessaging variables
-    const IDENTIFIER_ID = process.env.AFROMESSAGING_IDENTIFIER_ID;
-    const SENDER_NAME = 'Teamwork'; 
-    const RECIPIENT = phone_number;
-    const MESSAGE = `Your OTP is: ${otp}. Valid for 10 minutes.`;
-    const CALLBACK_URL = process.env.SMS_CALLBACK_URL || ''; // Optional
-
-    // 4. Construct URL exactly as per documentation
-    const baseUrl = 'https://api.afromessage.com/api/send';
-    const queryParams = [
-      `from=${encodeURIComponent(IDENTIFIER_ID)}`,
-      `sender=${encodeURIComponent(SENDER_NAME)}`,
-      `to=${encodeURIComponent(RECIPIENT)}`,
-      `message=${encodeURIComponent(MESSAGE)}`
-    ];
-    
-    if (CALLBACK_URL) {
-      queryParams.push(`callback=${encodeURIComponent(CALLBACK_URL)}`);
-    }
-
-    const apiUrl = `${baseUrl}?${queryParams.join('&')}`;
-
-    // 5. Execute request
-    const response = await axios.get(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${process.env.AFROMESSAGING_API_KEY.trim()}`,
-        'Accept': 'application/json'
-      }
+    // Send OTP email
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: {
+        user: process.env.EMAIL_USERNAME,
+        pass: process.env.EMAIL_PASSWORD,
+      },
     });
 
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to send OTP');
-    }
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: 'የእርስዎ OTP ኮድ',
+      html: `
+        <div dir="rtl">
+          <h2>የእርስዎ OTP ኮድ</h2>
+          <p>የእርስዎ OTP ኮድ፡ <strong>${otp}</strong> ነው።</p>
+          <p>ለ<strong>10 ደቂቃዎች</strong> የሚሰራ ነው።</p>
+          <p>እናመሰግናለን!</p>
+          <p>ቲምዎርክ አይቲ ሶሊውሽን</p>
+        </div>
+      `,
+    });
 
-    await t.commit();
-    return { 
-      success: true,
-      messageId: response.data.messageId,
-      credits: response.data.credits 
-    };
-
+    if (shouldCommit) await t.commit();
+    return { success: true, message: "OTP በትክክል ተልኳል" };
   } catch (error) {
-    await t.rollback();
-    console.error('SMS API Failure:', {
-      error: error.message,
-      requestUrl: error.config?.url, // Logs the exact URL sent
-      responseData: error.response?.data
+    if (shouldCommit && !t.finished) await t.rollback();
+    console.error("የOTP ስርወት ስህተት:", error);
+    throw error;
+  }
+};
+
+const verifyOTP = async ({ email, otp }, options = {}) => {
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
+
+  try {
+    const user = await User.findOne({
+      where: { email, deletedAt: null, is_active: true },
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
     });
-    throw new Error(`OTP sending failed: ${error.message}`);
+
+    if (!user) throw new Error("ተጠቃሚ አልተገኘም");
+    if (!user.otp || !user.otpExpiry) throw new Error("OTP አልተጠየቀም");
+    if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
+    if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
+
+    // Complete verification
+    await user.update({
+      isFirstLogin: false,
+      last_login: new Date(),
+      otp: null,
+      otpExpiry: null
+    }, { transaction: t });
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role?.name,
+        administrative_unit_id: user.administrative_unit_id,
+        oversight_office_id: user.oversight_office_id,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    if (shouldCommit) await t.commit();
+    return {
+      token,
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role?.name,
+      },
+      message: "OTP በትክክል ተረጋግጧል"
+    };
+  } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
+    console.error("የOTP ማረጋገጫ ስህተት:", error);
+    throw error;
   }
 };
 // logoute service
 const logoutService = async (userId, options = {}) => {
   const { transaction } = options;
   try {
- 
     // If you have a session store, you can destroy the session here.
 
     return { message: "በተሳካ ሁኔታ ወጣል።" };
@@ -266,20 +311,20 @@ const forgotPasswordService = async (email) => {
   const user = await User.findOne({
     where: {
       email: email,
-      deletedAt: null, 
+      deletedAt: null,
     },
   });
   if (!user) throw new Error("User not found.");
 
   // Generate JWT token (expires in 1h)
-const resetToken = jwt.sign(
-  { 
-    userId: user.id,  // Use consistent naming (userId instead of just id)
-    email: user.email 
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+  const resetToken = jwt.sign(
+    {
+      userId: user.id, // Use consistent naming (userId instead of just id)
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
 
   // Save token to DB
   user.resetPasswordToken = resetToken;
@@ -296,18 +341,19 @@ const resetPasswordService = async (token, newPassword) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  
-    if (!decoded.userId) {  // Check for userId instead of id
+
+    if (!decoded.userId) {
+      // Check for userId instead of id
       throw new Error("Invalid token: missing user ID");
     }
 
     // Find user with valid token
     const user = await User.findOne({
       where: {
-        id: decoded.userId,  // Use userId here
+        id: decoded.userId, // Use userId here
         resetPasswordToken: token,
-        resetPasswordExpires: { [Op.gt]: Date.now() }
-      }
+        resetPasswordExpires: { [Op.gt]: Date.now() },
+      },
     });
 
     if (!user) throw new Error("Invalid or expired token");
@@ -316,11 +362,10 @@ const resetPasswordService = async (token, newPassword) => {
     await user.update({
       password: newPassword,
       resetPasswordToken: null,
-      resetPasswordExpires: null
+      resetPasswordExpires: null,
     });
 
     return { success: true, message: "Password reset successful" };
-    
   } catch (error) {
     console.error("Reset error:", error);
     throw new Error(`Reset failed: ${error.message}`);
@@ -359,6 +404,7 @@ module.exports = {
   changePasswordService,
   resetPasswordService,
   login,
+  verifyOTP,
   sendOTP,
   logoutService,
   forgotPasswordService,

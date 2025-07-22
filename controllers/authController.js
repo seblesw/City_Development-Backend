@@ -4,7 +4,7 @@ const {
   forgotPasswordService,
   changePasswordService,
   resetPasswordService,
-  sendOTP,
+  verifyOTP,
 } = require("../services/authServices");
 
 const registerOfficialController = async (req, res) => {
@@ -24,14 +24,13 @@ const registerOfficialController = async (req, res) => {
       phone_number: body.phone_number,
       password: body.password || "12345678",
       role_id: body.role_id,
-      administrative_unit_id: body.administrative_unit_id,
+      administrative_unit_id: body.administrative_unit_id || null,
       oversight_office_id: body.oversight_office_id || null,
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
       relationship_type: null,
       marital_status: body.marital_status || null,
-      primary_owner_id: null,
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
 
@@ -48,49 +47,67 @@ const registerOfficialController = async (req, res) => {
 
 const loginController = async (req, res) => {
   try {
-    const { phone_number, password, otp } = req.body;
+    const { email, password } = req.body;
 
-    if (!phone_number) {
-      return res.status(400).json({ error: "ስልክ ቁጥር መግለጽ አለበት።" });
+    if (!email) {
+      return res.status(400).json({ error: "ኢሜይል መግለጽ አለበት።" });
     }
 
-
-    // Proceed with login (OTP or password)
-    const result = await login({ phone_number, password, otp });
+    const result = await login({ email, password });
+    
+    // if (result.requiresOTPVerification) {
+    //   return res.status(200).json({
+    //     message: "OTP ወደ ኢሜይልዎ ተልኳል። እባክዎ ያረጋግጡ።",
+    //     data: result
+    //   });
+    // }
 
     return res.status(200).json({
       message: "መግባት ተሳክቷል።", 
       data: result,
     });
   } catch (error) {
+    console.error("Login error:", error);
+    
+    const errorMessage = error.message.includes("Invalid") || error.message.includes("Incorrect")
+      ? "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።"
+      : error.message.includes("User not found")
+      ? "ተጠቃሚ አልተገኙም"
+      : error.message;
+
     return res.status(400).json({ 
-      error: error.message.includes("Invalid") 
-        ? "የስልክ ቁጥር፣ OTP ወይም �ስተኝጋሌ ትክክል አይደለም።" // "Invalid credentials"
-        : error.message 
+      error: errorMessage 
     });
   }
 };
-const sendOTPController = async (req, res) => {
-  try {
-    const { phone_number } = req.body;
-    console.log("[API] /send-otp request:", phone_number);
 
-    if (!phone_number) {
-      console.log("[Validation] Phone number missing");
-      return res.status(400).json({ error: "ስልክ ቁጥር መግለጽ አለበት።" });
+const verifyOtpController = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ 
+        error: "ኢሜይል እና OTP መግለጽ አለበት።" 
+      });
     }
 
-    const result = await sendOTP(phone_number);
-    console.log("[API] OTP sent successfully:", phone_number);
+    const result = await verifyOTP({ email, otp });
+    
     return res.status(200).json({
-      message: "OTP በተሳካ ሁኔታ ተልኳል።",
-      data: result,
+      message: "OTP በትክክል ተረጋግጧል።",
+      data: result
     });
-
   } catch (error) {
-    console.error("[API] OTP send error:", error.message);
+    console.error("OTP verification error:", error);
+    
+    const errorMessage = error.message.includes("Invalid") || error.message.includes("No OTP")
+      ? "የተሳሳተ ወይም ያልተገኘ OTP"
+      : error.message.includes("expired")
+      ? "OTP ጊዜው አልፎታል፣ እባክዎ አዲስ OTP ይጠይቁ"
+      : error.message;
+
     return res.status(400).json({ 
-      error: "የስልክ ቁጥር ልክ አይደለም።" 
+      error: errorMessage 
     });
   }
 };
@@ -166,8 +183,8 @@ module.exports = {
   registerOfficialController,
   resetPassword,
   loginController,
-  sendOTPController,
   logoutController,
+  verifyOtpController,
   forgotPasswordController,
   changePasswordController,
 };

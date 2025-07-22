@@ -137,7 +137,7 @@ module.exports = (db, DataTypes) => {
       }, // OTP expiry time
       isFirstLogin: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false,
+        defaultValue: true,
       }, 
     },
     {
