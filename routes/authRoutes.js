@@ -5,7 +5,8 @@ const router = express.Router();
 // Importing the authController methods
 router.post("/register", authController.registerOfficialController);
 router.post("/login", authController.loginController);
-router.post('/send-otp', authController.sendOTPController); 
+// router.post('/send-otp', authController.sendOTPController); 
+router.post("/verify-otp",authController.verifyOtpController)
 router.post("/logout", authMiddleware.protect, authController.logoutController);
 router.post("/change-password", authMiddleware.protect, authController.changePasswordController);
 router.post("/forgot-password", authController.forgotPasswordController);
