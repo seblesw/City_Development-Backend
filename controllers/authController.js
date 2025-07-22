@@ -24,14 +24,13 @@ const registerOfficialController = async (req, res) => {
       phone_number: body.phone_number,
       password: body.password || "12345678",
       role_id: body.role_id,
-      administrative_unit_id: body.administrative_unit_id,
+      administrative_unit_id: body.administrative_unit_id || null,
       oversight_office_id: body.oversight_office_id || null,
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
       relationship_type: null,
       marital_status: body.marital_status || null,
-      primary_owner_id: null,
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
 

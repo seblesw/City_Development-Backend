@@ -14,8 +14,6 @@ const registerOfficial = async (data, options = {}) => {
   let t = transaction;
 
   try {
-    // Basic required fields check
-    // console.log("Registering official with data:", data);
     if (
       !data.first_name ||
       !data.last_name ||
@@ -23,12 +21,10 @@ const registerOfficial = async (data, options = {}) => {
       !data.email ||
       !data.phone_number ||
       !data.national_id ||
-      !data.administrative_unit_id ||
-      !data.role_id ||
-      !data.gender
-    ) {
+      !data.role_id
+        ) {
       throw new Error(
-        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ የአስተዳደር ክፍል፣ ሚና፣ እና ጾታ መግለጽ አለባቸው።"
+        "ስም፣ የአባት ስም፣ የአያት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር፣ ኢሜል መግለጽ አለባቸው።"
       );
     }
 
@@ -40,6 +36,15 @@ const registerOfficial = async (data, options = {}) => {
       });
       if (!office) {
         throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
+      }
+    }
+    //validate Administrative Unit(optional)
+    if (data.administrative_unit_id) {
+      const administrativeUnit = await AdministrativeUnit.findByPk(data.administrative_unit_id, {
+        transaction: t,
+      });
+      if (!administrativeUnit) {
+        throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
       }
     }
 
