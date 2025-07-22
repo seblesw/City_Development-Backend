@@ -111,7 +111,7 @@ const login = async ({ phone_number, password, otp }, options = {}) => {
       where: { phone_number, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role", attributes: ['id', 'name'] }],
       transaction: t,
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
+      attributes: ['id', 'first_name', 'last_name', 'phone_number','email','national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
     });
 
     if (!user) throw new Error("Invalid phone number or password");
