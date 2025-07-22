@@ -4,6 +4,7 @@ const {
   getOversightOfficeByIdService,
   updateOversightOfficeService,
   deleteOversightOfficeService,
+  getOversightOfficeStatsService,
 } = require('../services/oversightOfficeService');
 
 exports.createOversightOffice = async (req, res) => {
@@ -82,6 +83,26 @@ exports.deleteOversightOffice = async (req, res) => {
     res.status(404).json({
       status: 'error',
       message: error.message || 'ቢሮ መሰረዝ አልተሳካም።',
+    });
+  }
+};
+//get the statistics of the oversight office
+exports.getOversightOfficeStats = async (req, res) => {
+  try {
+    const userOversightOfficeId = req.user.oversight_office_id;
+    if (!userOversightOfficeId) {
+      throw new Error('ይህ ተጠቃሚ በዚህ ቢሮ ውስጥ አይገኝም።');
+    }
+
+    const stats = await getOversightOfficeStatsService(userOversightOfficeId);
+    res.status(200).json({
+      status: 'success',
+      data: stats,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message || 'Failed to get oversight office statistics',
     });
   }
 };

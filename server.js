@@ -55,7 +55,7 @@ const startServer = async () => {
     // Sync models with the database
     // Set force to true only in development to drop tables={force:true}
     // set alter to true for to add new attribuete with out drop existing table {alter:true}
-    await db.sync({alter:true}); 
+    // await db.sync({alter:true}); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

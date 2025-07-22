@@ -31,6 +31,7 @@ const protect = async (req, res, next) => {
         "role_id",
         "is_active",
         "administrative_unit_id",
+        "oversight_office_id",
       ],
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
     });
@@ -49,7 +50,8 @@ const protect = async (req, res, next) => {
       phone_number: user.phone_number,
       role_id: user.role_id,
       role_name: user.role ? user.role.name : null,
-      administrative_unit_id: user.administrative_unit_id,
+      administrative_unit_id: user.administrative_unit_id || null,
+      oversight_office_id: user.oversight_office_id || null,
     };
 
     next();

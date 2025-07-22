@@ -7,11 +7,12 @@ const {
   updateAdministrativeUnit,
   deleteAdministrativeUnit,
 } = require("../controllers/administrativeUnitController");
+const authMiddleware= require("../middlewares/authMiddleware");
 
 router.post("/", createAdministrativeUnit);
 router.get("/", getAllAdministrativeUnits);
 router.get("/:id", getAdministrativeUnitById);
-router.put("/:id", updateAdministrativeUnit);
+router.put("/:id", authMiddleware.protect, updateAdministrativeUnit);
 router.delete("/:id", deleteAdministrativeUnit);
 
 module.exports = router;

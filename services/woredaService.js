@@ -23,7 +23,7 @@ const createWoredaService = async (woredaData, createdByUserId) => {
     name,
     zone_id,
     code,
-    created_by: createdByUserId || null,
+    created_by: createdByUserId,
   });
 
   return Woreda.findByPk(woreda.id, {
