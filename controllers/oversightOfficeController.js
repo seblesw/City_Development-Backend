@@ -76,9 +76,7 @@ exports.updateOversightOffice = async (req, res) => {
 
 exports.deleteOversightOffice = async (req, res) => {
   try {
-    const userId = req.user.id;
-    console.log(`Deleting oversight office with ID: ${req.params.id} by user: ${userId}`);
-    await deleteOversightOfficeService(req.params.id, userId);
+    await deleteOversightOfficeService(req.params.id);
     res.status(204).send();
   } catch (error) {
     res.status(404).json({

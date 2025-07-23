@@ -177,7 +177,7 @@ exports.updateOversightOfficeService = async (
   }
 };
 
-exports.deleteOversightOfficeService = async (id, userId, transaction) => {
+exports.deleteOversightOfficeService = async (id, transaction) => {
   try {
     const office = await OversightOffice.findByPk(id, { transaction });
     if (!office) throw new Error("ቢሮ አልተገኘም።");
@@ -189,69 +189,43 @@ exports.deleteOversightOfficeService = async (id, userId, transaction) => {
 
 exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
-    // Get the oversight office and its hierarchy level
+    // 1. Get the oversight office and its hierarchy
     const oversightOffice = await OversightOffice.findByPk(oversightOfficeId, {
       include: [
-        {
-          model: Region,
-          as: "region",
-          required: true,
-          attributes: ["id", "name", "code"],
-        },
-        {
-          model: Zone,
-          as: "zone",
-          required: false,
-          attributes: ["id", "name", "code"],
-        },
-        {
-          model: Woreda,
-          as: "woreda",
-          required: false,
-          attributes: ["id", "name", "code"],
-        },
+        { model: Region, as: "region", attributes: ["id", "name", "code"] },
+        { model: Zone, as: "zone", attributes: ["id", "name", "code"] },
+        { model: Woreda, as: "woreda", attributes: ["id", "name", "code"] },
       ],
     });
 
     if (!oversightOffice) {
-      throw new Error("ተቆጣጣሪ ቢሮ አልተገኘም።");
+      throw new Error("Oversight office not found");
     }
 
-    // Determine the hierarchy level
-    const isRegional = oversightOffice.region_id && !oversightOffice.zone_id;
-    const isZonal = oversightOffice.region_id && oversightOffice.zone_id && !oversightOffice.woreda_id;
-    const isWoreda = oversightOffice.region_id && oversightOffice.zone_id && oversightOffice.woreda_id;
-
-    // Build the query to find all oversight offices under this hierarchy
-    const where = { deletedAt: { [Op.eq]: null } };
-
-    if (isRegional) {
-      where.region_id = oversightOffice.region_id;
-    } else if (isZonal) {
-      where.region_id = oversightOffice.region_id;
-      where.zone_id = oversightOffice.zone_id;
-    } else if (isWoreda) {
-      where.region_id = oversightOffice.region_id;
-      where.zone_id = oversightOffice.zone_id;
+    // 2. Determine hierarchy level and build query
+    const where = { deletedAt: null };
+    if (oversightOffice.woreda_id) {
       where.woreda_id = oversightOffice.woreda_id;
+      where.zone_id = oversightOffice.zone_id;
+    } else if (oversightOffice.zone_id) {
+      where.zone_id = oversightOffice.zone_id;
     }
+    where.region_id = oversightOffice.region_id;
 
-    // Get all oversight offices under this hierarchy with their administrative units
+    // 3. Get all oversight offices in this hierarchy with their admin units
     const offices = await OversightOffice.findAll({
       where,
-      include: [
-        {
-          model: AdministrativeUnit,
-          as: "administrativeUnits",
-          where: { deletedAt: { [Op.eq]: null } },
-          required: false,
-        },
-      ],
+      include: [{
+        model: AdministrativeUnit,
+        as: "administrativeUnits",
+        where: { deletedAt: null },
+        required: false,
+      }],
     });
 
-    // Get all administrative units under these offices
-    const adminUnitIds = offices.flatMap(office => 
-      office.administrativeUnits.map(unit => unit.id)
+    // 4. Get all admin unit IDs
+    const adminUnitIds = offices.flatMap(o => 
+      o.administrativeUnits.map(u => u.id)
     );
 
     if (adminUnitIds.length === 0) {
@@ -259,7 +233,8 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         oversightOffice: {
           id: oversightOffice.id,
           name: oversightOffice.name,
-          level: isRegional ? "regional" : isZonal ? "zonal" : "woreda",
+          level: oversightOffice.woreda_id ? "woreda" : 
+                oversightOffice.zone_id ? "zonal" : "regional",
           region: oversightOffice.region,
           zone: oversightOffice.zone,
           woreda: oversightOffice.woreda
@@ -272,100 +247,79 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
       };
     }
 
-    // Get land record counts for each administrative unit
-    const landRecordCounts = await LandRecord.findAll({
-      attributes: [
-        'administrative_unit_id',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'landRecordCount']
-      ],
-      where: { 
+    // 5. Get all land records for these admin units with their owners
+    const landRecords = await LandRecord.findAll({
+      where: {
         administrative_unit_id: { [Op.in]: adminUnitIds },
-        deletedAt: { [Op.eq]: null }
-      },
-      group: ['administrative_unit_id'],
-      raw: true
-    });
-
-    // Get landowner counts through the LandOwner joint table
-    const landownerCounts = await LandRecord.findAll({
-      attributes: [
-        'administrative_unit_id',
-        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('owner_id'))), 'landownerCount']
-      ],
-      where: { 
-        administrative_unit_id: { [Op.in]: adminUnitIds },
-        deletedAt: { [Op.eq]: null }
+        deletedAt: null
       },
       include: [{
         model: User,
-        through: LandOwner,
-        as: 'owners',
-        where: { deletedAt: { [Op.eq]: null } },
-        required: true
+        as: "owners",
+        through: { 
+          attributes: [] 
+        },
+        attributes: ["id"],
+        required: false
       }],
-      group: ['administrative_unit_id'],
-      raw: true
     });
 
-    // Create lookup objects for quick access
-    const landRecordCountMap = landRecordCounts.reduce((acc, item) => {
-      acc[item.administrative_unit_id] = item.landRecordCount;
-      return acc;
-    }, {});
+    // 6. Process the data to get counts
+    const statsByAdminUnit = {};
+    
+    landRecords.forEach(record => {
+      const adminUnitId = record.administrative_unit_id;
+      
+      if (!statsByAdminUnit[adminUnitId]) {
+        statsByAdminUnit[adminUnitId] = {
+          landRecordCount: 0,
+          landownerIds: new Set()
+        };
+      }
+      
+      statsByAdminUnit[adminUnitId].landRecordCount++;
+      
+      if (record.owners && record.owners.length > 0) {
+        record.owners.forEach(owner => {
+          statsByAdminUnit[adminUnitId].landownerIds.add(owner.id);
+        });
+      }
+    });
 
-    const landownerCountMap = landownerCounts.reduce((acc, item) => {
-      acc[item.administrative_unit_id] = item.landownerCount;
-      return acc;
-    }, {});
+    // 7. Get admin unit details
+    const adminUnits = await AdministrativeUnit.findAll({
+      where: { id: { [Op.in]: adminUnitIds } },
+      attributes: ["id", "name"]
+    });
 
-    // Calculate statistics
+    // 8. Prepare the final stats
     const stats = {
       oversightOffice: {
         id: oversightOffice.id,
         name: oversightOffice.name,
-        level: isRegional ? "regional" : isZonal ? "zonal" : "woreda",
+        level: oversightOffice.woreda_id ? "woreda" : 
+              oversightOffice.zone_id ? "zonal" : "regional",
         region: oversightOffice.region,
         zone: oversightOffice.zone,
         woreda: oversightOffice.woreda
       },
       totalOffices: offices.length,
-      totalAdministrativeUnits: 0,
-      totalLandRecords: 0,
-      totalLandowners: 0,
-      administrativeUnits: [],
+      totalAdministrativeUnits: adminUnitIds.length,
+      totalLandRecords: landRecords.length,
+      totalLandowners: Object.values(statsByAdminUnit).reduce(
+        (sum, unit) => sum + unit.landownerIds.size, 0),
+      administrativeUnits: adminUnits.map(unit => ({
+        id: unit.id,
+        name: unit.name,
+        landRecordCount: statsByAdminUnit[unit.id]?.landRecordCount || 0,
+        landownerCount: statsByAdminUnit[unit.id]?.landownerIds.size || 0
+      }))
     };
 
-    // Process each office and its administrative units
-    for (const office of offices) {
-      if (office.administrativeUnits && office.administrativeUnits.length > 0) {
-        stats.totalAdministrativeUnits += office.administrativeUnits.length;
-
-        for (const unit of office.administrativeUnits) {
-          const landRecordCount = landRecordCountMap[unit.id] || 0;
-          const landownerCount = landownerCountMap[unit.id] || 0;
-          
-          stats.totalLandRecords += landRecordCount;
-          stats.totalLandowners += landownerCount;
-
-          const unitStats = {
-            id: unit.id,
-            name: unit.name,
-            landRecordCount,
-            landownerCount,
-            // Add other unit properties as needed
-          };
-          stats.administrativeUnits.push(unitStats);
-        }
-      }
-    }
-
     return stats;
+
   } catch (error) {
-    console.error('Error in getOversightOfficeStatsService:', {
-      message: error.message,
-      stack: error.stack,
-      oversightOfficeId
-    });
-    throw new Error(error.message || "የተቆጣጣሪ ቢሮ ስታቲስቲክስ ማግኘት አልተሳካም።");
+    console.error('Error in getOversightOfficeStatsService:', error);
+    throw new Error(error.message || "Failed to get oversight office statistics");
   }
 };
