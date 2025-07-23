@@ -5,10 +5,14 @@ const {
   Zone,
   Woreda,
   AdministrativeUnit,
+  OWNERSHIP_TYPES,
+  LAND_USES,
+  ZONING_TYPES,
   LandOwner,
   LandRecord,
   sequelize,
   User,
+  LAND_USE_TYPES,
 } = require("../models");
 exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
@@ -187,6 +191,10 @@ exports.deleteOversightOfficeService = async (id, transaction) => {
   }
 };
 
+// At the top of your file, import the enum values from your models
+// At the top of your service file, import the enums
+// const { LAND_USE_TYPES, ZONING_TYPES, OWNERSHIP_TYPES } = require('../models/enums'); // Adjust path as needed
+
 exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
     // 1. Get the oversight office and its hierarchy
@@ -230,24 +238,27 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
 
     if (adminUnitIds.length === 0) {
       return {
-        oversightOffice: {
-          id: oversightOffice.id,
-          name: oversightOffice.name,
-          level: oversightOffice.woreda_id ? "woreda" : 
-                oversightOffice.zone_id ? "zonal" : "regional",
-          region: oversightOffice.region,
-          zone: oversightOffice.zone,
-          woreda: oversightOffice.woreda
-        },
-        totalOffices: offices.length,
-        totalAdministrativeUnits: 0,
-        totalLandRecords: 0,
-        totalLandowners: 0,
-        administrativeUnits: [],
+        status: "success",
+        data: {
+          oversightOffice: {
+            id: oversightOffice.id,
+            name: oversightOffice.name,
+            level: oversightOffice.woreda_id ? "woreda" : 
+                  oversightOffice.zone_id ? "zonal" : "regional",
+            region: oversightOffice.region,
+            zone: oversightOffice.zone,
+            woreda: oversightOffice.woreda
+          },
+          totalOffices: offices.length,
+          totalAdministrativeUnits: 0,
+          totalLandRecords: 0,
+          totalLandowners: 0,
+          administrativeUnits: [],
+        }
       };
     }
 
-    // 5. Get all land records for these admin units with their owners
+    // 5. Get all land records for these admin units with their owners and additional attributes
     const landRecords = await LandRecord.findAll({
       where: {
         administrative_unit_id: { [Op.in]: adminUnitIds },
@@ -262,22 +273,70 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         attributes: ["id"],
         required: false
       }],
+      attributes: [
+        'id',
+        'administrative_unit_id',
+        'ownership_type',
+        'land_use',
+        'zoning_type'
+      ],
+      raw: true
     });
 
-    // 6. Process the data to get counts
+    // 6. Initialize statsByAdminUnit with all possible enum values
     const statsByAdminUnit = {};
     
+    // Get all enum values as arrays
+    const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
+    const landUseValues = Object.values(LAND_USE_TYPES);
+    const zoningTypeValues = Object.values(ZONING_TYPES);
+
+    // Initialize each admin unit with all enum values set to 0
+    adminUnitIds.forEach(adminUnitId => {
+      statsByAdminUnit[adminUnitId] = {
+        landRecordCount: 0,
+        landownerIds: new Set(),
+        ownershipTypes: {},
+        landUses: {},
+        zoningTypes: {}
+      };
+
+      // Initialize all ownership types
+      ownershipTypeValues.forEach(type => {
+        statsByAdminUnit[adminUnitId].ownershipTypes[type] = 0;
+      });
+
+      // Initialize all land uses
+      landUseValues.forEach(type => {
+        statsByAdminUnit[adminUnitId].landUses[type] = 0;
+      });
+
+      // Initialize all zoning types
+      zoningTypeValues.forEach(type => {
+        statsByAdminUnit[adminUnitId].zoningTypes[type] = 0;
+      });
+    });
+
+    // 7. Process the land records to populate the counts
     landRecords.forEach(record => {
       const adminUnitId = record.administrative_unit_id;
       
-      if (!statsByAdminUnit[adminUnitId]) {
-        statsByAdminUnit[adminUnitId] = {
-          landRecordCount: 0,
-          landownerIds: new Set()
-        };
+      statsByAdminUnit[adminUnitId].landRecordCount++;
+      
+      // Count by ownership type
+      if (record.ownership_type && ownershipTypeValues.includes(record.ownership_type)) {
+        statsByAdminUnit[adminUnitId].ownershipTypes[record.ownership_type]++;
       }
       
-      statsByAdminUnit[adminUnitId].landRecordCount++;
+      // Count by land use
+      if (record.land_use && landUseValues.includes(record.land_use)) {
+        statsByAdminUnit[adminUnitId].landUses[record.land_use]++;
+      }
+      
+      // Count by zoning type
+      if (record.zoning_type && zoningTypeValues.includes(record.zoning_type)) {
+        statsByAdminUnit[adminUnitId].zoningTypes[record.zoning_type]++;
+      }
       
       if (record.owners && record.owners.length > 0) {
         record.owners.forEach(owner => {
@@ -286,34 +345,40 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
       }
     });
 
-    // 7. Get admin unit details
+    // 8. Get admin unit details
     const adminUnits = await AdministrativeUnit.findAll({
       where: { id: { [Op.in]: adminUnitIds } },
       attributes: ["id", "name"]
     });
 
-    // 8. Prepare the final stats
+    // 9. Prepare the final stats
     const stats = {
-      oversightOffice: {
-        id: oversightOffice.id,
-        name: oversightOffice.name,
-        level: oversightOffice.woreda_id ? "woreda" : 
-              oversightOffice.zone_id ? "zonal" : "regional",
-        region: oversightOffice.region,
-        zone: oversightOffice.zone,
-        woreda: oversightOffice.woreda
-      },
-      totalOffices: offices.length,
-      totalAdministrativeUnits: adminUnitIds.length,
-      totalLandRecords: landRecords.length,
-      totalLandowners: Object.values(statsByAdminUnit).reduce(
-        (sum, unit) => sum + unit.landownerIds.size, 0),
-      administrativeUnits: adminUnits.map(unit => ({
-        id: unit.id,
-        name: unit.name,
-        landRecordCount: statsByAdminUnit[unit.id]?.landRecordCount || 0,
-        landownerCount: statsByAdminUnit[unit.id]?.landownerIds.size || 0
-      }))
+      status: "success",
+      data: {
+        oversightOffice: {
+          id: oversightOffice.id,
+          name: oversightOffice.name,
+          level: oversightOffice.woreda_id ? "woreda" : 
+                oversightOffice.zone_id ? "zonal" : "regional",
+          region: oversightOffice.region,
+          zone: oversightOffice.zone,
+          woreda: oversightOffice.woreda
+        },
+        totalOffices: offices.length,
+        totalAdministrativeUnits: adminUnitIds.length,
+        totalLandRecords: landRecords.length,
+        totalLandowners: Object.values(statsByAdminUnit).reduce(
+          (sum, unit) => sum + unit.landownerIds.size, 0),
+        administrativeUnits: adminUnits.map(unit => ({
+          id: unit.id,
+          name: unit.name,
+          landRecordCount: statsByAdminUnit[unit.id]?.landRecordCount || 0,
+          landownerCount: statsByAdminUnit[unit.id]?.landownerIds.size || 0,
+          ownershipTypes: statsByAdminUnit[unit.id]?.ownershipTypes || {},
+          landUses: statsByAdminUnit[unit.id]?.landUses || {},
+          zoningTypes: statsByAdminUnit[unit.id]?.zoningTypes || {}
+        }))
+      }
     };
 
     return stats;
