@@ -2207,7 +2207,7 @@ const changeRecordStatusService = async (
           model: User,
           as: "owners",
           through: { attributes: [] },
-          attributes: ["id", "first_name", "last_name", "email"],
+          attributes: ["id", "first_name", "last_name","middle_name", "email"],
         },
       ],
     });
