@@ -7,11 +7,12 @@ const {
   updateWoreda,
   deleteWoreda,
 } = require("../controllers/woredaController");
+const authMiddleware = require("../middlewares/authMiddleware");
 
-router.post("/", createWoreda);
-router.get("/", getAllWoredas);
-router.get("/:id", getWoredaById);
-router.put("/:id", updateWoreda);
-router.delete("/:id", deleteWoreda);
+router.post("/", authMiddleware.protect, createWoreda);
+router.get("/", authMiddleware.protect, getAllWoredas);
+router.get("/:id", authMiddleware.protect, getWoredaById);
+router.put("/:id", authMiddleware.protect, updateWoreda);
+router.delete("/:id", authMiddleware.protect, deleteWoreda);
 
 module.exports = router;
