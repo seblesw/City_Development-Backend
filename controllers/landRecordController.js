@@ -19,10 +19,11 @@ const {
   restoreFromTrashService,
   permanentlyDeleteService,
   getTrashItemsService,
-  importLandRecordsFromCSVService,
-  rejectedLandRecords,
+  // importLandRecordsFromCSVService,
+  // rejectedLandRecords,
   getRejectedLandRecordsService,
   getLandRecordStats,
+  importLandRecordsFromXLSXService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -76,14 +77,14 @@ const createLandRecord = async (req, res) => {
     });
   }
 };
-const importLandRecordsFromCSV = async (req, res) => {
+const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     if (!req.file) {
       throw new Error("CSV ፋይል ያስፈልጋል።");
     }
 
-    const results = await importLandRecordsFromCSVService(
+    const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
       { transaction: t }
@@ -671,14 +672,14 @@ const getLandRecordStatsController = async (req, res, next) => {
   try {
     // Get the admin unit ID from the authenticated user
     const adminUnitId = req.user.administrative_unit_id || null;
-    
+
     // Get optional transaction from request if needed
     const options = {};
     if (req.transaction) options.transaction = req.transaction;
-    
+
     const stats = await getLandRecordStats(adminUnitId, options);
-    
-     res.status(200).json({
+
+    res.status(200).json({
       status: "success",
       message: "የመሬት መዝገብ ስታቲስቲክስ በተሳካ ሁኔታ ተገኝቷል።",
       data: stats,
@@ -698,7 +699,7 @@ module.exports = {
   permanentlyDelete,
   getTrash,
   createLandRecord,
-  importLandRecordsFromCSV,
+  importLandRecordsFromXLSX,
   saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,
