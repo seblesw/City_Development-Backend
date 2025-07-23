@@ -21,6 +21,7 @@ const createLandPaymentController = async (req, res) => {
       penalty_reason: body.penalty_reason || null,
       description: body.description || null,
       payer_id: body.payer_id,
+      created_by: req.user.id,
     };
     const payment = await createLandPaymentService(data);
     return res.status(201).json({

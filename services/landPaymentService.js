@@ -47,6 +47,7 @@ const createLandPaymentService = async (data, options = {}) => {
 
     // Validate amounts
     if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {
+      console.log("Total amount validation failed:", typeof(data.total_amount));
       throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
     }
 
@@ -102,6 +103,7 @@ const createLandPaymentService = async (data, options = {}) => {
       changed_by: data.created_by,
       changed_at: new Date()
     }];
+    console.log("New action log:", data);
 
     await LandRecord.update(
       { action_log: newLog },

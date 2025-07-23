@@ -174,6 +174,9 @@ const login = async ({ email, password }, options = {}) => {
         email: user.email,
         phone_number: user.phone_number,
         role: user.role?.name,
+        isFirstLogin: user.isFirstLogin,
+        national_id: user.national_id,
+        administrative_unit_id: user.administrative_unit_id,
       },
       message: "በተሳካ ሁኔታ ገብተዋል"
     };
