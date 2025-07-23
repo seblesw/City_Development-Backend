@@ -17,7 +17,7 @@ const createDocumentController = async (req, res) => {
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "ቢያንስ አንዴ ፋይል መግለጥ አለበት።" });
     }
-    console.log("body",body, "files",files,"user", user )
+    // console.log("body",body, "files",files,"user", user )
     const data = {
       map_number: body.map_number,
       document_type: body.document_type || null,

@@ -15,6 +15,6 @@ router.get("/stats",authMiddleware.protect, getOversightOfficeStats);
 router.get("/", getAllOversightOffices);
 router.get("/:id", getOversightOfficeById);
 router.put("/:id", updateOversightOffice);
-router.delete("/:id", deleteOversightOffice);
+router.delete("/:id", authMiddleware.protect,deleteOversightOffice);
 
 module.exports = router;

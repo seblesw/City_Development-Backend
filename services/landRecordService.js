@@ -103,7 +103,11 @@ const createLandRecordService = async (data, files, user) => {
 
     // 6. Create and Link Owners
     const createdOwners = await userService.createLandOwner(
-      owners,
+      owners.map(owner => ({
+        ...owner,
+        email: owner.email || null,
+        address: owner.address || null
+      })),
       adminunit,
       user.id,
       { transaction: t }
@@ -1762,7 +1766,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       paranoid: !includeDeleted,
       transaction: t,
     });
-    // console.log(records)
+    // (records)
 
     // 3. Process and transform the data
     const processedRecords = rows.map((record) => {

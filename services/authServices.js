@@ -127,10 +127,7 @@ const login = async ({ email, password }, options = {}) => {
       where: { email, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
       transaction: t,
-      attributes: [
-        "id", "first_name", "middle_name", "last_name", "email", 
-        "phone_number", "password", "otp", "otpExpiry", "isFirstLogin"
-      ],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number','email','national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
@@ -177,6 +174,9 @@ const login = async ({ email, password }, options = {}) => {
         email: user.email,
         phone_number: user.phone_number,
         role: user.role?.name,
+        isFirstLogin: user.isFirstLogin,
+        national_id: user.national_id,
+        administrative_unit_id: user.administrative_unit_id,
       },
       message: "በተሳካ ሁኔታ ገብተዋል"
     };
@@ -206,6 +206,7 @@ const sendOTP = async (email, options = {}) => {
 
     // Generate and save new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log("Generated OTP:", otp); // Debugging log
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
     await user.update({ otp, otpExpiry }, { transaction: t });
 
