@@ -177,7 +177,7 @@ exports.updateOversightOfficeService = async (
   }
 };
 
-exports.deleteOversightOfficeService = async (id, userId, transaction) => {
+exports.deleteOversightOfficeService = async (id, transaction) => {
   try {
     const office = await OversightOffice.findByPk(id, { transaction });
     if (!office) throw new Error("ቢሮ አልተገኘም።");
@@ -290,7 +290,7 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
     const landownerCounts = await LandRecord.findAll({
       attributes: [
         'administrative_unit_id',
-        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('owner_id'))), 'landownerCount']
+        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('user_id'))), 'landownerCount']
       ],
       where: { 
         administrative_unit_id: { [Op.in]: adminUnitIds },
