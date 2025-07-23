@@ -22,6 +22,7 @@ const landPaymentService = require("./landPaymentService");
 const { Op } = require("sequelize");
 const userService = require("./userService");
 const { parseCSVFile } = require("../utils/csvParser");
+const { sendEmail } = require("../utils/statusEmail");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -2193,14 +2194,20 @@ const changeRecordStatusService = async (
   const t = await sequelize.transaction();
 
   try {
-    // 1. Get the record with minimal associations
+    // 1. Get the record with owners
     const record = await LandRecord.findByPk(recordId, {
       transaction: t,
       include: [
         {
           model: User,
           as: "creator",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: [] },
+          attributes: ["id", "first_name", "last_name", "email"],
         },
       ],
     });
@@ -2209,7 +2216,7 @@ const changeRecordStatusService = async (
       throw new Error("Land record not found");
     }
 
-    // 2. Validate status transition
+    // 2. Validate status transition (existing code remains the same)
     const allowedTransitions = {
       [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
       [RECORD_STATUSES.SUBMITTED]: [
@@ -2230,7 +2237,7 @@ const changeRecordStatusService = async (
       );
     }
 
-    // 3. Prepare update data - PostgreSQL compatible JSONB update
+    // 3. Prepare update data (existing code remains the same)
     const currentHistory = Array.isArray(record.status_history)
       ? record.status_history
       : [];
@@ -2250,7 +2257,6 @@ const changeRecordStatusService = async (
       status_history: newHistory,
     };
 
-    // 4. Handle status-specific fields
     if (newStatus === RECORD_STATUSES.REJECTED) {
       if (!rejection_reason) {
         throw new Error("Rejection reason is required");
@@ -2261,11 +2267,99 @@ const changeRecordStatusService = async (
       updateData.approved_by = userId;
     }
 
-    // 5. Update the record
+    // 4. Update the record
     await record.update(updateData, { transaction: t });
     await t.commit();
 
-    // 6. Return updated record with basic associations
+
+   const emailPromises = record.owners.map(async (owner) => {
+  if (owner.email) {
+    // Get the updater's admin unit details
+    const updaterWithAdminUnit = await User.findByPk(userId, {
+      attributes: ['first_name', 'middle_name', 'last_name'],
+      include: [{
+        model: AdministrativeUnit,
+        as: 'administrativeUnit',
+        attributes: ['name'],
+        required: false
+      }]
+    });
+
+    const adminUnitName = updaterWithAdminUnit.administrativeUnit 
+      ? updaterWithAdminUnit.administrativeUnit.name 
+      : 'የከተማ መሬት አስተዳደር'; 
+
+    const subject = `የመሬት ሁኔታ ማሻሻል ${record.parcel_number}`;
+    
+    let emailBody = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <p>ውድ ${owner.first_name} ${owner.middle_name},</p>
+        <p>(መዝገብ #${record.parcel_number}) መዝገብ ቁጥር ያለው የመሬትዎ ሁኔታ ተሻሻሏል:</p>
+        
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
+          <p><strong>አሁናዊ ሁኔታ:</strong> ${newStatus}</p>
+    `;
+
+    if (notes) {
+      emailBody += `
+          <p><strong>ተያያዥ ጽሁፍ:</strong></p>
+          <p style="background-color: #fff; padding: 8px; border-left: 3px solid #3498db;">
+            ${notes}
+          </p>
+      `;
+    }
+
+    if (rejection_reason) {
+      emailBody += `
+          <p><strong>ውድቅ የተደረገበት ምክንያት:</strong></p>
+          <p style="background-color: #fff; padding: 8px; border-left: 3px solid #e74c3c;">
+            ${rejection_reason}
+          </p>
+      `;
+    }
+
+    emailBody += `
+        </div>
+        
+        <p><strong>ያሻሻለው አካል:</strong> ${updaterWithAdminUnit.first_name} ${updaterWithAdminUnit.middle_name}</p>
+        <p><strong>ከ:</strong> ${adminUnitName}</p>
+        
+        <div style="margin-top: 20px;">
+          <p>እናመሰግናለን</p>
+          <p>የ ${adminUnitName} ከተማ መሬት አስተዳደር</p>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: center;">
+          <a href="${process.env.FRONTEND_URL}/land-records/${record.id}" 
+             style="background-color: #2ecc71; color: white; padding: 10px 20px; 
+                    text-decoration: none; border-radius: 5px; display: inline-block;">
+            መሬት መዝገብ ለማየት ይህን ይጫኑ
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; font-size: 0.9em; color: #7f8c8d;">
+          <p>ይህ ኢሜይል በስርአቱ በአውቶማቲክ መንገድ ተልኳል። እባክዎ በቀጥታ ምላሽ አይስጡ።</p>
+        </div>
+      </div>
+    `;
+
+    try {
+      await sendEmail({
+        to: owner.email,
+        subject,
+        html: emailBody
+      });
+      console.log(`Status update email sent to ${owner.email}`);
+    } catch (emailError) {
+      console.error(`Failed to send email to ${owner.email}:`, emailError);
+    }
+  }
+});
+
+    // Wait for all emails to be sent (but don't fail the whole operation if emails fail)
+    await Promise.allSettled(emailPromises);
+
+    // 6. Return updated record
     return await LandRecord.findByPk(recordId, {
       include: [
         { model: User, as: "creator" },
