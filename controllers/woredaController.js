@@ -8,7 +8,7 @@ const {
 
 exports.createWoreda = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
+    const userId = req.user.id;
     const woreda = await createWoredaService(req.body, userId);
     res.status(201).json({
       status: "success",

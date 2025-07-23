@@ -56,14 +56,40 @@ exports.getAdministrativeUnitById = async (req, res) => {
 
 exports.updateAdministrativeUnit = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
-    const unit = await updateAdministrativeUnitService(req.params.id, req.body, userId);
+
+
+    // Validate required parameters
+    if (!req.params.id) {
+      throw new Error('Unit ID is required');
+    }
+
+    if (!req.user || !req.user.id) {
+      throw new Error('User authentication required');
+    }
+
+    const userId = req.user.id;
+
+    const unit = await updateAdministrativeUnitService(
+      req.params.id, 
+      req.body, 
+      userId
+    );
+
     res.status(200).json({
       status: "success",
       data: unit,
     });
   } catch (error) {
-    res.status(400).json({
+    console.error('Error in updateAdministrativeUnit controller:', {
+      message: error.message,
+      stack: error.stack,
+      params: req.params,
+      body: req.body,
+      user: req.user
+    });
+
+    const statusCode = error.message.includes('not found') ? 404 : 400;
+    res.status(statusCode).json({
       status: "error",
       message: error.message || "አስተዳደር ክፍል ማዘመን አልተሳካም።",
     });
