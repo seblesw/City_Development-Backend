@@ -191,9 +191,6 @@ exports.deleteOversightOfficeService = async (id, transaction) => {
   }
 };
 
-// At the top of your file, import the enum values from your models
-// At the top of your service file, import the enums
-// const { LAND_USE_TYPES, ZONING_TYPES, OWNERSHIP_TYPES } = require('../models/enums'); // Adjust path as needed
 
 exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
@@ -258,7 +255,7 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
       };
     }
 
-    // 5. Get all land records for these admin units with their owners and additional attributes
+    // 5. Get all land records for these admin units with their owners
     const landRecords = await LandRecord.findAll({
       where: {
         administrative_unit_id: { [Op.in]: adminUnitIds },
@@ -279,8 +276,7 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         'ownership_type',
         'land_use',
         'zoning_type'
-      ],
-      raw: true
+      ]
     });
 
     // 6. Initialize statsByAdminUnit with all possible enum values
@@ -301,17 +297,14 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         zoningTypes: {}
       };
 
-      // Initialize all ownership types
       ownershipTypeValues.forEach(type => {
         statsByAdminUnit[adminUnitId].ownershipTypes[type] = 0;
       });
 
-      // Initialize all land uses
       landUseValues.forEach(type => {
         statsByAdminUnit[adminUnitId].landUses[type] = 0;
       });
 
-      // Initialize all zoning types
       zoningTypeValues.forEach(type => {
         statsByAdminUnit[adminUnitId].zoningTypes[type] = 0;
       });
@@ -338,9 +331,12 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         statsByAdminUnit[adminUnitId].zoningTypes[record.zoning_type]++;
       }
       
-      if (record.owners && record.owners.length > 0) {
+      // Process owners - ensure we have valid owner data
+      if (record.owners && Array.isArray(record.owners)) {
         record.owners.forEach(owner => {
-          statsByAdminUnit[adminUnitId].landownerIds.add(owner.id);
+          if (owner && owner.id) {
+            statsByAdminUnit[adminUnitId].landownerIds.add(owner.id);
+          }
         });
       }
     });
