@@ -23,7 +23,7 @@ router.post(
   authMiddleware.protect,
   postLimiter,
   upload.single("file"),
-  landRecordController.importLandRecordsFromCSV
+  landRecordController.importLandRecordsFromXLSX
 );
 router.get("/trash", authMiddleware.protect, landRecordController.getTrash);
 router.get(

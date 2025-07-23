@@ -23,6 +23,8 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { parseCSVFile } = require("../utils/csvParser");
 const { sendEmail } = require("../utils/statusEmail");
+const XLSX = require('xlsx');
+
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -190,7 +192,7 @@ const createLandRecordService = async (data, files, user) => {
   }
 };
 
-const importLandRecordsFromCSVService = async (
+const importLandRecordsFromXLSXService = async (
   filePath,
   user,
   options = {}
@@ -212,12 +214,12 @@ const importLandRecordsFromCSVService = async (
       errorDetails: [],
     };
 
-    // 1. Parse and validate CSV
-    const csvData = await parseAndValidateCSV(filePath);
-    results.totalRows = csvData.length;
+    // 1. Parse and validate XLSX
+    const xlsxData = await parseAndValidateXLSX(filePath);
+    results.totalRows = xlsxData.length;
 
     // 2. Group rows by parcel_number + plot_number
-    const recordsGrouped = groupCSVRows(csvData);
+    const recordsGrouped = groupXLSXRows(xlsxData);
 
     // 3. Process each group
     for (const [groupKey, rows] of Object.entries(recordsGrouped)) {
@@ -226,7 +228,7 @@ const importLandRecordsFromCSVService = async (
 
       // Ensure rowNum is available for error handling
       const rowNum =
-        csvData.findIndex(
+        xlsxData.findIndex(
           (r) =>
             r.parcel_number === primaryRow.parcel_number &&
             r.plot_number === primaryRow.plot_number
@@ -234,7 +236,7 @@ const importLandRecordsFromCSVService = async (
 
       try {
         const { owners, landRecordData, documents, payments } =
-          await transformCSVData(rows, adminUnitId);
+          await transformXLSXData(rows, adminUnitId);
 
         await createLandRecordService(
           {
@@ -243,7 +245,7 @@ const importLandRecordsFromCSVService = async (
             documents,
             land_payment: payments[0] || null, // adapt if you expect multiple
           },
-          [], // No files for CSV import
+          [], // No files for XLSX import
           user, // Pass the full user object
           {
             transaction: rowTransaction,
@@ -263,15 +265,26 @@ const importLandRecordsFromCSVService = async (
     return results;
   } catch (error) {
     if (!transaction) await t.rollback();
-    throw new Error(`CSV import failed: ${error.message}`);
+    throw new Error(`XLSX import failed: ${error.message}`);
   }
 };
 
 // ------------------ Helper Functions ------------------
 
-async function parseAndValidateCSV(filePath) {
-  const csvData = await parseCSVFile(filePath);
-  return csvData.filter((row) => {
+async function parseAndValidateXLSX(filePath) {
+  // Using xlsx library to parse the file
+  const workbook = XLSX.readFile(filePath);
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+  
+  // Convert to JSON
+  const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
+    raw: false, // Get formatted strings
+    defval: null, // Use null for empty cells
+    dateNF: 'YYYY-MM-DD' // Date format
+  });
+
+  return xlsxData.filter((row) => {
     if (!row.parcel_number || !row.plot_number) {
       throw new Error(
         "Each row must contain both parcel_number and plot_number."
@@ -281,8 +294,8 @@ async function parseAndValidateCSV(filePath) {
   });
 }
 
-function groupCSVRows(csvData) {
-  return csvData.reduce((groups, row) => {
+function groupXLSXRows(xlsxData) {
+  return xlsxData.reduce((groups, row) => {
     const key = `${row.parcel_number}_${row.plot_number}`;
     if (!groups[key]) groups[key] = [];
     groups[key].push(row);
@@ -290,7 +303,7 @@ function groupCSVRows(csvData) {
   }, {});
 }
 
-async function transformCSVData(rows, adminUnitId) {
+async function transformXLSXData(rows, adminUnitId) {
   const primaryRow = rows[0];
   const ownershipCategory = primaryRow.ownership_category?.trim();
 
@@ -352,7 +365,7 @@ async function transformCSVData(rows, adminUnitId) {
         String(row.document_is_active || "").toLowerCase()
       ),
       plot_number: row.plot_number,
-      files: [], // No actual file uploaded for CSV
+      files: [], // No actual file uploaded for XLSX
     }));
 
   // 4. Prepare Payments (one shared for የጋራ, from first row only)
@@ -367,11 +380,13 @@ async function transformCSVData(rows, adminUnitId) {
       paid_amount: parseFloat(row.paid_amount) || 0,
       currency: row.currency || "ETB",
       payment_status: calculatePaymentStatus(row),
-      description: row.payment_description || "ከ CSV ተመጣጣኝ ክፍያ",
+      description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
     }));
 
   return { owners, landRecordData, documents, payments };
 }
+
+// The calculatePaymentStatus and handleImportError functions remain the same
 function calculatePaymentStatus(row) {
   const total = parseFloat(row.total_amount) || 0;
   const paid = parseFloat(row.paid_amount) || 0;
@@ -2812,7 +2827,7 @@ module.exports = {
   getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,
-  importLandRecordsFromCSVService,
+importLandRecordsFromXLSXService,
   changeRecordStatusService,
   saveLandRecordAsDraftService,
   getAllLandRecordService,

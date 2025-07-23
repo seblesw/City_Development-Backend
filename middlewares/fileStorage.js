@@ -29,11 +29,23 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ["application/pdf", "text/csv", "image/jpeg", "image/png"];
-  if (allowedTypes.includes(file.mimetype)) {
+  const allowedTypes = [
+    "application/pdf",
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // Correct MIME for .xlsx
+    "application/vnd.ms-excel", // For older .xls files
+    "image/jpeg",
+    "image/png"
+  ];
+  
+  // Also check file extension as additional validation
+  const fileExt = path.extname(file.originalname).toLowerCase();
+  const allowedExts = ['.pdf', '.csv', '.xlsx', '.xls', '.jpeg', '.jpg', '.png'];
+
+  if (allowedTypes.includes(file.mimetype) && allowedExts.includes(fileExt)) {
     cb(null, true);
   } else {
-    cb(new Error("ፋይሉ PDF፣ CSV፣ JPEG ወይም PNG አይነት መሆን አለበት።"), false);
+    cb(new Error("ፋይሉ PDF፣ CSV፣ XLSX, JPEG ወይም PNG አይነት መሆን አለበት።"), false);
   }
 };
 
