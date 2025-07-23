@@ -17,7 +17,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   try {
     //  Validate required fields
     if (!data.plot_number || !data.document_type) {
-      console.log(data)
+      // console.log(data)
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
     }
 

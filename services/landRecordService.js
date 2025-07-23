@@ -1766,7 +1766,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       paranoid: !includeDeleted,
       transaction: t,
     });
-    // console.log(records)
+    // (records)
 
     // 3. Process and transform the data
     const processedRecords = rows.map((record) => {
