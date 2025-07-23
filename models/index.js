@@ -109,7 +109,7 @@ Region.hasMany(AdministrativeUnit, {
 });
 Region.hasMany(OversightOffice, {
   foreignKey: "region_id",
-  as: "regionalOffices",
+  as: "oversightOffices",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
@@ -135,7 +135,7 @@ Zone.hasMany(AdministrativeUnit, {
 });
 Zone.hasMany(OversightOffice, {
   foreignKey: "oversight_office_id",
-  as: "zonalOffices",
+  as: "oversightOffices",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
@@ -155,7 +155,7 @@ Woreda.hasMany(AdministrativeUnit, {
 });
 Woreda.hasMany(OversightOffice, {
   foreignKey: "oversight_office_id",
-  as: "woredaOffices",
+  as: "oversightOffices",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });

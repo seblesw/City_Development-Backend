@@ -5,6 +5,10 @@ const {
   Zone,
   Woreda,
   AdministrativeUnit,
+  LandOwner,
+  LandRecord,
+  sequelize,
+  User,
 } = require("../models");
 exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
@@ -183,7 +187,6 @@ exports.deleteOversightOfficeService = async (id, userId, transaction) => {
   }
 };
 
-// oversightOfficeService.js - add this to the existing file
 exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
     // Get the oversight office and its hierarchy level
@@ -195,7 +198,6 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
           required: true,
           attributes: ["id", "name", "code"],
         },
-
         {
           model: Zone,
           as: "zone",
@@ -215,16 +217,10 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
       throw new Error("ተቆጣጣሪ ቢሮ አልተገኘም።");
     }
 
-    // Determine the hierarchy level (regional, zonal, or woreda)
+    // Determine the hierarchy level
     const isRegional = oversightOffice.region_id && !oversightOffice.zone_id;
-    const isZonal =
-      oversightOffice.region_id &&
-      oversightOffice.zone_id &&
-      !oversightOffice.woreda_id;
-    const isWoreda =
-      oversightOffice.region_id &&
-      oversightOffice.zone_id &&
-      oversightOffice.woreda_id;
+    const isZonal = oversightOffice.region_id && oversightOffice.zone_id && !oversightOffice.woreda_id;
+    const isWoreda = oversightOffice.region_id && oversightOffice.zone_id && oversightOffice.woreda_id;
 
     // Build the query to find all oversight offices under this hierarchy
     const where = { deletedAt: { [Op.eq]: null } };
@@ -240,7 +236,7 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
       where.woreda_id = oversightOffice.woreda_id;
     }
 
-    // Get all oversight offices under this hierarchy
+    // Get all oversight offices under this hierarchy with their administrative units
     const offices = await OversightOffice.findAll({
       where,
       include: [
@@ -249,15 +245,78 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
           as: "administrativeUnits",
           where: { deletedAt: { [Op.eq]: null } },
           required: false,
-          include: [
-            // Include any related models you need for stats (land records, owners, etc.)
-            // Example:
-            // { model: LandRecord, where: { deletedAt: { [Op.eq]: null } },
-            // { model: Owner, where: { deletedAt: { [Op.eq]: null } },
-          ],
         },
       ],
     });
+
+    // Get all administrative units under these offices
+    const adminUnitIds = offices.flatMap(office => 
+      office.administrativeUnits.map(unit => unit.id)
+    );
+
+    if (adminUnitIds.length === 0) {
+      return {
+        oversightOffice: {
+          id: oversightOffice.id,
+          name: oversightOffice.name,
+          level: isRegional ? "regional" : isZonal ? "zonal" : "woreda",
+          region: oversightOffice.region,
+          zone: oversightOffice.zone,
+          woreda: oversightOffice.woreda
+        },
+        totalOffices: offices.length,
+        totalAdministrativeUnits: 0,
+        totalLandRecords: 0,
+        totalLandowners: 0,
+        administrativeUnits: [],
+      };
+    }
+
+    // Get land record counts for each administrative unit
+    const landRecordCounts = await LandRecord.findAll({
+      attributes: [
+        'administrative_unit_id',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'landRecordCount']
+      ],
+      where: { 
+        administrative_unit_id: { [Op.in]: adminUnitIds },
+        deletedAt: { [Op.eq]: null }
+      },
+      group: ['administrative_unit_id'],
+      raw: true
+    });
+
+    // Get landowner counts through the LandOwner joint table
+    const landownerCounts = await LandRecord.findAll({
+      attributes: [
+        'administrative_unit_id',
+        [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('owner_id'))), 'landownerCount']
+      ],
+      where: { 
+        administrative_unit_id: { [Op.in]: adminUnitIds },
+        deletedAt: { [Op.eq]: null }
+      },
+      include: [{
+        model: User,
+        through: LandOwner,
+        as: 'owners',
+        where: { deletedAt: { [Op.eq]: null } },
+        required: true
+      }],
+      group: ['administrative_unit_id'],
+      raw: true
+    });
+
+    // Create lookup objects for quick access
+    const landRecordCountMap = landRecordCounts.reduce((acc, item) => {
+      acc[item.administrative_unit_id] = item.landRecordCount;
+      return acc;
+    }, {});
+
+    const landownerCountMap = landownerCounts.reduce((acc, item) => {
+      acc[item.administrative_unit_id] = item.landownerCount;
+      return acc;
+    }, {});
 
     // Calculate statistics
     const stats = {
@@ -265,10 +324,14 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         id: oversightOffice.id,
         name: oversightOffice.name,
         level: isRegional ? "regional" : isZonal ? "zonal" : "woreda",
+        region: oversightOffice.region,
+        zone: oversightOffice.zone,
+        woreda: oversightOffice.woreda
       },
       totalOffices: offices.length,
       totalAdministrativeUnits: 0,
-      // Add other statistics you need
+      totalLandRecords: 0,
+      totalLandowners: 0,
       administrativeUnits: [],
     };
 
@@ -278,13 +341,18 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         stats.totalAdministrativeUnits += office.administrativeUnits.length;
 
         for (const unit of office.administrativeUnits) {
-          // Calculate statistics for each administrative unit
+          const landRecordCount = landRecordCountMap[unit.id] || 0;
+          const landownerCount = landownerCountMap[unit.id] || 0;
+          
+          stats.totalLandRecords += landRecordCount;
+          stats.totalLandowners += landownerCount;
+
           const unitStats = {
             id: unit.id,
             name: unit.name,
-            // Add other unit properties you need
-            // landRecordsCount: unit.LandRecords ? unit.LandRecords.length : 0,
-            // ownersCount: unit.Owners ? unit.Owners.length : 0,
+            landRecordCount,
+            landownerCount,
+            // Add other unit properties as needed
           };
           stats.administrativeUnits.push(unitStats);
         }
@@ -293,6 +361,11 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
 
     return stats;
   } catch (error) {
+    console.error('Error in getOversightOfficeStatsService:', {
+      message: error.message,
+      stack: error.stack,
+      oversightOfficeId
+    });
     throw new Error(error.message || "የተቆጣጣሪ ቢሮ ስታቲስቲክስ ማግኘት አልተሳካም።");
   }
 };
