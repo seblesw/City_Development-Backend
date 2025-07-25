@@ -16,6 +16,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
 
   try {
     //  Validate required fields
+    // console.log("Creating document with data:", data, "and files:", files);
     if (!data.plot_number || !data.document_type) {
       // console.log(data)
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
@@ -123,6 +124,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     return document;
   } catch (error) {
     if (!transaction && t) await t.rollback();
+    console.error("Document creation error:", error);
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };

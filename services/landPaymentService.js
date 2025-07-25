@@ -70,7 +70,7 @@ const createLandPaymentService = async (data, options = {}) => {
     const payment = await LandPayment.create({
       land_record_id: data.land_record_id,
       payment_type: data.payment_type,
-      other_payment_type: data.other_payment_type || null,
+      // other_payment_type: data.other_payment_type || null,
       total_amount: data.total_amount,
       paid_amount: data.paid_amount,
       anual_payment:data.anual_payment,

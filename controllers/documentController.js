@@ -24,11 +24,12 @@ const createDocumentController = async (req, res) => {
       reference_number: body.reference_number || null,
       description: body.description || null,
       issue_date: body.issue_date || null,
-      land_record_id: body.land_record_id || null,
+      land_record_id: Number(body.land_record_id) || null,
       preparer_name: body.preparer_name,
       approver_name: body.approver_name || null,
       isActive: body.isActive !== undefined ? body.isActive : true,
       inActived_reason: body.inActived_reason || null,
+      plot_number: body.plot_number || null,
     };
     const document = await createDocumentService(data, files, user.id);
     return res.status(201).json({
