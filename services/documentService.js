@@ -16,7 +16,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
 
   try {
     //  Validate required fields
-    // console.log("Creating document with data:", data, "and files:", files);
     if (!data.plot_number || !data.document_type) {
       // console.log(data)
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
@@ -25,15 +24,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
-
-    //  If document_type is OTHER, use other_document_type
-    if (data.document_type === DOCUMENT_TYPES.OTHER) {
-      if (!data.other_document_type || data.other_document_type.trim() === "") {
-        throw new Error("ሌላ አማራጭ የተመረጠ ከሆነ፣ ሌላውን የሰነድ አይነት ያስገቡ።");
-      }
-      data.document_type = data.other_document_type.trim();
-    }
-
     //  Check for duplicate reference number per land record
     if (data.reference_number) {
       const existingRef = await Document.findOne({
@@ -78,7 +68,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       {
         plot_number: data.plot_number,
         document_type: data.document_type,
-        other_document_type: data.other_document_type || null,
         reference_number: data.reference_number,
         description: data.description,
         files: fileMetadata,
@@ -246,13 +235,13 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
           typeof file === 'string' 
             ? { 
                 file_path: file,
-                file_name: file.split('\\').pop(), // Extract filename from path
-                mime_type: 'unknown', // Default since old entries lack metadata
-                file_size: 0, // Default
-                uploaded_at: document.createdAt, // Fallback to doc creation time
-                uploaded_by: null // Unknown uploader for old files
+                file_name: file.split('\\').pop(), 
+                mime_type: 'unknown', 
+                file_size: 0, 
+                uploaded_at: document.createdAt,
+                uploaded_by: null 
               }
-            : file // Already an object? Keep as-is
+            : file 
         )
       : [];
 

@@ -360,7 +360,6 @@ async function transformXLSXData(rows, adminUnitId) {
     .filter((row) => row.document_type)
     .map((row) => ({
       document_type: row.document_type,
-      other_document_type: row.other_document_type || null,
       reference_number: row.document_reference_number || null,
       description: row.document_description || "",
       issue_date: row.document_issue_date
@@ -1299,7 +1298,6 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "id",
             "plot_number",
             "document_type",
-            "other_document_type",
             "reference_number",
             "issue_date",
             "isActive",
@@ -2673,7 +2671,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
             }))
           ),
 
-          // Records by ownership type (including other)
+          // Records by ownership type 
           by_ownership: [
             ...(await Promise.all(
               Object.values(OWNERSHIP_TYPES).map(async (type) => ({
@@ -2684,21 +2682,9 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
                 }),
               }))
             )),
-            {
-              ownership_type: "OTHER",
-              count: await LandRecord.count({
-                where: {
-                  ...baseWhere,
-                  ownership_type: {
-                    [Op.notIn]: Object.values(OWNERSHIP_TYPES),
-                  },
-                },
-                transaction: t,
-              }),
-            },
           ],
 
-          // Records by land use (including other)
+          // Records by land use
           by_land_use: [
             ...(await Promise.all(
               Object.values(LAND_USE_TYPES).map(async (use) => ({
@@ -2709,16 +2695,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
                 }),
               }))
             )),
-            {
-              land_use: "OTHER",
-              count: await LandRecord.count({
-                where: {
-                  ...baseWhere,
-                  land_use: { [Op.notIn]: Object.values(LAND_USE_TYPES) },
-                },
-                transaction: t,
-              }),
-            },
           ],
 
           // Owners count in this admin unit
