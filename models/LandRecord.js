@@ -104,6 +104,14 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
+      other_ownership_type:{
+        type:DataTypes.STRING,
+        allowNull:true
+      },
+      other_land_use:{
+        type:DataTypes.STRING,
+        allowNull:true
+      },
       south_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
