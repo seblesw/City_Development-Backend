@@ -16,6 +16,8 @@ const createLandPaymentController = async (req, res) => {
       payment_type: body.payment_type,
       total_amount: body.total_amount,
       paid_amount: body.paid_amount,
+      annual_payment: body.annual_payment || null,
+      initial_payment: body.initial_payment || null,
       currency: body.currency || "ETB",
       payment_status: body.payment_status || PAYMENT_STATUSES.PENDING,
       penalty_reason: body.penalty_reason || null,
