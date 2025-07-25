@@ -27,28 +27,27 @@ const LAND_USE_TYPES = {
   MANUFACTURING_STORAGE: "ማምረቻ እና ማከማቻ",
   TRANSPORT: "መንገዶች እና ትራንስፖርት",
   URBAN_AGRICULTURE: "ከተማ ግብርና",
-  FOREST: "ደን",
+  FOREST: "ደንና አረጓዴ ቦታወች",
   RECREATION: "መዝናኛ እና መጫዎቻ",
   PROTECTED_AREA: "የተጠበቀ ክልል",
   INDUSTRIAL: "ኢንዱስትሪ",
-  OTHER: "ሌላ",
 };
 
 const ZONING_TYPES = {
   CENTER_BUSINESS: "የንግድ ማዕከል",
   TRANSITION_ZONE: "የሽግግር ቀጠና",
-  EXPANSION_ZONE: "የማስፋት ቀጠና",
+  EXPANSION_ZONE: "የማስፋፊያ ቀጠና",
 };
-
 const OWNERSHIP_TYPES = {
-  COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
-  TRANSFER: "ስመ ንብረት ማስተላለፍ",
-  LEASE: "የሊዝ ይዞታ-በጨረታ",
-  LEASE_ALLOCATION: "የሊዝ ይዞታ-በምደባ",
-  NO_PRIOR_DOCUMENT: "ሰነድ አልባ ይዞታ",
-  DISPLACEMENT: "በመፈናቀል ትክ",
-  MERET_BANK: "የመሬት ባንክ",
-  OTHERS: "ሌላ",
+  NO_PRIOR_DOCUMENT: "በነባር (ሰነድ አልባ) የተያዘ ይዞታ",
+  TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
+  LEASE_ALLOCATION: "በማህበር ስምሪት(በ ሊዝ በምደባ) የተያዘ ይዞታ",
+  LEASE: "በሊዝ በጨረታ የተያዘ ይዞታ",
+  DISPLACEMENT: "በመፈናቀል ትክ የተያዘ ይዞታ",
+  INVESTMENT_LEASE: "በኢንቨስትመንት ሊዝ ጨረታ የተያዘ ይዞታ",
+  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ስምሪት) የተያዘ ይዞታ",
+  COURT_ORDER: "በፍርድ ቤት ትእዛዝ የተያዘ ይዞታ",
+  MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -157,17 +156,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      other_land_use: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: "ሌላ የመሬት አጠቃቀም ከ0 እስከ 100  መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s,.-]+$/,
-            msg: "ሌላ የመሬት አጠቃቀም ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
-          },
-        },
-      },
       address: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -184,17 +172,6 @@ module.exports = (db, DataTypes) => {
             msg: `የባለቤትነት አይነት ከተፈቀዱት እሴቶች (${Object.values(
               OWNERSHIP_TYPES
             ).join(", ")}) ውስጥ መሆን አለበት።`,
-          },
-        },
-      },
-      other_ownership_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: "ሌላ የመሬት የይዞታ ባለቤትነት አይነት ከ0 እስከ 100  መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s,.-]+$/,
-            msg: "ሌላ የባለቤትነት አይነት ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
           },
         },
       },
@@ -322,9 +299,7 @@ module.exports = (db, DataTypes) => {
         { unique: true, fields: ["parcel_number", "administrative_unit_id"] },
         { fields: ["administrative_unit_id"] },
         { fields: ["land_use"] },
-        { fields: ["other_land_use"] },
         { fields: ["ownership_type"] },
-        { fields: ["other_ownership_type"] },
         { fields: ["block_number"] },
         { fields: ["record_status"] },
         { fields: ["priority"] },

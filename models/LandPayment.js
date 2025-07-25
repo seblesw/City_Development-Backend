@@ -1,11 +1,10 @@
+
 const PAYMENT_TYPES = {
-  LEASE_PAYMENT: "የኪራይ ክፍያ",
-  TAX: "ግብር",
-  COMMERCIAL_SERVICE_FEE: "የንግድ አገልግሎት ክፍያ",
+  LEASE_PAYMENT: "የሊዝ ክፍያ",
+  TAX: "የግብር ክፍያ",
+  SERVICE_FEE: "የአገልግሎት ክፍያ",
   COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
-  YENEGADA_AMETAWI_KFYA: "የንግድ አስተዋጽኦ",
-  OTHER: "ሌላ",
 };
 
 const PAYMENT_STATUSES = {
@@ -41,17 +40,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      other_payment_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: "ሌላ የክፍያ አይነት ከ0 እስከ 100 ፊደል መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s,.-]+$/,
-            msg: "ሌላ የክፍያ አይነት ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
-          },
-        },
-      },
       total_amount: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
@@ -77,6 +65,33 @@ module.exports = (db, DataTypes) => {
             msg: "የተከፈለ ገንዘብ 0 ወይም ከዚያ መሆን አለበት።",
           },
         },
+      },
+      anual_payment: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የአመታዊ ክፍያ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የአመታዊ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      },
+      initial_payment:{
+        type:DataTypes.DECIMAL,
+        allowNull:true,
+        validate: {
+          isDecimal: {
+            msg: "የመጀመሪያ ክፍያ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የመጀመሪያ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      
       },
       currency: {
         type: DataTypes.STRING,
@@ -137,7 +152,6 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { fields: ["land_record_id"] },
         { fields: ["payment_type"] },
-        { fields: ["other_payment_type"] },
         { fields: ["payment_status"] },
       ],
     }
