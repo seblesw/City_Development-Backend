@@ -317,6 +317,7 @@ async function transformXLSXData(rows, adminUnitId) {
     owners = rows
       .map((row) => ({
         first_name: row.first_name || "Unknown",
+        middle_name: row.middle_name || "Unknown",
         last_name: row.last_name || "Unknown",
         national_id: String(row.national_id || "").trim(),
         email: row.email?.trim() || null,
@@ -379,7 +380,6 @@ async function transformXLSXData(rows, adminUnitId) {
     .filter((row) => row.payment_type)
     .map((row) => ({
       payment_type: row.payment_type,
-      other_payment_type: row.other_payment_type || null,
       total_amount: parseFloat(row.total_amount) || 0,
       paid_amount: parseFloat(row.paid_amount) || 0,
       currency: row.currency || "ETB",
@@ -1317,7 +1317,6 @@ const getLandRecordByIdService = async (id, options = {}) => {
           attributes: [
             "id",
             "payment_type",
-            "other_payment_type",
             "total_amount",
             "paid_amount",
             "currency",
