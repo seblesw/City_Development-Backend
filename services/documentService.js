@@ -16,7 +16,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
 
   try {
     //  Validate required fields
-    // console.log("Creating document with data:", data, "and files:", files);
     if (!data.plot_number || !data.document_type) {
       // console.log(data)
       throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
@@ -25,15 +24,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
-
-    //  If document_type is OTHER, use other_document_type
-    if (data.document_type === DOCUMENT_TYPES.OTHER) {
-      if (!data.other_document_type || data.other_document_type.trim() === "") {
-        throw new Error("ሌላ አማራጭ የተመረጠ ከሆነ፣ ሌላውን የሰነድ አይነት ያስገቡ።");
-      }
-      data.document_type = data.other_document_type.trim();
-    }
-
     //  Check for duplicate reference number per land record
     if (data.reference_number) {
       const existingRef = await Document.findOne({
@@ -78,7 +68,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       {
         plot_number: data.plot_number,
         document_type: data.document_type,
-        other_document_type: data.other_document_type || null,
         reference_number: data.reference_number,
         description: data.description,
         files: fileMetadata,
@@ -214,26 +203,24 @@ const importPDFs = async ({ files, uploaderId }) => {
 
 
 
-const addFilesToDocumentService = async (
-  id,
-  files,
-  updaterId,
-  options = {}
-) => {
+const addFilesToDocumentService = async (id, files, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate updater role
-    // Assume updaterId is the req user object, not a DB id
-    const updater = updaterId;
-    if (!updater) {
-      L;
+    // Validate updater
+    if (!updaterId) {
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
-    const document = await Document.findByPk(id, { transaction: t });
+    // Get document with lock
+    const document = await Document.findByPk(id, { 
+      transaction: t,
+      lock: t.LOCK.UPDATE 
+    });
+    
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
@@ -242,33 +229,54 @@ const addFilesToDocumentService = async (
       throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
-    // Prepare new files
-    const newFiles = files.map((file) => ({
+    // 1. Normalize existing files (convert strings to objects if needed)
+    const normalizedExistingFiles = Array.isArray(document.files) 
+      ? document.files.map(file => 
+          typeof file === 'string' 
+            ? { 
+                file_path: file,
+                file_name: file.split('\\').pop(), 
+                mime_type: 'unknown', 
+                file_size: 0, 
+                uploaded_at: document.createdAt,
+                uploaded_by: null 
+              }
+            : file 
+        )
+      : [];
+
+    // 2. Prepare new files (with full metadata)
+    const newFiles = files.map(file => ({
       file_path: file.path,
       file_name: file.originalname,
       mime_type: file.mimetype,
       file_size: file.size,
+      uploaded_at: new Date(),
+      uploaded_by: updaterId
     }));
 
-    // Update document
-    document.files = [...(document.files || []), ...newFiles];
-    document.isActive = true;
-    document.inActived_reason = null;
-    await document.save({ transaction: t });
+    // 3. Combine all files (existing normalized + new)
+    const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
-    // Log file addition in LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(document.land_record_id, {
-      transaction: t,
-    });
+    // 4. Update the document
+    await document.update({
+      files: updatedFiles,
+      isActive: true,
+      inActived_reason: null
+    }, { transaction: t });
+
+    // 5. Log the action (optional)
+    const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
     if (landRecord) {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
-          action: `DOCUMENT_FILES_ADDED_${document.document_type}`,
+          action: "DOCUMENT_FILES_ADDED",
           changed_by: updaterId,
           changed_at: new Date(),
           document_id: document.id,
-        },
+          details: { files_added: newFiles.length }
+        }
       ];
       await landRecord.save({ transaction: t });
     }
