@@ -64,7 +64,7 @@ const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     if (!req.file) {
-      throw new Error("CSV ፋይል ያስፈልጋል።");
+      throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
 
     const results = await importLandRecordsFromXLSXService(
@@ -74,15 +74,15 @@ const importLandRecordsFromXLSX = async (req, res) => {
     );
 
     await t.commit();
-    fs.unlinkSync(req.file.path); // Cleanup
+    fs.unlinkSync(req.file.path);
 
     res.status(201).json({
       status: "success",
-      message: `CSV በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+      message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
       data: {
         created: results.createdCount,
         skipped: results.skippedCount,
-        errors: results.errors.slice(0, 10), // Show first 10 errors
+        errors: results.errors.slice(0, 10),
       },
     });
   } catch (error) {
