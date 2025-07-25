@@ -1,7 +1,7 @@
 const { Op } = require("sequelize");
 const { Woreda, Zone, AdministrativeUnit } = require("../models/index");
 
-const createWoredaService = async (woredaData, createdByUserId) => {
+const createWoredaService = async (woredaData) => {
   const { name, zone_id } = woredaData;
 
   const existingWoreda = await Woreda.findOne({
@@ -23,7 +23,6 @@ const createWoredaService = async (woredaData, createdByUserId) => {
     name,
     zone_id,
     code,
-    created_by: createdByUserId,
   });
 
   return Woreda.findByPk(woreda.id, {
