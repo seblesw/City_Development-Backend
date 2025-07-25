@@ -212,26 +212,24 @@ const importPDFs = async ({ files, uploaderId }) => {
 
 
 
-const addFilesToDocumentService = async (
-  id,
-  files,
-  updaterId,
-  options = {}
-) => {
+const addFilesToDocumentService = async (id, files, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate updater role
-    // Assume updaterId is the req user object, not a DB id
-    const updater = updaterId;
-    if (!updater) {
-      L;
+    // Validate updater
+    if (!updaterId) {
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
-    const document = await Document.findByPk(id, { transaction: t });
+    // Get document with lock
+    const document = await Document.findByPk(id, { 
+      transaction: t,
+      lock: t.LOCK.UPDATE 
+    });
+    
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
@@ -240,33 +238,54 @@ const addFilesToDocumentService = async (
       throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
-    // Prepare new files
-    const newFiles = files.map((file) => ({
+    // 1. Normalize existing files (convert strings to objects if needed)
+    const normalizedExistingFiles = Array.isArray(document.files) 
+      ? document.files.map(file => 
+          typeof file === 'string' 
+            ? { 
+                file_path: file,
+                file_name: file.split('\\').pop(), // Extract filename from path
+                mime_type: 'unknown', // Default since old entries lack metadata
+                file_size: 0, // Default
+                uploaded_at: document.createdAt, // Fallback to doc creation time
+                uploaded_by: null // Unknown uploader for old files
+              }
+            : file // Already an object? Keep as-is
+        )
+      : [];
+
+    // 2. Prepare new files (with full metadata)
+    const newFiles = files.map(file => ({
       file_path: file.path,
       file_name: file.originalname,
       mime_type: file.mimetype,
       file_size: file.size,
+      uploaded_at: new Date(),
+      uploaded_by: updaterId
     }));
 
-    // Update document
-    document.files = [...(document.files || []), ...newFiles];
-    document.isActive = true;
-    document.inActived_reason = null;
-    await document.save({ transaction: t });
+    // 3. Combine all files (existing normalized + new)
+    const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
-    // Log file addition in LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(document.land_record_id, {
-      transaction: t,
-    });
+    // 4. Update the document
+    await document.update({
+      files: updatedFiles,
+      isActive: true,
+      inActived_reason: null
+    }, { transaction: t });
+
+    // 5. Log the action (optional)
+    const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
     if (landRecord) {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
-          action: `DOCUMENT_FILES_ADDED_${document.document_type}`,
+          action: "DOCUMENT_FILES_ADDED",
           changed_by: updaterId,
           changed_at: new Date(),
           document_id: document.id,
-        },
+          details: { files_added: newFiles.length }
+        }
       ];
       await landRecord.save({ transaction: t });
     }
