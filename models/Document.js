@@ -1,11 +1,5 @@
 const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
-  LEASE_AGREEMENT: "የሊዝ ስምምነት",
-  COURT_ORDER: "የፍርድ ቤት ትእዛዝ",
-  TRANSFER_DOCUMENT: "የማስተላለፍ ሰነድ",
-  SURVEY_PLAN: "የመሬት መለኪያ ፕላን",
-  RECIEPT: "የክፍያ ደረሰኝ",
-  OTHER: "ሌላ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -114,6 +108,16 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+     verifier_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 100],
+            msg: "የሰነድ አጽዳቂ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
       approver_name: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -148,7 +152,7 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { unique: true, fields: ["plot_number", "land_record_id"] },
-        { fields: ["reference_number", "land_record_id"] },
+        { fields: ["reference_number"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
         { fields: ["other_document_type"] },

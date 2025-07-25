@@ -36,23 +36,6 @@ const createLandRecord = async (req, res) => {
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
-
-    // Validate ownership structure
-    if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
-      return res.status(400).json({
-        status: "error",
-        message: "የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።",
-      });
-    } else if (
-      land_record.ownership_category === "የግል" &&
-      owners.length !== 1
-    ) {
-      return res.status(400).json({
-        status: "error",
-        message: "የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።",
-      });
-    }
-
     // console.log(req.body);
     const result = await createLandRecordService(
       {

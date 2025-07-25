@@ -73,6 +73,8 @@ const createLandPaymentService = async (data, options = {}) => {
       other_payment_type: data.other_payment_type || null,
       total_amount: data.total_amount,
       paid_amount: data.paid_amount,
+      anual_payment:data.anual_payment,
+      initial_payment:data.initial_payment,
       currency: data.currency,
       payment_status,
       penalty_reason: data.penalty_reason || null,
