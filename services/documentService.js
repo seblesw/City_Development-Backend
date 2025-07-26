@@ -142,7 +142,7 @@ const importPDFs = async ({ files, uploaderId }) => {
       try {
         fs.unlink(file.path);
       } catch (err) {
-        const unlinkMsg = `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`;
+        const unlinkMsg = `ፋይሉን �ጥፎ መደምረስ አልተቻለም: ${file.path} => ${err.message}`;
         unmatchedLogs.push(unlinkMsg);
         console.warn(unlinkMsg);
       }
@@ -150,11 +150,46 @@ const importPDFs = async ({ files, uploaderId }) => {
       continue;
     }
 
-    const relativePath = path.relative(path.join(__dirname, ".."), file.path);
-    const filesArray = Array.isArray(document.files) ? document.files : [];
+    // Generate the desired web-accessible path
+    const desiredPath = `documents/uploads/ሰነድ/${file.originalname}`;
+    
+    // Move the file to the desired location
+    try {
+      const targetDir = path.join(__dirname, '../documents/uploads/ሰነድ');
+      
+      // Ensure target directory exists
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      
+      const targetPath = path.join(targetDir, file.originalname);
+      fs.renameSync(file.path, targetPath);
+    } catch (err) {
+      const moveErrorMsg = `ፋይሉን ወደ ትክክለኛ ማህደር መዛወር አልተቻለም: ${err.message}`;
+      unmatchedLogs.push(moveErrorMsg);
+      console.error(moveErrorMsg);
+      continue;
+    }
 
-    if (!filesArray.includes(relativePath)) {
-      filesArray.push(relativePath);
+    // Handle the files array
+    const filesArray = Array.isArray(document.files) ? document.files : [];
+    
+    // Check if file already exists (case-insensitive comparison)
+    const fileExists = filesArray.some(existingFile => {
+      const existingPath = typeof existingFile === 'string' ? existingFile : existingFile.file_path;
+      return existingPath.toLowerCase() === desiredPath.toLowerCase();
+    });
+
+    if (!fileExists) {
+      // Add as object with metadata
+      filesArray.push({
+        file_path: desiredPath,
+        file_name: file.originalname,
+        mime_type: file.mimetype || 'application/pdf',
+        file_size: file.size,
+        uploaded_at: new Date(),
+        uploaded_by: uploaderId
+      });
     }
 
     document.files = filesArray;
@@ -170,7 +205,7 @@ const importPDFs = async ({ files, uploaderId }) => {
       files: document.files,
     });
 
-    //  Push log to LandRecord.action_log
+    // Push log to LandRecord.action_log
     const landRecord = await LandRecord.findByPk(document.land_record_id);
     if (landRecord) {
       const actionLog = Array.isArray(landRecord.action_log)
@@ -182,6 +217,10 @@ const importPDFs = async ({ files, uploaderId }) => {
         document_id: document.id,
         changed_by: uploaderId,
         changed_at: new Date().toISOString(),
+        details: {
+          file_name: file.originalname,
+          file_path: desiredPath
+        }
       });
 
       landRecord.action_log = actionLog;
@@ -192,12 +231,11 @@ const importPDFs = async ({ files, uploaderId }) => {
   }
 
   return {
-    message: `${updatedDocuments.length} document(s) linked successfully.`,
+    message: `${updatedDocuments.length} ሰነድ(ዎች) በትክክል ተገናኝተዋል።`,
     updatedDocuments,
     unmatchedLogs,
   };
 };
-
 
 
 
@@ -235,7 +273,7 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
           typeof file === 'string' 
             ? { 
                 file_path: file,
-                file_name: file.split('\\').pop(), 
+                file_name: file.split('/').pop(), // Changed from backslash to forward slash
                 mime_type: 'unknown', 
                 file_size: 0, 
                 uploaded_at: document.createdAt,
@@ -245,15 +283,22 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
         )
       : [];
 
-    // 2. Prepare new files (with full metadata)
-    const newFiles = files.map(file => ({
-      file_path: file.path,
-      file_name: file.originalname,
-      mime_type: file.mimetype,
-      file_size: file.size,
-      uploaded_at: new Date(),
-      uploaded_by: updaterId
-    }));
+    // 2. Prepare new files (with full metadata and correct path)
+    const newFiles = files.map(file => {
+      // Extract just the filename from the path
+      const fileName = file.originalname;
+      // Create the desired path format
+      const desiredPath = `documents/uploads/ሰነድ/${fileName}`;
+      
+      return {
+        file_path: desiredPath, // Use the desired path format instead of file.path
+        file_name: fileName,
+        mime_type: file.mimetype,
+        file_size: file.size,
+        uploaded_at: new Date(),
+        uploaded_by: updaterId
+      };
+    });
 
     // 3. Combine all files (existing normalized + new)
     const updatedFiles = [...normalizedExistingFiles, ...newFiles];
