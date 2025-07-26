@@ -174,14 +174,14 @@ module.exports = (db, DataTypes) => {
       ownership_type: {
         type: DataTypes.STRING,
         allowNull: false,
-        validate: {
-          isIn: {
-            args: [Object.values(OWNERSHIP_TYPES)],
-            msg: `የባለቤትነት አይነት ከተፈቀዱት እሴቶች (${Object.values(
-              OWNERSHIP_TYPES
-            ).join(", ")}) ውስጥ መሆን አለበት።`,
-          },
-        },
+        // validate: {
+        //   isIn: {
+        //     args: [Object.values(OWNERSHIP_TYPES)],
+        //     msg: `የባለቤትነት አይነት ከተፈቀዱት እሴቶች (${Object.values(
+        //       OWNERSHIP_TYPES
+        //     ).join(", ")}) ውስጥ መሆን አለበት።`,
+        //   },
+        // },
       },
       record_status: {
         type: DataTypes.STRING,
