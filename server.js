@@ -14,6 +14,7 @@ const userRoutes =require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
+const path = require('path');
 // Initialize express app
 
 const app = express();

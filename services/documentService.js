@@ -124,48 +124,81 @@ const importPDFs = async ({ files, uploaderId }) => {
   const unmatchedLogs = [];
 
   for (const file of files) {
-    const basePlotNumber = path.basename(file.originalname, path.extname(file.originalname));
-    const document = await Document.findOne({ where: { plot_number: basePlotNumber } });
+    const basePlotNumber = path.basename(
+      file.originalname,
+      path.extname(file.originalname)
+    );
+
+    const document = await Document.findOne({
+      where: { plot_number: basePlotNumber },
+    });
 
     if (!document) {
-      const logMsg = `Plot number not found: ${basePlotNumber}`;
+      const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
+      console.warn(logMsg);
       unmatchedLogs.push(logMsg);
-      try { fs.unlink(file.path); } catch (err) {
-        unmatchedLogs.push(`Failed to delete file: ${err.message}`);
+
+      // Delete unmatched file
+      try {
+        fs.unlink(file.path);
+      } catch (err) {
+        const unlinkMsg = `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`;
+        unmatchedLogs.push(unlinkMsg);
+        console.warn(unlinkMsg);
       }
+
       continue;
     }
 
-    // Get relative path from project root
-    const serverRelativePath = path.relative(path.join(__dirname, '../..'), file.path)
-      .split(path.sep).join('/');
-
+    const relativePath = path.relative(path.join(__dirname, ".."), file.path);
     const filesArray = Array.isArray(document.files) ? document.files : [];
-    
-    if (!filesArray.some(f => {
-      const existingPath = typeof f === 'string' ? f : f.file_path;
-      return existingPath === serverRelativePath;
-    })) {
-      filesArray.push({
-        file_path: serverRelativePath,
-        file_name: file.originalname,
-        mime_type: file.mimetype || 'application/pdf',
-        file_size: file.size,
-        uploaded_at: new Date(),
-        uploaded_by: uploaderId
+
+    if (!filesArray.includes(relativePath)) {
+      filesArray.push(relativePath);
+    }
+
+    document.files = filesArray;
+    document.set("files", filesArray);
+    document.changed("files", true);
+    document.uploaded_by = uploaderId;
+
+    await document.save();
+
+    updatedDocuments.push({
+      id: document.id,
+      plot_number: document.plot_number,
+      files: document.files,
+    });
+
+    //  Push log to LandRecord.action_log
+    const landRecord = await LandRecord.findByPk(document.land_record_id);
+    if (landRecord) {
+      const actionLog = Array.isArray(landRecord.action_log)
+        ? landRecord.action_log
+        : [];
+
+      actionLog.push({
+        action: `DOCUMENT_UPLOAD_${document.document_type}`,
+        document_id: document.id,
+        changed_by: uploaderId,
+        changed_at: new Date().toISOString(),
       });
 
-      await document.update({ files: filesArray });
-      updatedDocuments.push(document);
+      landRecord.action_log = actionLog;
+      landRecord.set("action_log", actionLog);
+      landRecord.changed("action_log", true);
+      await landRecord.save();
     }
   }
 
   return {
-    message: `${updatedDocuments.length} documents updated`,
+    message: `${updatedDocuments.length} document(s) linked successfully.`,
     updatedDocuments,
-    unmatchedLogs
+    unmatchedLogs,
   };
 };
+
+
 
 
 
@@ -178,56 +211,81 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
     t = t || (await sequelize.transaction());
 
     // Validate updater
-    if (!updaterId) throw new Error("Updater ID required");
+    if (!updaterId) {
+      throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
+    }
 
+    // Get document with lock
     const document = await Document.findByPk(id, { 
       transaction: t,
       lock: t.LOCK.UPDATE 
     });
     
-    if (!document) throw new Error(`Document not found: ${id}`);
-    if (!files?.length) throw new Error("At least one file required");
+    if (!document) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
+    }
 
-    // Normalize existing files
+    if (!files || files.length === 0) {
+      throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
+    }
+
+    // 1. Normalize existing files (convert strings to objects if needed)
     const normalizedExistingFiles = Array.isArray(document.files) 
-      ? document.files.map(file => typeof file === 'string' 
-          ? { 
-              file_path: file,
-              file_name: file.split('/').pop(),
-              mime_type: 'unknown',
-              file_size: 0,
-              uploaded_at: document.createdAt,
-              uploaded_by: null
-            }
-          : file)
+      ? document.files.map(file => 
+          typeof file === 'string' 
+            ? { 
+                file_path: file,
+                file_name: file.split('\\').pop(), 
+                mime_type: 'unknown', 
+                file_size: 0, 
+                uploaded_at: document.createdAt,
+                uploaded_by: null 
+              }
+            : file 
+        )
       : [];
 
-    // Prepare new files with server-relative paths
-    const newFiles = files.map(file => {
-      const serverRelativePath = path.relative(path.join(__dirname, '../..'), file.path)
-        .split(path.sep).join('/');
+    // 2. Prepare new files (with full metadata)
+    const newFiles = files.map(file => ({
+      file_path: file.path,
+      file_name: file.originalname,
+      mime_type: file.mimetype,
+      file_size: file.size,
+      uploaded_at: new Date(),
+      uploaded_by: updaterId
+    }));
 
-      return {
-        file_path: serverRelativePath,
-        file_name: file.originalname,
-        mime_type: file.mimetype,
-        file_size: file.size,
-        uploaded_at: new Date(),
-        uploaded_by: updaterId
-      };
-    });
+    // 3. Combine all files (existing normalized + new)
+    const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
+    // 4. Update the document
     await document.update({
-      files: [...normalizedExistingFiles, ...newFiles],
+      files: updatedFiles,
       isActive: true,
       inActived_reason: null
     }, { transaction: t });
+
+    // 5. Log the action (optional)
+    const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
+    if (landRecord) {
+      landRecord.action_log = [
+        ...(landRecord.action_log || []),
+        {
+          action: "DOCUMENT_FILES_ADDED",
+          changed_by: updaterId,
+          changed_at: new Date(),
+          document_id: document.id,
+          details: { files_added: newFiles.length }
+        }
+      ];
+      await landRecord.save({ transaction: t });
+    }
 
     if (!transaction) await t.commit();
     return document;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw error;
+    throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
   }
 };
 const getDocumentByIdService = async (id, options = {}) => {
