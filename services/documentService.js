@@ -124,119 +124,48 @@ const importPDFs = async ({ files, uploaderId }) => {
   const unmatchedLogs = [];
 
   for (const file of files) {
-    const basePlotNumber = path.basename(
-      file.originalname,
-      path.extname(file.originalname)
-    );
-
-    const document = await Document.findOne({
-      where: { plot_number: basePlotNumber },
-    });
+    const basePlotNumber = path.basename(file.originalname, path.extname(file.originalname));
+    const document = await Document.findOne({ where: { plot_number: basePlotNumber } });
 
     if (!document) {
-      const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
-      console.warn(logMsg);
+      const logMsg = `Plot number not found: ${basePlotNumber}`;
       unmatchedLogs.push(logMsg);
-
-      // Delete unmatched file
-      try {
-        fs.unlink(file.path);
-      } catch (err) {
-        const unlinkMsg = `ፋይሉን �ጥፎ መደምረስ አልተቻለም: ${file.path} => ${err.message}`;
-        unmatchedLogs.push(unlinkMsg);
-        console.warn(unlinkMsg);
+      try { fs.unlink(file.path); } catch (err) {
+        unmatchedLogs.push(`Failed to delete file: ${err.message}`);
       }
-
       continue;
     }
 
-    // Generate the desired web-accessible path
-    const desiredPath = `uploads/documents/ሰነድ/${file.originalname}`;
-    
-    // Move the file to the desired location
-    try {
-      const targetDir = path.join(__dirname, '../documents/uploads/ሰነድ');
-      
-      // Ensure target directory exists
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-      
-      const targetPath = path.join(targetDir, file.originalname);
-      fs.renameSync(file.path, targetPath);
-    } catch (err) {
-      const moveErrorMsg = `ፋይሉን ወደ ትክክለኛ ማህደር መዛወር አልተቻለም: ${err.message}`;
-      unmatchedLogs.push(moveErrorMsg);
-      console.error(moveErrorMsg);
-      continue;
-    }
+    // Get relative path from project root
+    const serverRelativePath = path.relative(path.join(__dirname, '../..'), file.path)
+      .split(path.sep).join('/');
 
-    // Handle the files array
     const filesArray = Array.isArray(document.files) ? document.files : [];
     
-    // Check if file already exists (case-insensitive comparison)
-    const fileExists = filesArray.some(existingFile => {
-      const existingPath = typeof existingFile === 'string' ? existingFile : existingFile.file_path;
-      return existingPath.toLowerCase() === desiredPath.toLowerCase();
-    });
-
-    if (!fileExists) {
-      // Add as object with metadata
+    if (!filesArray.some(f => {
+      const existingPath = typeof f === 'string' ? f : f.file_path;
+      return existingPath === serverRelativePath;
+    })) {
       filesArray.push({
-        file_path: desiredPath,
+        file_path: serverRelativePath,
         file_name: file.originalname,
         mime_type: file.mimetype || 'application/pdf',
         file_size: file.size,
         uploaded_at: new Date(),
         uploaded_by: uploaderId
       });
-    }
 
-    document.files = filesArray;
-    document.set("files", filesArray);
-    document.changed("files", true);
-    document.uploaded_by = uploaderId;
-
-    await document.save();
-
-    updatedDocuments.push({
-      id: document.id,
-      plot_number: document.plot_number,
-      files: document.files,
-    });
-
-    // Push log to LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(document.land_record_id);
-    if (landRecord) {
-      const actionLog = Array.isArray(landRecord.action_log)
-        ? landRecord.action_log
-        : [];
-
-      actionLog.push({
-        action: `DOCUMENT_UPLOAD_${document.document_type}`,
-        document_id: document.id,
-        changed_by: uploaderId,
-        changed_at: new Date().toISOString(),
-        details: {
-          file_name: file.originalname,
-          file_path: desiredPath
-        }
-      });
-
-      landRecord.action_log = actionLog;
-      landRecord.set("action_log", actionLog);
-      landRecord.changed("action_log", true);
-      await landRecord.save();
+      await document.update({ files: filesArray });
+      updatedDocuments.push(document);
     }
   }
 
   return {
-    message: `${updatedDocuments.length} ሰነድ(ዎች) በትክክል ተገናኝተዋል።`,
+    message: `${updatedDocuments.length} documents updated`,
     updatedDocuments,
-    unmatchedLogs,
+    unmatchedLogs
   };
 };
-
 
 
 
@@ -249,50 +178,38 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
     t = t || (await sequelize.transaction());
 
     // Validate updater
-    if (!updaterId) {
-      throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
-    }
+    if (!updaterId) throw new Error("Updater ID required");
 
-    // Get document with lock
     const document = await Document.findByPk(id, { 
       transaction: t,
       lock: t.LOCK.UPDATE 
     });
     
-    if (!document) {
-      throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
-    }
+    if (!document) throw new Error(`Document not found: ${id}`);
+    if (!files?.length) throw new Error("At least one file required");
 
-    if (!files || files.length === 0) {
-      throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
-    }
-
-    // 1. Normalize existing files (convert strings to objects if needed)
+    // Normalize existing files
     const normalizedExistingFiles = Array.isArray(document.files) 
-      ? document.files.map(file => 
-          typeof file === 'string' 
-            ? { 
-                file_path: file,
-                file_name: file.split('/').pop(), // Changed from backslash to forward slash
-                mime_type: 'unknown', 
-                file_size: 0, 
-                uploaded_at: document.createdAt,
-                uploaded_by: null 
-              }
-            : file 
-        )
+      ? document.files.map(file => typeof file === 'string' 
+          ? { 
+              file_path: file,
+              file_name: file.split('/').pop(),
+              mime_type: 'unknown',
+              file_size: 0,
+              uploaded_at: document.createdAt,
+              uploaded_by: null
+            }
+          : file)
       : [];
 
-    // 2. Prepare new files (with full metadata and correct path)
+    // Prepare new files with server-relative paths
     const newFiles = files.map(file => {
-      // Extract just the filename from the path
-      const fileName = file.originalname;
-      // Create the desired path format
-      const desiredPath = `uploads/documents/ሰነድ/${fileName}`;
-      
+      const serverRelativePath = path.relative(path.join(__dirname, '../..'), file.path)
+        .split(path.sep).join('/');
+
       return {
-        file_path: desiredPath, // Use the desired path format instead of file.path
-        file_name: fileName,
+        file_path: serverRelativePath,
+        file_name: file.originalname,
         mime_type: file.mimetype,
         file_size: file.size,
         uploaded_at: new Date(),
@@ -300,37 +217,17 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
       };
     });
 
-    // 3. Combine all files (existing normalized + new)
-    const updatedFiles = [...normalizedExistingFiles, ...newFiles];
-
-    // 4. Update the document
     await document.update({
-      files: updatedFiles,
+      files: [...normalizedExistingFiles, ...newFiles],
       isActive: true,
       inActived_reason: null
     }, { transaction: t });
-
-    // 5. Log the action (optional)
-    const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
-    if (landRecord) {
-      landRecord.action_log = [
-        ...(landRecord.action_log || []),
-        {
-          action: "DOCUMENT_FILES_ADDED",
-          changed_by: updaterId,
-          changed_at: new Date(),
-          document_id: document.id,
-          details: { files_added: newFiles.length }
-        }
-      ];
-      await landRecord.save({ transaction: t });
-    }
 
     if (!transaction) await t.commit();
     return document;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
+    throw error;
   }
 };
 const getDocumentByIdService = async (id, options = {}) => {
