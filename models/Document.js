@@ -35,17 +35,7 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      other_document_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 100], msg: "ሌላ የሰነድ አይነት ከ0 እስከ 100 ፊደል መሆን አለበት።" },
-          is: {
-            args: /^[a-zA-Z0-9\s,.-]+$/,
-            msg: "ሌላ የሰነድ አይነት ፊደል፣ ቁጥር፣ ክፍተት፣ እና ሰረዝ ብቻ መያዝ አለበት።",
-          },
-        },
-      },
+  
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -155,7 +145,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["reference_number"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },
-        { fields: ["other_document_type"] },
       ],
     }
   );
