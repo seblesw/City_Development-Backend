@@ -151,7 +151,7 @@ const importPDFs = async ({ files, uploaderId }) => {
     }
 
     // Generate the desired web-accessible path
-    const desiredPath = `documents/uploads/ሰነድ/${file.originalname}`;
+    const desiredPath = `uploads/documents/ሰነድ/${file.originalname}`;
     
     // Move the file to the desired location
     try {
@@ -288,7 +288,7 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
       // Extract just the filename from the path
       const fileName = file.originalname;
       // Create the desired path format
-      const desiredPath = `documents/uploads/ሰነድ/${fileName}`;
+      const desiredPath = `uploads/documents/ሰነድ/${fileName}`;
       
       return {
         file_path: desiredPath, // Use the desired path format instead of file.path
