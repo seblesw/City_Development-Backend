@@ -45,7 +45,7 @@ const OWNERSHIP_TYPES = {
   LEASE: "በሊዝ በጨረታ የተያዘ ይዞታ",
   DISPLACEMENT: "በመፈናቀል ትክ የተያዘ ይዞታ",
   INVESTMENT_LEASE: "በኢንቨስትመንት ሊዝ ጨረታ የተያዘ ይዞታ",
-  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ስምሪት) የተያዘ ይዞታ",
+  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ምሪት) የተያዘ ይዞታ",
   COURT_ORDER: "በፍርድ ቤት ትእዛዝ የተያዘ ይዞታ",
   MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
 };
