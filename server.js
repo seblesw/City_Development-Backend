@@ -21,7 +21,10 @@ const app = express();
 const port = process.env.PORT ;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'https://city.development.teamworksc.com',
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
