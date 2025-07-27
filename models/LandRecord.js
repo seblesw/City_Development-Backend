@@ -41,7 +41,7 @@ const ZONING_TYPES = {
 const OWNERSHIP_TYPES = {
   NO_PRIOR_DOCUMENT: "በነባር (ሰነድ አልባ) የተያዘ ይዞታ",
   TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
-  LEASE_ALLOCATION: "በማህበር ስምሪት(በ ሊዝ በምደባ) የተያዘ ይዞታ",
+  LEASE_ALLOCATION: "በማህበር ምሪት(በ ሊዝ ምደባ) የተያዘ ይዞታ",
   LEASE: "በሊዝ በጨረታ የተያዘ ይዞታ",
   DISPLACEMENT: "በመፈናቀል ትክ የተያዘ ይዞታ",
   INVESTMENT_LEASE: "በኢንቨስትመንት ሊዝ ጨረታ የተያዘ ይዞታ",
