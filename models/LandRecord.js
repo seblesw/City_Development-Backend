@@ -63,6 +63,7 @@ module.exports = (db, DataTypes) => {
       parcel_number: {
         type: DataTypes.STRING,
         allowNull: false,
+        unique:true,
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
           len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50  መሆን አለበት።" },
