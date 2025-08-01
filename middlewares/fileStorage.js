@@ -11,9 +11,9 @@ if (!fs.existsSync(ROOT_UPLOAD_DIR)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const recordId = req.body.land_record_id || req.params.id || "files";
-    const safeRecordId = recordId.toString().replace(/[^a-zA-Z0-9-_]/g, "");
-    const folderPath = path.join(ROOT_UPLOAD_DIR, safeRecordId);
+    // const recordId = req.body.land_record_id || req.params.id || "files";
+    // const safeRecordId = recordId.toString().replace(/[^a-zA-Z0-9-_]/g, "");
+    const folderPath = path.join(ROOT_UPLOAD_DIR);
 
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
@@ -30,7 +30,7 @@ const storage = multer.diskStorage({
     const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
     
     // Add server-relative path to the file object
-    file.serverRelativePath = `uploads/documents/${req.body.land_record_id || req.params.id || "uncategorized"}/${filename}`;
+    file.serverRelativePath = `uploads/documents/${filename}`;
     
     cb(null, filename);
   }
