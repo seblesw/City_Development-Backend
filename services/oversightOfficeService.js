@@ -14,7 +14,7 @@ const {
   User,
   LAND_USE_TYPES,
 } = require("../models");
-exports.createOversightOfficeService = async (data, transaction) => {
+exports.createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
 
   try {
@@ -87,7 +87,7 @@ exports.createOversightOfficeService = async (data, transaction) => {
         zone_id: zone_id || null,
         woreda_id: woreda_id || null,
         code,
-        // created_by: userId,
+        created_by: userId,
       },
       { transaction }
     );
