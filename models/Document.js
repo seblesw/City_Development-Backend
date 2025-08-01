@@ -14,6 +14,7 @@ module.exports = (db, DataTypes) => {
       },
       plot_number: {
         type: DataTypes.STRING,
+        unique:true,
         allowNull: false,
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
@@ -44,10 +45,7 @@ module.exports = (db, DataTypes) => {
             args: [0, 50],
             msg: "የሰነድ አመላካች ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
-          is: {
-            args: /^[A-Za-z0-9-]+$/,
-            msg: "የሰነድ አመላካች ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።",
-          },
+         
         },
       },
       isActive: {
@@ -75,6 +73,13 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
+      verified_plan_number:{
+        type:DataTypes.STRING,
+        allowNull:true,
+        validate:{
+          len:{args:[1,20], msg:"የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም"}
+        }
+      },
       is_draft: {
         type: DataTypes.BOOLEAN,
         allowNull: true,
@@ -89,22 +94,11 @@ module.exports = (db, DataTypes) => {
       },
       preparer_name: {
         type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: { msg: "የሰነድ አዘጋጅ ስም ባዶ መሆን አይችልም።" },
-          len: {
-            args: [1, 100],
-            msg: "የሰነድ አዘጋጅ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
-          },
-        },
-      },
-     verifier_name: {
-        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           len: {
-            args: [0, 100],
-            msg: "የሰነድ አጽዳቂ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
+            args: [1, 100],
+            msg: "የሰነድ አዘጋጅ ስም ከ1 እስከ 100 ቁምፊዎች መሆን አለበት።",
           },
         },
       },

@@ -23,8 +23,7 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { parseCSVFile } = require("../utils/csvParser");
 const { sendEmail } = require("../utils/statusEmail");
-const XLSX = require('xlsx');
-
+const XLSX = require("xlsx");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -103,10 +102,10 @@ const createLandRecordService = async (data, files, user) => {
 
     // 6. Create and Link Owners
     const createdOwners = await userService.createLandOwner(
-      owners.map(owner => ({
+      owners.map((owner) => ({
         ...owner,
         email: owner.email || null,
-        address: owner.address || null
+        address: owner.address || null,
       })),
       adminunit,
       user.id,
@@ -247,10 +246,10 @@ const importLandRecordsFromXLSXService = async (
             land_record: landRecordData,
             owners,
             documents,
-            land_payment: payments[0] || null, 
+            land_payment: payments[0] || null,
           },
-          [], 
-          user, 
+          [],
+          user,
           {
             transaction: rowTransaction,
             isImport: true,
@@ -280,12 +279,12 @@ async function parseAndValidateXLSX(filePath) {
   const workbook = XLSX.readFile(filePath);
   const firstSheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheetName];
-  
+
   // Convert to JSON
   const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
     raw: false, // Get formatted strings
     defval: null, // Use null for empty cells
-    dateNF: 'DD/MM/YYYY' // Date format
+    dateNF: "DD/MM/YYYY", // Date format
   });
 
   return xlsxData.filter((row) => {
@@ -1135,6 +1134,7 @@ const getAllLandRecordService = async (options = {}) => {
             "plot_number",
             "document_type",
             "reference_number",
+            "files",
             "issue_date",
             "isActive",
           ],
@@ -1693,7 +1693,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       include: [
         {
           model: User,
-          as: "owners", // CORRECT: Alias for the User model
+          as: "owners",
           through: { attributes: [] },
           attributes: [
             "id",
@@ -1708,13 +1708,19 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         },
         {
           model: AdministrativeUnit,
-          as: "administrativeUnit", // CORRECT: Alias for AdministrativeUnit
+          as: "administrativeUnit",
           attributes: ["id", "name"],
         },
         {
           model: Document,
-          as: "documents", // CORRECT: Alias for Document
-          attributes: ["id", "document_type", "reference_number", "createdAt"],
+          as: "documents",
+          attributes: [
+            "id",
+            "document_type",
+            "reference_number",
+            "files",
+            "createdAt",
+          ],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
           limit: 3,
@@ -1722,7 +1728,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         },
         {
           model: LandPayment,
-          as: "payments", // CORRECT: Alias for LandPayment
+          as: "payments",
           attributes: [
             "id",
             "payment_type",
@@ -2082,20 +2088,22 @@ const updateLandRecordService = async (
       throw new Error("Land record not found");
     }
 
-      // Process land record updates if provided
+    // Process land record updates if provided
     if (data.land_record && Object.keys(data.land_record).length > 0) {
       const previousStatus = existingRecord.record_status;
       const newStatus = RECORD_STATUSES.SUBMITTED;
-      
+
       // Track changes for logging
       const changes = {};
-      Object.keys(data.land_record).forEach(key => {
-        if (existingRecord[key] !== data.land_record[key] && 
-            key !== 'updated_at' && 
-            key !== 'created_at') {
+      Object.keys(data.land_record).forEach((key) => {
+        if (
+          existingRecord[key] !== data.land_record[key] &&
+          key !== "updated_at" &&
+          key !== "created_at"
+        ) {
           changes[key] = {
             from: existingRecord[key],
-            to: data.land_record[key]
+            to: data.land_record[key],
           };
         }
       });
@@ -2104,46 +2112,56 @@ const updateLandRecordService = async (
       const updatePayload = {
         ...data.land_record,
         updated_by: updater.id,
-        record_status: newStatus
+        record_status: newStatus,
       };
 
       // Update status history if status changed
       if (newStatus !== previousStatus) {
-        const currentStatusHistory = Array.isArray(existingRecord.status_history) 
-          ? existingRecord.status_history 
+        const currentStatusHistory = Array.isArray(
+          existingRecord.status_history
+        )
+          ? existingRecord.status_history
           : [];
-        
+
         updatePayload.status_history = [
           ...currentStatusHistory,
           {
             status: newStatus,
             changed_at: new Date(),
             changed_by: updater.id,
-            notes: data.land_record.status_notes || null
-          }
+            notes: data.land_record.status_notes || null,
+          },
         ];
       }
 
       await existingRecord.update(updatePayload, { transaction: t });
 
       // Always log the land record update action
-      const currentLog = Array.isArray(existingRecord.action_log) ? existingRecord.action_log : [];
-      const newLog = [...currentLog, {
-        action: 'LAND_RECORD_UPDATED',
-        changes: Object.keys(changes).length > 0 ? changes : undefined,
-        status_change: newStatus !== previousStatus ? {
-          from: previousStatus,
-          to: newStatus
-        } : undefined,
-        changed_by: updater.id,
-        changed_at: new Date()
-      }];
+      const currentLog = Array.isArray(existingRecord.action_log)
+        ? existingRecord.action_log
+        : [];
+      const newLog = [
+        ...currentLog,
+        {
+          action: "LAND_RECORD_UPDATED",
+          changes: Object.keys(changes).length > 0 ? changes : undefined,
+          status_change:
+            newStatus !== previousStatus
+              ? {
+                  from: previousStatus,
+                  to: newStatus,
+                }
+              : undefined,
+          changed_by: updater.id,
+          changed_at: new Date(),
+        },
+      ];
 
       await LandRecord.update(
         { action_log: newLog },
         {
           where: { id: recordId },
-          transaction: t
+          transaction: t,
         }
       );
     }
@@ -2217,7 +2235,7 @@ const changeRecordStatusService = async (
           model: User,
           as: "owners",
           through: { attributes: [] },
-          attributes: ["id", "first_name", "last_name","middle_name", "email"],
+          attributes: ["id", "first_name", "last_name", "middle_name", "email"],
         },
       ],
     });
@@ -2281,27 +2299,28 @@ const changeRecordStatusService = async (
     await record.update(updateData, { transaction: t });
     await t.commit();
 
+    const emailPromises = record.owners.map(async (owner) => {
+      if (owner.email) {
+        // Get the updater's admin unit details
+        const updaterWithAdminUnit = await User.findByPk(userId, {
+          attributes: ["first_name", "middle_name", "last_name"],
+          include: [
+            {
+              model: AdministrativeUnit,
+              as: "administrativeUnit",
+              attributes: ["name"],
+              required: false,
+            },
+          ],
+        });
 
-   const emailPromises = record.owners.map(async (owner) => {
-  if (owner.email) {
-    // Get the updater's admin unit details
-    const updaterWithAdminUnit = await User.findByPk(userId, {
-      attributes: ['first_name', 'middle_name', 'last_name'],
-      include: [{
-        model: AdministrativeUnit,
-        as: 'administrativeUnit',
-        attributes: ['name'],
-        required: false
-      }]
-    });
+        const adminUnitName = updaterWithAdminUnit.administrativeUnit
+          ? updaterWithAdminUnit.administrativeUnit.name
+          : "የከተማ መሬት አስተዳደር";
 
-    const adminUnitName = updaterWithAdminUnit.administrativeUnit 
-      ? updaterWithAdminUnit.administrativeUnit.name 
-      : 'የከተማ መሬት አስተዳደር'; 
+        const subject = `የመሬት ሁኔታ ማሻሻል ${record.parcel_number}`;
 
-    const subject = `የመሬት ሁኔታ ማሻሻል ${record.parcel_number}`;
-    
-    let emailBody = `
+        let emailBody = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <p>ውድ ${owner.first_name} ${owner.middle_name},</p>
         <p>(መዝገብ #${record.parcel_number}) መዝገብ ቁጥር ያለው የመሬትዎ ሁኔታ ተሻሻሏል:</p>
@@ -2310,25 +2329,25 @@ const changeRecordStatusService = async (
           <p><strong>አሁናዊ ሁኔታ:</strong> ${newStatus}</p>
     `;
 
-    if (notes) {
-      emailBody += `
+        if (notes) {
+          emailBody += `
           <p><strong>ተያያዥ ጽሁፍ:</strong></p>
           <p style="background-color: #fff; padding: 8px; border-left: 3px solid #3498db;">
             ${notes}
           </p>
       `;
-    }
+        }
 
-    if (rejection_reason) {
-      emailBody += `
+        if (rejection_reason) {
+          emailBody += `
           <p><strong>ውድቅ የተደረገበት ምክንያት:</strong></p>
           <p style="background-color: #fff; padding: 8px; border-left: 3px solid #e74c3c;">
             ${rejection_reason}
           </p>
       `;
-    }
+        }
 
-    emailBody += `
+        emailBody += `
         </div>
         
         <p><strong>ያሻሻለው አካል:</strong> ${updaterWithAdminUnit.first_name} ${updaterWithAdminUnit.middle_name}</p>
@@ -2353,18 +2372,18 @@ const changeRecordStatusService = async (
       </div>
     `;
 
-    try {
-      await sendEmail({
-        to: owner.email,
-        subject,
-        html: emailBody
-      });
-      console.log(`Status update email sent to ${owner.email}`);
-    } catch (emailError) {
-      console.error(`Failed to send email to ${owner.email}:`, emailError);
-    }
-  }
-});
+        try {
+          await sendEmail({
+            to: owner.email,
+            subject,
+            html: emailBody,
+          });
+          console.log(`Status update email sent to ${owner.email}`);
+        } catch (emailError) {
+          console.error(`Failed to send email to ${owner.email}:`, emailError);
+        }
+      }
+    });
 
     // Wait for all emails to be sent (but don't fail the whole operation if emails fail)
     await Promise.allSettled(emailPromises);
@@ -2610,7 +2629,6 @@ const getTrashItemsService = async (user, options = {}) => {
   }
 };
 
-
 //stats
 const getLandRecordStats = async (adminUnitId, options = {}) => {
   const { transaction } = options;
@@ -2671,7 +2689,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
             }))
           ),
 
-          // Records by ownership type 
+          // Records by ownership type
           by_ownership: [
             ...(await Promise.all(
               Object.values(OWNERSHIP_TYPES).map(async (type) => ({
@@ -2800,7 +2818,7 @@ module.exports = {
   getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,
-importLandRecordsFromXLSXService,
+  importLandRecordsFromXLSXService,
   changeRecordStatusService,
   saveLandRecordAsDraftService,
   getAllLandRecordService,

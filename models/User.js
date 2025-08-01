@@ -47,6 +47,10 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         unique: { msg: "ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።" },
       },
+      profile_picture:{
+        type:DataTypes.STRING,
+        allowNull:true,
+      },
       password: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -115,7 +119,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["ነጠላ", "ባለትዳር"]],
+            args: [["ያላገባ/ች", "ባለትዳር"]],
             msg: "የጋብቻ ሁኔታ ከተፈቀዱት  (ነጠላ, ባለትዳር,) ውስጥ አንዱ መሆን አለበት።",
           },
         },
