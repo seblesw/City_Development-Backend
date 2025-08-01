@@ -10,8 +10,8 @@ const {
 exports.createOversightOffice = async (req, res) => {
   try {
     const { name, region_id, zone_id, woreda_id } = req.body;
-    const userId = req.user.id;
-    const office = await createOversightOfficeService({ name, region_id, zone_id, woreda_id }, userId);
+    // const userId = req.user.id;
+    const office = await createOversightOfficeService({ name, region_id, zone_id, woreda_id });
     res.status(201).json({
       status: 'success',
       data: office,
