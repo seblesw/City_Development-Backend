@@ -54,10 +54,10 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
     }
 
-    // 3. Validate Parcel Number Format
-    if (!/^[A-Za-z0-9-]+$/.test(land_record.parcel_number)) {
-      throw new Error("የመሬት ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።");
-    }
+    // // 3. Validate Parcel Number Format
+    // if (!/^[A-Za-z0-9-]+$/.test(land_record.parcel_number)) {
+    //   throw new Error("የመሬት ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።");
+    // }
 
     // 4. Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
