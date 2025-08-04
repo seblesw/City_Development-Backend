@@ -18,7 +18,6 @@ module.exports = (db, DataTypes) => {
         validate: {
           notEmpty: { msg: "ሚና ስም ባዶ መሆን አይችልም።" },
           len: { args: [2, 50], msg: "ሚና ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
-          is: { args: /^[\u1200-\u137F\sA-Za-z0-9]+$/u, msg: "ሚና ስም ፊደል፣ ቁጥር ወይም ክፍተት ብቻ መያዝ አለበት።" },
         },
       },
       permissions: {
