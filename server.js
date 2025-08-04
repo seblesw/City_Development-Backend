@@ -14,13 +14,20 @@ const userRoutes =require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
+const path = require('path');
 // Initialize express app
 
 const app = express();
 const port = process.env.PORT ;
 
 // Middleware
-app.use(cors());
+app.use(cors(
+  {
+    origin: '*', // Allow all origins, you can specify specific origins if needed
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    // credentials: true,
+  }
+));
 app.use(bodyParser.json());
 app.use(express.json());
 
@@ -45,6 +52,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
+app.use('/documents', express.static(path.join(__dirname, 'uploads/documents/ሰነድ')));
 
 
 // Start server
@@ -55,7 +63,7 @@ const startServer = async () => {
     // Sync models with the database
     // Set force to true only in development to drop tables={force:true}
     // set alter to true for to add new attribuete with out drop existing table {alter:true}
-    await db.sync({alter:true}); 
+    // await db.sync({alter:true}); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

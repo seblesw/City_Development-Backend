@@ -63,6 +63,14 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
           }))
         : [];
 
+
+//         const fileMetadata = files.map((file) => ({
+//   file_path: `/documents/${file.filename}`, // Store relative path
+//   file_name: file.originalname,
+//   mime_type: file.mimetype,
+//   file_size: file.size
+// }));
+
     // Create document
     const document = await Document.create(
       {
