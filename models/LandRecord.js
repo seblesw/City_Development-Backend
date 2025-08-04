@@ -41,11 +41,11 @@ const ZONING_TYPES = {
 const OWNERSHIP_TYPES = {
   NO_PRIOR_DOCUMENT: "በነባር (ሰነድ አልባ) የተያዘ ይዞታ",
   TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
-  LEASE_ALLOCATION: "በማህበር ስምሪት(በ ሊዝ በምደባ) የተያዘ ይዞታ",
+  LEASE_ALLOCATION: "በማህበር ምሪት(በ ሊዝ ምደባ) የተያዘ ይዞታ",
   LEASE: "በሊዝ በጨረታ የተያዘ ይዞታ",
   DISPLACEMENT: "በመፈናቀል ትክ የተያዘ ይዞታ",
   INVESTMENT_LEASE: "በኢንቨስትመንት ሊዝ ጨረታ የተያዘ ይዞታ",
-  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ስምሪት) የተያዘ ይዞታ",
+  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ምሪት) የተያዘ ይዞታ",
   COURT_ORDER: "በፍርድ ቤት ትእዛዝ የተያዘ ይዞታ",
   MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
 };
@@ -63,6 +63,7 @@ module.exports = (db, DataTypes) => {
       parcel_number: {
         type: DataTypes.STRING,
         allowNull: false,
+        unique:true,
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
           len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50  መሆን አለበት።" },
@@ -104,14 +105,7 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
-      other_ownership_type:{
-        type:DataTypes.STRING,
-        allowNull:true
-      },
-      other_land_use:{
-        type:DataTypes.STRING,
-        allowNull:true
-      },
+     
       south_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,

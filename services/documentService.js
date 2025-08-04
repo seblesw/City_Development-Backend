@@ -6,7 +6,7 @@ const {
   User,
   Role,
 } = require("../models");
-const { Op } = require("sequelize");
+const { Op, where } = require("sequelize");
 const path = require("path");
 const fs = require("fs/promises");
 
@@ -15,106 +15,110 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    //  Validate required fields
-    if (!data.plot_number || !data.document_type) {
-      // console.log(data)
-      throw new Error("የሰነድ መረጃዎች (plot_number, document_type) አስፈላጊ ናቸው።");
+    // Validate required fields
+    if (!data.plot_number) {
+      throw new Error("የሰነድ መረጃዎች (plot_number) አስፈላጊ ናቸው።");
+    }
+
+    // Check for existing document
+    const existingDocument = await Document.findOne({
+      where: {
+        plot_number: data.plot_number,
+        deletedAt: null
+      },
+      transaction: t
+    });
+
+    if (existingDocument) {
+      throw new Error("ይህ የካርታ ቁጥር ከዚህ በፊት ተመዝግቧል");
     }
 
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
-    //  Check for duplicate reference number per land record
-    if (data.reference_number) {
-      const existingRef = await Document.findOne({
-        where: {
-          reference_number: data.reference_number,
-          land_record_id: data.land_record_id,
-          deletedAt: null,
-        },
-        transaction: t,
-      });
 
-      if (existingRef) {
-        throw new Error("ይህ የሰነድ አመልካች ቁጥር በዚህ መሬት መዝገብ ላይ አስቀድሞ ተመዝግቧል።");
+    // Document versioning
+    const version = await Document.count({
+      where: {
+        land_record_id: data.land_record_id,
+        plot_number: data.plot_number,
+        deletedAt: null
+      },
+      transaction: t
+    }) + 1;
+
+    // Prepare file metadata with server-relative paths
+    const fileMetadata = [];
+    if (Array.isArray(files) && files.length > 0) {
+      for (const file of files) {
+        // Get server-relative path (from project root)
+        const serverRelativePath = path.relative(
+          path.join(__dirname, '..'), // Go up to project root
+          file.path
+        ).split(path.sep).join('/'); // Convert to forward slashes
+
+        fileMetadata.push({
+          file_path: serverRelativePath,
+          file_name: file.originalname || `document_${Date.now()}${path.extname(file.originalname) || ''}`,
+          mime_type: file.mimetype || "application/octet-stream",
+          file_size: file.size || 0,
+          uploaded_at: new Date(),
+          uploaded_by: creatorId
+        });
       }
     }
-
-    //  Document versioning per land record + plot + document_type
-    const version =
-      (await Document.count({
-        where: {
-          land_record_id: data.land_record_id,
-          plot_number: data.plot_number,
-          document_type: data.document_type,
-          deletedAt: null,
-        },
-        transaction: t,
-      })) + 1;
-
-    //Prepare file metadata if any
-    const fileMetadata =
-      Array.isArray(files) && files.length > 0
-        ? files.map((file) => ({
-            file_path: file.path,
-            file_name: file.originalname || `document_${Date.now()}`,
-            mime_type: file.mimetype || "application/octet-stream",
-            file_size: file.size || 0,
-          }))
-        : [];
-
-
-//         const fileMetadata = files.map((file) => ({
-//   file_path: `/documents/${file.filename}`, // Store relative path
-//   file_name: file.originalname,
-//   mime_type: file.mimetype,
-//   file_size: file.size
-// }));
 
     // Create document
     const document = await Document.create(
       {
         plot_number: data.plot_number,
-        document_type: data.document_type,
+        document_type: data.document_type || DOCUMENT_TYPES.TITLE_DEED,
         reference_number: data.reference_number,
         description: data.description,
         files: fileMetadata,
         version,
         land_record_id: data.land_record_id,
-        preparer_name: data.preparer_name || `User_${creatorId}`,
+        verified_plan_number: data.verified_plan_number || null,
+        preparer_name: data.preparer_name || null,
         approver_name: data.approver_name || null,
         issue_date: data.issue_date || new Date(),
         uploaded_by: creatorId,
+        isActive: true
       },
       { transaction: t }
     );
 
-    // Log document upload to land record
+    // Log document creation to land record
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: true,
+      lock: true
     });
 
     if (!landRecord) {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
 
-    const currentLog = Array.isArray(landRecord.action_log)
-      ? landRecord.action_log
+    const currentLog = Array.isArray(landRecord.action_log) 
+      ? landRecord.action_log 
       : [];
+    
     const newLog = [
       ...currentLog,
       {
-        action: `DOCUMENT_UPLOAD_${data.document_type}`,
+        action: `DOCUMENT_CREATE_${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
         document_id: document.id,
         changed_by: creatorId,
         changed_at: new Date(),
-      },
+        details: {
+          plot_number: data.plot_number,
+          files_added: fileMetadata.length
+        }
+      }
     ];
 
-    await LandRecord.update(
+    await landRecord.update(
       { action_log: newLog },
-      { where: { id: data.land_record_id }, transaction: t }
+      { transaction: t }
     );
 
     if (!transaction) await t.commit();
@@ -132,80 +136,105 @@ const importPDFs = async ({ files, uploaderId }) => {
   const unmatchedLogs = [];
 
   for (const file of files) {
-    const basePlotNumber = path.basename(
-      file.originalname,
-      path.extname(file.originalname)
-    );
+    try {
+      const basePlotNumber = path.basename(
+        file.originalname,
+        path.extname(file.originalname)
+      );
 
-    const document = await Document.findOne({
-      where: { plot_number: basePlotNumber },
-    });
-
-    if (!document) {
-      const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
-      console.warn(logMsg);
-      unmatchedLogs.push(logMsg);
-
-      // Delete unmatched file
-      try {
-        fs.unlink(file.path);
-      } catch (err) {
-        const unlinkMsg = `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`;
-        unmatchedLogs.push(unlinkMsg);
-        console.warn(unlinkMsg);
-      }
-
-      continue;
-    }
-
-    const relativePath = path.relative(path.join(__dirname, ".."), file.path);
-    const filesArray = Array.isArray(document.files) ? document.files : [];
-
-    if (!filesArray.includes(relativePath)) {
-      filesArray.push(relativePath);
-    }
-
-    document.files = filesArray;
-    document.set("files", filesArray);
-    document.changed("files", true);
-    document.uploaded_by = uploaderId;
-
-    await document.save();
-
-    updatedDocuments.push({
-      id: document.id,
-      plot_number: document.plot_number,
-      files: document.files,
-    });
-
-    //  Push log to LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(document.land_record_id);
-    if (landRecord) {
-      const actionLog = Array.isArray(landRecord.action_log)
-        ? landRecord.action_log
-        : [];
-
-      actionLog.push({
-        action: `DOCUMENT_UPLOAD_${document.document_type}`,
-        document_id: document.id,
-        changed_by: uploaderId,
-        changed_at: new Date().toISOString(),
+      const document = await Document.findOne({
+        where: { plot_number: basePlotNumber },
       });
 
-      landRecord.action_log = actionLog;
-      landRecord.set("action_log", actionLog);
-      landRecord.changed("action_log", true);
-      await landRecord.save();
+      if (!document) {
+        const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
+        unmatchedLogs.push(logMsg);
+        
+        // Delete unmatched file
+        try {
+          fs.unlink(file.path);
+        } catch (err) {
+          unmatchedLogs.push(`ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`);
+        }
+        continue;
+      }
+
+      // Get server-relative path (from project root)
+      const serverRelativePath = path.relative(
+        path.join(__dirname, '..'), // Go up to project root
+        file.path
+      ).split(path.sep).join('/'); // Convert to forward slashes
+
+      // Handle files array (convert strings to objects if needed)
+      const filesArray = Array.isArray(document.files) 
+        ? document.files.map(f => typeof f === 'string' ? { 
+            file_path: f,
+            file_name: path.basename(f),
+            mime_type: 'application/pdf',
+            file_size: 0,
+            uploaded_at: new Date(),
+            uploaded_by: null
+          } : f)
+        : [];
+
+      // Check if file already exists
+      const fileExists = filesArray.some(f => 
+        f.file_path === serverRelativePath
+      );
+
+      if (!fileExists) {
+        filesArray.push({
+          file_path: serverRelativePath,
+          file_name: file.originalname,
+          mime_type: file.mimetype || 'application/pdf',
+          file_size: file.size,
+          uploaded_at: new Date(),
+          uploaded_by: uploaderId
+        });
+
+        await document.update({
+          files: filesArray,
+          uploaded_by: uploaderId
+        });
+
+        updatedDocuments.push({
+          id: document.id,
+          plot_number: document.plot_number,
+          files: document.files,
+        });
+
+        // Update LandRecord action log
+        const landRecord = await LandRecord.findByPk(document.land_record_id);
+        if (landRecord) {
+          const actionLog = Array.isArray(landRecord.action_log) 
+            ? landRecord.action_log 
+            : [];
+
+          actionLog.push({
+            action: `DOCUMENT_UPLOAD_${document.document_type}`,
+            document_id: document.id,
+            changed_by: uploaderId,
+            changed_at: new Date().toISOString(),
+            details: {
+              file_name: file.originalname,
+              file_path: serverRelativePath
+            }
+          });
+
+          await landRecord.update({ action_log: actionLog });
+        }
+      }
+    } catch (error) {
+      unmatchedLogs.push(`Error processing ${file.originalname}: ${error.message}`);
     }
   }
 
   return {
-    message: `${updatedDocuments.length} document(s) linked successfully.`,
+    message: `${updatedDocuments.length} ሰነድ(ዎች) በትክክል ተገናኝተዋል።`,
     updatedDocuments,
     unmatchedLogs,
   };
 };
-
 
 
 
@@ -218,12 +247,10 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate updater
     if (!updaterId) {
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
-    // Get document with lock
     const document = await Document.findByPk(id, { 
       transaction: t,
       lock: t.LOCK.UPDATE 
@@ -237,13 +264,13 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
       throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
-    // 1. Normalize existing files (convert strings to objects if needed)
+    // Normalize existing files
     const normalizedExistingFiles = Array.isArray(document.files) 
       ? document.files.map(file => 
           typeof file === 'string' 
             ? { 
                 file_path: file,
-                file_name: file.split('\\').pop(), 
+                file_name: file.split('/').pop(), 
                 mime_type: 'unknown', 
                 file_size: 0, 
                 uploaded_at: document.createdAt,
@@ -253,9 +280,9 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
         )
       : [];
 
-    // 2. Prepare new files (with full metadata)
+    // Prepare new files with server-relative paths
     const newFiles = files.map(file => ({
-      file_path: file.path,
+      file_path: file.serverRelativePath, // Use the server-relative path
       file_name: file.originalname,
       mime_type: file.mimetype,
       file_size: file.size,
@@ -263,17 +290,17 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
       uploaded_by: updaterId
     }));
 
-    // 3. Combine all files (existing normalized + new)
+    // Combine all files
     const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
-    // 4. Update the document
+    // Update the document
     await document.update({
       files: updatedFiles,
       isActive: true,
       inActived_reason: null
     }, { transaction: t });
 
-    // 5. Log the action (optional)
+    // Log the action
     const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
     if (landRecord) {
       landRecord.action_log = [

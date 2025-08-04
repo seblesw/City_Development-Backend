@@ -4,16 +4,16 @@ const fs = require("fs");
 
 const ROOT_UPLOAD_DIR = path.join(__dirname, "..", "uploads", "documents");
 
-// Ensure root folder exists
+// Ensure upload directory exists
 if (!fs.existsSync(ROOT_UPLOAD_DIR)) {
   fs.mkdirSync(ROOT_UPLOAD_DIR, { recursive: true });
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const recordId =
-      req.body.land_record_id || req.query.land_record_id || "ሰነድ";
-    const folderPath = path.join(ROOT_UPLOAD_DIR, `${recordId}`);
+    // const recordId = req.body.land_record_id || req.params.id || "files";
+    // const safeRecordId = recordId.toString().replace(/[^a-zA-Z0-9-_]/g, "");
+    const folderPath = path.join(ROOT_UPLOAD_DIR);
 
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
@@ -24,37 +24,42 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-  },
+    const sanitizedName = path.basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9-_.]/g, "")
+      .slice(0, 100);
+    const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
+    
+    // Add server-relative path to the file object
+    file.serverRelativePath = `uploads/documents/${filename}`;
+    
+    cb(null, filename);
+  }
 });
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     "application/pdf",
     "text/csv",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // Correct MIME for .xlsx
-    "application/vnd.ms-excel", // For older .xls files
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
     "image/jpeg",
     "image/png"
   ];
   
-  // Also check file extension as additional validation
   const fileExt = path.extname(file.originalname).toLowerCase();
   const allowedExts = ['.pdf', '.csv', '.xlsx', '.xls', '.jpeg', '.jpg', '.png'];
 
   if (allowedTypes.includes(file.mimetype) && allowedExts.includes(fileExt)) {
     cb(null, true);
   } else {
-    cb(new Error("ፋይሉ PDF፣ CSV፣ XLSX, JPEG ወይም PNG አይነት መሆን አለበት።"), false);
+    cb(new Error("Invalid file type. Only PDF, CSV, Excel, JPEG, or PNG files are allowed."), false);
   }
 };
 
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
-  }
+
 });
 
 module.exports = upload;

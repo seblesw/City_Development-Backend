@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const getLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000, 
   max: 100,
   message: "በጣም ብዙ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
@@ -24,7 +24,7 @@ router.post(
 router.post(
   "/import-pdfs",
   authMiddleware.protect,
-  upload.array("documents", 500),
+  upload.array("documents", 1000),
   documentController.importPDFDocuments
 );
 

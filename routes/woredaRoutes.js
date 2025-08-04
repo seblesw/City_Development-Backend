@@ -7,7 +7,6 @@ const {
   updateWoreda,
   deleteWoreda,
 } = require("../controllers/woredaController");
-const authMiddleware = require("../middlewares/authMiddleware");
 
 router.post("/", createWoreda);
 router.get("/", getAllWoredas);
