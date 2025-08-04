@@ -4,6 +4,8 @@ const documentController = require("../controllers/documentController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
 const rateLimit = require("express-rate-limit");
+const path = require('path');
+const fs = require('fs');
 
 const getLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
@@ -36,13 +38,13 @@ router.post(
 );
 
 // Get a document by ID (requires authentication, accessible to መዝጋቢ and አስተዳደር)
-router.get(
-  "/:id",
-  authMiddleware.protect,
-  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
-  getLimiter,
-  documentController.getDocumentByIdController
-);
+// router.get(
+//   "/:id",
+//   authMiddleware.protect,
+//   //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+//   getLimiter,
+//   documentController.getDocumentByIdController
+// );
 
 // Update a document (requires authentication, optional multiple file upload, restricted to አስተዳደር)
 router.put(
@@ -60,5 +62,28 @@ router.delete(
   //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.deleteDocumentController
 );
+
+// router.get('/:filename', async (req, res) => {
+//   console.log("here")
+//     try {
+//         // Get the filename from the request parameters
+//         const fileName = req.params.filename;
+        
+//         // Construct the full file path
+//         const filePath = path.join(__dirname, '../uploads/documents/ሰነድ', fileName);
+        
+//         // Check if file exists
+//         if (!fs.existsSync(filePath)) {
+//             return res.status(404).send('File not found');
+//         }
+        
+//         // Send the file
+//         res.sendFile(filePath);
+//     } catch (error) {
+//         console.error('Error serving file:', error);
+//         res.status(500).send('Internal server error');
+//     }
+// };
+// );
 
 module.exports = router;

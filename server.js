@@ -21,7 +21,13 @@ const app = express();
 const port = process.env.PORT ;
 
 // Middleware
-app.use(cors());
+app.use(cors(
+  {
+    origin: '*', // Allow all origins, you can specify specific origins if needed
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    // credentials: true,
+  }
+));
 app.use(bodyParser.json());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -47,6 +53,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
+app.use('/documents', express.static(path.join(__dirname, 'uploads/documents/ሰነድ')));
 
 
 // Start server
