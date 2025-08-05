@@ -58,7 +58,7 @@ const fileFilter = (req, file, cb) => {
     cb(new Error("Invalid file type. Only PDF, CSV, Excel, JPEG, or PNG files are allowed."), false);
   }
 };
-
+//export the multer upload middleware
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter
