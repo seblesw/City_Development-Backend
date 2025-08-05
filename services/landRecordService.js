@@ -178,7 +178,7 @@ const createLandRecordService = async (data, files, user) => {
   } catch (error) {
     await t.rollback();
     
-    // Cleanup uploaded files if transaction fails
+    // Cleanup uploaded files if transaction fails remove file 
     if (files) {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach(file => {
