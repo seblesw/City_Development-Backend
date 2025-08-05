@@ -5,7 +5,6 @@ const {
   deleteUser,
   getAllUserService,
 } = require("../services/userService");
-
 const bcrypt = require("bcryptjs");
 
 const createLandOwnerController = async (req, res) => {
