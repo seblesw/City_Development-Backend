@@ -27,7 +27,7 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
   }
 
   const existingUnit = await AdministrativeUnit.findOne({
-    where: { name, region_id, oversight_office_id: oversight_office_id || null, deleted_at: null },
+    where: { name, region_id, oversight_office_id: oversight_office_id || null, deletedAt: null },
   });
   if (existingUnit) {
     throw new Error("የአስተዳደር ክፍል ስም በዚህ ክልል እና ቢሮ ውስጥ ተይዟል።");
@@ -85,7 +85,7 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
 
 const getAllAdministrativeUnitsService = async () => {
   return AdministrativeUnit.findAll({
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Region, as: "region" },
       { model: Zone, as: "zone" },
@@ -100,7 +100,7 @@ const getAllAdministrativeUnitsService = async () => {
 
 const getAdministrativeUnitByIdService = async (id) => {
   const unit = await AdministrativeUnit.findByPk(id, {
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Region, as: "region" },
       { model: Zone, as: "zone" },
@@ -124,7 +124,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
 
     // 1. Get the existing unit
     const unit = await AdministrativeUnit.findByPk(id, { 
-      where: { deleted_at: null },
+      where: { deletedAt: null },
       transaction 
     });
     
@@ -160,7 +160,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
           region_id: updateData.region_id,
           oversight_office_id: updateData.oversight_office_id || null,
           id: { [Op.ne]: id },
-          deleted_at: null,
+          deletedAt: null,
         },
         transaction
       });
@@ -260,12 +260,12 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
   }
 };
 const deleteAdministrativeUnitService = async (id, deletedByUserId) => {
-  const unit = await AdministrativeUnit.findByPk(id, { where: { deleted_at: null } });
+  const unit = await AdministrativeUnit.findByPk(id, { where: { deletedAt: null } });
   if (!unit) {
     throw new Error("አስተዳደር ክፍል አልተገኘም።");
   }
 
-  await unit.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
+  await unit.update({ deletedAt: new Date(), deleted_by: deletedByUserId || null });
 };
 
 module.exports = {
