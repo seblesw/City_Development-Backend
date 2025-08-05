@@ -69,7 +69,7 @@ router.post(
   postLimiter,
   upload.fields([
     { name: 'documents', maxCount: 200 },
-    { name: 'profile_pictures', maxCount: 10 }
+    { name: 'profile_picture', maxCount: 10 }
   ]),  landRecordController.createLandRecord
 );
 router.post(

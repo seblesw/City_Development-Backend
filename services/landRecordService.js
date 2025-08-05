@@ -47,7 +47,7 @@ const createLandRecordService = async (data, files, user) => {
 
     validateInputs();
 
-    // 2. Check for Duplicate Parcel (with enhanced query)
+    // 2. Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -61,18 +61,22 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    // 3. Process Profile Pictures
-    const processProfilePictures = () => {
-      const profilePictures = files?.profile_pictures || [];
+    // 3. Process Profile Pictures (NEW IMPLEMENTATION)
+    const processOwnerPhotos = () => {
+      // Handle both array and single file upload
+      const profilePictures = Array.isArray(files?.profile_picture) 
+        ? files.profile_picture 
+        : files?.profile_picture ? [files.profile_picture] : [];
+      
       return owners.map((owner, index) => ({
         ...owner,
         profile_picture: profilePictures[index]?.serverRelativePath || null
       }));
     };
 
-    const ownersWithPhotos = processProfilePictures();
+    const ownersWithPhotos = processOwnerPhotos();
 
-    // 4. Create Land Record (with enhanced status tracking)
+    // 4. Create Land Record
     const landRecord = await LandRecord.create({
       ...land_record,
       administrative_unit_id: adminunit,
@@ -98,7 +102,7 @@ const createLandRecordService = async (data, files, user) => {
       }]
     }, { transaction: t });
 
-    // 5. Create and Link Owners (with enhanced owner processing)
+    // 5. Create and Link Owners
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map(owner => ({
         ...owner,
@@ -123,7 +127,7 @@ const createLandRecordService = async (data, files, user) => {
       }, { transaction: t }))
     );
 
-    // 6. Handle Documents (with improved file handling)
+    // 6. Handle Documents
     const processDocuments = async () => {
       if (!documents.length) return [];
       
@@ -141,7 +145,7 @@ const createLandRecordService = async (data, files, user) => {
 
     const documentResults = await processDocuments();
 
-    // 7. Handle Payment (with enhanced validation)
+    // 7. Handle Payment
     const processPayment = async () => {
       if (!land_payment || land_payment.total_amount <= 0) return null;
       
