@@ -5,7 +5,7 @@ const createZoneService = async (zoneData, createdByUserId) => {
   const { name, region_id } = zoneData;
 
   const existingZone = await Zone.findOne({
-    where: { name, region_id, deleted_at: null },
+    where: { name, region_id, deletedAt: null },
   });
   if (existingZone) {
     throw new Error("የዞን ስም በዚህ ክልል ውስጥ ተይዟል።");
@@ -37,7 +37,7 @@ const createZoneService = async (zoneData, createdByUserId) => {
 
 const getAllZonesService = async () => {
   return Zone.findAll({
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Region, as: "region" },
       { model: Woreda, as: "woredas" },
@@ -49,7 +49,7 @@ const getAllZonesService = async () => {
 
 const getZoneByIdService = async (id) => {
   const zone = await Zone.findByPk(id, {
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Region, as: "region" },
       { model: Woreda, as: "woredas" },
@@ -65,7 +65,7 @@ const getZoneByIdService = async (id) => {
 };
 
 const updateZoneService = async (id, zoneData, updatedByUserId) => {
-  const zone = await Zone.findByPk(id, { where: { deleted_at: null } });
+  const zone = await Zone.findByPk(id, { where: { deletedAt: null } });
   if (!zone) {
     throw new Error("ዞን አልተገኘም።");
   }
@@ -78,7 +78,7 @@ const updateZoneService = async (id, zoneData, updatedByUserId) => {
         name,
         region_id: region_id || zone.region_id,
         id: { [Op.ne]: id },
-        deleted_at: null,
+        deletedAt: null,
       },
     });
     if (existingZone) {
@@ -113,12 +113,12 @@ const updateZoneService = async (id, zoneData, updatedByUserId) => {
 };
 
 const deleteZoneService = async (id, deletedByUserId) => {
-  const zone = await Zone.findByPk(id, { where: { deleted_at: null } });
+  const zone = await Zone.findByPk(id, { where: { deletedAt: null } });
   if (!zone) {
     throw new Error("ዞን አልተገኘም።");
   }
 
-  await zone.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
+  await zone.update({ deletedAt: new Date(), deleted_by: deletedByUserId || null });
 };
 
 module.exports = {

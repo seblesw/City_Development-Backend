@@ -26,10 +26,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "regions", key: "id" },
       },
-    deleted_at:{
-      type: DataTypes.DATE,
-      allowNull:true,
-    },
     },
     {
       tableName: "zones",
@@ -41,17 +37,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["name", "region_id"], unique: true },
         { fields: ["region_id"] },
       ],
-      hooks: {
-        beforeCreate: async (zone, options) => {
-          const region = await db.models.Region.findByPk(zone.region_id, { transaction: options.transaction });
-          if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
-          const count = await db.models.Zone.count({
-            where: { region_id: zone.region_id },
-            transaction: options.transaction,
-          });
-          zone.code = `${region.code}-Z${count + 1}`;
-        },
-      },
     }
   );
 
