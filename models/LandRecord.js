@@ -1,3 +1,4 @@
+
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ተልኳል",
@@ -31,6 +32,7 @@ const LAND_USE_TYPES = {
   RECREATION: "መዝናኛ እና መጫዎቻ",
   PROTECTED_AREA: "የተጠበቀ ክልል",
   INDUSTRIAL: "ኢንዱስትሪ",
+  OTHER: "የተለየ አገልግሎት",
 };
 
 const ZONING_TYPES = {
@@ -39,15 +41,18 @@ const ZONING_TYPES = {
   EXPANSION_ZONE: "የማስፋፊያ ቀጠና",
 };
 const OWNERSHIP_TYPES = {
-  NO_PRIOR_DOCUMENT: "በነባር (ሰነድ አልባ) የተያዘ ይዞታ",
-  TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
-  LEASE_ALLOCATION: "በማህበር ምሪት(በ ሊዝ ምደባ) የተያዘ ይዞታ",
-  LEASE: "በሊዝ በጨረታ የተያዘ ይዞታ",
-  DISPLACEMENT: "በመፈናቀል ትክ የተያዘ ይዞታ",
-  INVESTMENT_LEASE: "በኢንቨስትመንት ሊዝ ጨረታ የተያዘ ይዞታ",
-  INVESTMENT_ALLOCATION: "በኢንቨስትመንት ምደባ(ምሪት) የተያዘ ይዞታ",
-  COURT_ORDER: "በፍርድ ቤት ትእዛዝ የተያዘ ይዞታ",
+  NO_PRIOR_DOCUMENT: "በነባር ሰነድ አልባ የተያዘ ይዞታ",
+  COURT_ORDER: "በፍ/ቤት ትዛዝ የተያዘ ይዞታ",
+  DISPLACEMENT: "በትክና ልዩልዩ በነባር የተያዘ ይዞታ",
   MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
+  LEASE: "በሊዝ የተያዘ ይዞታ",
+};
+const LEASE_OWNERSHIP_TYPE = {
+  LEASE_ALLOCATION: "በማህበር ምሪት በምደባ የተያዘ ይዞታ",
+  MENORIYA_DRJIT: "በመኖሪያና ድርጅት በጨረታ የተያዘ ይዞታ",
+  TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
+  DISPLACEMENT_ALLOCATION: "በትክና ልዩልዩ በምደባ የተያዙ ይዞታወች",
+  INVESTMENT_ALLOCATION: "በኢንቨስትመንት በምደባ የተያዘ ይዞታ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -63,7 +68,7 @@ module.exports = (db, DataTypes) => {
       parcel_number: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique:true,
+        unique: true,
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
           len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50  መሆን አለበት።" },
@@ -75,7 +80,7 @@ module.exports = (db, DataTypes) => {
         references: { model: "administrative_units", key: "id" },
       },
       ownership_category: {
-        type: DataTypes.STRING, 
+        type: DataTypes.STRING,
         allowNull: true,
         validate: {
           isIn: {
@@ -88,7 +93,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: false,
         validate: {
-          min: { args: [0.1], msg: "ስፋት ከ0.1 ካሬ ሜትር በታች መሆን አይችልም።" },
+          min: { args: [0.1], msg: "ስፋት ከ1 ካሬ ሜትር በታች መሆን አይችልም።" },
         },
       },
       north_neighbor: {
@@ -101,11 +106,11 @@ module.exports = (db, DataTypes) => {
       east_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
-         validate: {
+        validate: {
           len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
-     
+
       south_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -120,9 +125,9 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የምዕራብ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
-      notes:{
-        type:DataTypes.STRING,
-        allowNull:true,
+      notes: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       block_number: {
         type: DataTypes.STRING,
@@ -168,14 +173,33 @@ module.exports = (db, DataTypes) => {
       ownership_type: {
         type: DataTypes.STRING,
         allowNull: false,
-        // validate: {
-        //   isIn: {
-        //     args: [Object.values(OWNERSHIP_TYPES)],
-        //     msg: `የባለቤትነት አይነት ከተፈቀዱት እሴቶች (${Object.values(
-        //       OWNERSHIP_TYPES
-        //     ).join(", ")}) ውስጥ መሆን አለበት።`,
-        //   },
-        // },
+        validate: {
+          isIn: {
+            args: [Object.values(OWNERSHIP_TYPES)],
+            msg: `የይዞታ አግባብ አይነት ከተፈቀዱት እሴቶች (${Object.values(
+              OWNERSHIP_TYPES
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          },
+        },
+      },
+      lease_ownership_type:{
+        type:DataTypes.STRING,
+        allowNull:true,
+        validate:{
+          isIn:{
+            args:[Object.values(LEASE_OWNERSHIP_TYPE)],
+            msg: `የ ሊዝ ይዞታ አግባብ አይነት ከተፈቀዱት  (${Object.values(
+              LEASE_OWNERSHIP_TYPE
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          }
+        }
+      },
+      remark: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 500], msg: "ምርመራ ከ0 እስከ 500 ፊደላት መሆን አለበት።" },
+        },
       },
       record_status: {
         type: DataTypes.STRING,
@@ -314,6 +338,7 @@ module.exports = (db, DataTypes) => {
   return {
     LandRecord,
     RECORD_STATUSES,
+    LEASE_OWNERSHIP_TYPE,
     NOTIFICATION_STATUSES,
     PRIORITIES,
     LAND_USE_TYPES,

@@ -11,6 +11,7 @@ const {
   ZONING_TYPES,
   OWNERSHIP_TYPES,
   DOCUMENT_TYPES,
+
   Document,
   LandOwner,
   LandPayment,
@@ -21,7 +22,6 @@ const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
 const { Op } = require("sequelize");
 const userService = require("./userService");
-const { parseCSVFile } = require("../utils/csvParser");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 
@@ -54,11 +54,6 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
     }
 
-    // // 3. Validate Parcel Number Format
-    // if (!/^[A-Za-z0-9-]+$/.test(land_record.parcel_number)) {
-    //   throw new Error("የመሬት ቁጥር ፊደል፣ ቁጥር ወይም ሰረዝ ብቻ መያዝ አለበት።");
-    // }
-
     // 4. Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
@@ -70,7 +65,7 @@ const createLandRecordService = async (data, files, user) => {
     });
 
     if (existingRecord) {
-      throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
+      throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
     // 5. Create Land Record
@@ -85,14 +80,24 @@ const createLandRecordService = async (data, files, user) => {
         status_history: [
           {
             status: RECORD_STATUSES.SUBMITTED,
-            changed_by: user.id,
+            changed_by: {
+              id: user.id,
+              first_name: user.first_name,
+              middle_name: user.middle_name,
+              last_name: user.last_name,
+            },
             changed_at: new Date(),
           },
         ],
         action_log: [
           {
             action: "CREATED",
-            changed_by: user.id,
+            changed_by: {
+              id: user.id,
+              first_name: user.first_name,
+              middle_name: user.middle_name,
+              last_name: user.last_name,
+            },
             changed_at: new Date(),
           },
         ],
@@ -321,7 +326,8 @@ async function transformXLSXData(rows, adminUnitId) {
         national_id: String(row.national_id || "").trim(),
         email: row.email?.trim() || null,
         phone_number: row.phone_number || null,
-        relationship_type: row.relationship_type || "ባለቤት",
+        gender: row.gender || null,
+        relationship_type: row.relationship_type || "ተጋሪ",
         address: row.address || null,
       }))
       .filter((owner) => owner.national_id);
@@ -331,6 +337,7 @@ async function transformXLSXData(rows, adminUnitId) {
       last_name: primaryRow.last_name || "Unknown",
       national_id: String(primaryRow.national_id || ""),
       email: primaryRow.email?.trim() || null,
+      gender: primaryRow.gender || null,
       phone_number: primaryRow.phone_number || null,
       relationship_type: primaryRow.relationship_type || "ባለቤት",
     });
@@ -345,6 +352,7 @@ async function transformXLSXData(rows, adminUnitId) {
     administrative_unit_id: adminUnitId,
     land_use: primaryRow.land_use || "መኖሪያ",
     ownership_type: primaryRow.ownership_type || "የግል",
+    lease_ownership_type:primaryRow.lease_ownership_type || null,
     zoning_type: primaryRow.zoning_type || "መኖሪያ",
     priority: primaryRow.priority || "መካከለኛ",
     block_number: primaryRow.block_number || null,
@@ -358,7 +366,7 @@ async function transformXLSXData(rows, adminUnitId) {
   const documents = documentRows
     .filter((row) => row.document_type)
     .map((row) => ({
-      document_type: row.document_type,
+      document_type: row.document_type || DOCUMENT_TYPES.TITLE_DEED,
       reference_number: row.document_reference_number || null,
       description: row.document_description || "",
       issue_date: row.document_issue_date
@@ -377,7 +385,7 @@ async function transformXLSXData(rows, adminUnitId) {
   const payments = paymentRows
     .filter((row) => row.payment_type)
     .map((row) => ({
-      payment_type: row.payment_type,
+      payment_type: row.payment_type || null,
       total_amount: parseFloat(row.total_amount) || 0,
       paid_amount: parseFloat(row.paid_amount) || 0,
       currency: row.currency || "ETB",
