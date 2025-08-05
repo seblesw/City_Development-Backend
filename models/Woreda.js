@@ -26,10 +26,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "zones", key: "id" },
       },
-      deleted_at:{
-        type:DataTypes.DATE,
-        allowNull:true,
-      },
     },
     {
       tableName: "woredas",
@@ -41,17 +37,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["name", "zone_id"], unique: true, },
         { fields: ["zone_id"] },
       ],
-      // hooks: {
-      //   beforeCreate: async (woreda, options) => {
-      //     const zone = await db.models.Zone.findByPk(woreda.zone_id, { transaction: options.transaction });
-      //     if (!zone) throw new Error("ትክክለኛ ዞን ይምረጡ።");
-      //     const count = await db.models.Woreda.count({
-      //       where: { zone_id: woreda.zone_id },
-      //       transaction: options.transaction,
-      //     });
-      //     woreda.code = `${zone.code}-W${count + 1}`;
-      //   },
-      // },
+      
     }
   );
 

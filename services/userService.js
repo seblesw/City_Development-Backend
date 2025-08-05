@@ -64,8 +64,8 @@ const createLandOwner = async (
           owner = await User.create(
             {
               ...ownerData,
-              national_id: nationalId,
-              phone_number: phoneNumber,
+              // national_id: nationalId,
+              // phone_number: phoneNumber,
               administrative_unit_id: administrativeUnitId,
               password,
               created_by: creatorId,

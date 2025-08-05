@@ -18,10 +18,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-      },
       code: {
         type: DataTypes.STRING,
         unique: true,

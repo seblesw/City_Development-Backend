@@ -85,11 +85,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: { len: [1, 50] },
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        defaultValue: null,
-      },
     },
     {
       tableName: "administrative_units",
@@ -100,12 +95,12 @@ module.exports = (db, DataTypes) => {
         {
           unique: true,
           fields: ["code"],
-          where: { deleted_at: { [Op.eq]: null } },
+          where: { deletedAt: { [Op.eq]: null } },
         },
         {
           unique: true,
           fields: ["name", "region_id", "oversight_office_id"],
-          where: { deleted_at: { [Op.eq]: null } },
+          where: { deletedAt: { [Op.eq]: null } },
         },
         { fields: ["region_id"] },
         { fields: ["zone_id"], where: { zone_id: { [Op.ne]: null } } },
@@ -115,69 +110,6 @@ module.exports = (db, DataTypes) => {
           where: { oversight_office_id: { [Op.ne]: null } },
         },
       ],
-      hooks: {
-        beforeCreate: async (unit, options) => {
-          const region = await db.models.Region.findByPk(unit.region_id, {
-            transaction: options.transaction,
-          });
-          if (!region) throw new Error("ትክክለኛ ክልል ይምረጡ።");
-          const zone = unit.zone_id
-            ? await db.models.Zone.findByPk(unit.zone_id, {
-                transaction: options.transaction,
-              })
-            : null;
-          const woreda = unit.woreda_id
-            ? await db.models.Woreda.findByPk(unit.woreda_id, {
-                transaction: options.transaction,
-              })
-            : null;
-          const oversight = unit.oversight_office_id
-            ? await db.models.OversightOffice.findByPk(
-                unit.oversight_office_id,
-                { transaction: options.transaction }
-              )
-            : null;
-            // console.log(oversight.region_id !=unit.region_id);
-          if (
-            unit.oversight_office_id &&
-            (!oversight || oversight.region_id != unit.region_id)
-          )
-            throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
-          const count = await db.models.AdministrativeUnit.count({
-            transaction: options.transaction,
-          });
-          unit.code = `${region.code}-${zone?.code.split("-")[1] || "NZ"}-${
-            woreda?.code.split("-")[2] || "NW"
-          }-AU${count + 1}`;
-          const existing = await db.models.AdministrativeUnit.findOne({
-            where: { code: unit.code },
-            transaction: options.transaction,
-          });
-          if (existing) throw new Error("የክፍል ኮድ ተይዟል።");
-        },
-        beforeUpdate: async (unit, options) => {
-          if (unit.changed("code")) {
-            const existing = await db.models.AdministrativeUnit.findOne({
-              where: { code: unit.code, id: { [Op.ne]: unit.id } },
-              transaction: options.transaction,
-            });
-            if (existing) throw new Error("የክፍል ኮድ ተይዟል።");
-          }
-          if (unit.changed("oversight_office_id")) {
-            const oversight = unit.oversight_office_id
-              ? await db.models.OversightOffice.findByPk(
-                  unit.oversight_office_id,
-                  { transaction: options.transaction }
-                )
-              : null;
-            if (
-              unit.oversight_office_id &&
-              (!oversight || oversight.region_id !== unit.region_id)
-            )
-              throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
-          }
-        },
-      },
     }
   );
 

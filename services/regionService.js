@@ -8,7 +8,7 @@ const createRegionService = async (regionData, createdByUserId) => {
   const code = `${name.slice(0, 3).toUpperCase()}`;
 
   const existingRegion = await Region.findOne({
-    where: { [Op.or]: [{ name }, { code }], deleted_at: null },
+    where: { [Op.or]: [{ name }, { code }], deletedAt: null },
   });
   if (existingRegion) {
     throw new Error("የክልል ስም ወይም ኮድ ተይዟል።");
@@ -31,7 +31,7 @@ const createRegionService = async (regionData, createdByUserId) => {
 
 const getAllRegionsService = async () => {
   return Region.findAll({
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Zone, as: "zones" },
       { model: AdministrativeUnit, as: "administrativeUnits" },
@@ -43,7 +43,7 @@ const getAllRegionsService = async () => {
 
 const getRegionByIdService = async (id) => {
   const region = await Region.findByPk(id, {
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Zone, as: "zones" },
       { model: AdministrativeUnit, as: "administrativeUnits" },
@@ -59,7 +59,7 @@ const getRegionByIdService = async (id) => {
 };
 
 const updateRegionService = async (id, regionData, updatedByUserId) => {
-  const region = await Region.findByPk(id, { where: { deleted_at: null } });
+  const region = await Region.findByPk(id, { where: { deletedAt: null } });
   if (!region) {
     throw new Error("ክልል አልተገኘም።");
   }
@@ -73,7 +73,7 @@ const updateRegionService = async (id, regionData, updatedByUserId) => {
 
   if (name || code) {
     const existingRegion = await Region.findOne({
-      where: { [Op.or]: [{ name }, { code }], id: { [Op.ne]: id }, deleted_at: null },
+      where: { [Op.or]: [{ name }, { code }], id: { [Op.ne]: id }, deletedAt: null },
     });
     if (existingRegion) {
       throw new Error("የክልል ስም ወይም ኮድ ተይዟል።");

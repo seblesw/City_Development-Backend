@@ -16,6 +16,7 @@ const {
   PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
+  LEASE_OWNERSHIP_TYPE,
   ZONING_TYPES,
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
@@ -325,6 +326,7 @@ module.exports = {
   PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
+  LEASE_OWNERSHIP_TYPE,
   ZONING_TYPES,
   PAYMENT_STATUSES,
   PAYMENT_TYPES,

@@ -5,7 +5,7 @@ const createWoredaService = async (woredaData) => {
   const { name, zone_id } = woredaData;
 
   const existingWoreda = await Woreda.findOne({
-    where: { name, zone_id, deleted_at: null },
+    where: { name, zone_id, deletedAt: null },
   });
   if (existingWoreda) {
     throw new Error("የወረዳ ስም በዚህ ዞን ውስጥ ተይዟል።");
@@ -35,7 +35,7 @@ const createWoredaService = async (woredaData) => {
 
 const getAllWoredasService = async () => {
   return Woreda.findAll({
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Zone, as: "zone" },
       { model: AdministrativeUnit, as: "administrativeUnits" },
@@ -46,7 +46,7 @@ const getAllWoredasService = async () => {
 
 const getWoredaByIdService = async (id) => {
   const woreda = await Woreda.findByPk(id, {
-    where: { deleted_at: null },
+    where: { deletedAt: null },
     include: [
       { model: Zone, as: "zone" },
       { model: AdministrativeUnit, as: "administrativeUnits" },
@@ -61,7 +61,7 @@ const getWoredaByIdService = async (id) => {
 };
 
 const updateWoredaService = async (id, woredaData, updatedByUserId) => {
-  const woreda = await Woreda.findByPk(id, { where: { deleted_at: null } });
+  const woreda = await Woreda.findByPk(id, { where: { deletedAt: null } });
   if (!woreda) {
     throw new Error("ወረዳ አልተገኘም።");
   }
@@ -74,7 +74,7 @@ const updateWoredaService = async (id, woredaData, updatedByUserId) => {
         name,
         zone_id: zone_id || woreda.zone_id,
         id: { [Op.ne]: id },
-        deleted_at: null,
+        deletedAt: null,
       },
     });
     if (existingWoreda) {
@@ -108,12 +108,12 @@ const updateWoredaService = async (id, woredaData, updatedByUserId) => {
 };
 
 const deleteWoredaService = async (id, deletedByUserId) => {
-  const woreda = await Woreda.findByPk(id, { where: { deleted_at: null } });
+  const woreda = await Woreda.findByPk(id, { where: { deletedAt: null } });
   if (!woreda) {
     throw new Error("ወረዳ አልተገኘም።");
   }
 
-  await woreda.update({ deleted_at: new Date(), deleted_by: deletedByUserId || null });
+  await woreda.update({ deletedAt: new Date(), deleted_by: deletedByUserId || null });
 };
 
 module.exports = {
