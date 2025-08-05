@@ -9,7 +9,7 @@ const {
 } = require("../controllers/administrativeUnitController");
 const authMiddleware= require("../middlewares/authMiddleware");
 
-router.post("/", createAdministrativeUnit);
+router.post("/", authMiddleware.protect,createAdministrativeUnit);
 router.get("/", getAllAdministrativeUnits);
 router.get("/:id", getAdministrativeUnitById);
 router.put("/:id", authMiddleware.protect, updateAdministrativeUnit);
