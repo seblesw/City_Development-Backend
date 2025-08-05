@@ -67,8 +67,10 @@ router.post(
   "/",
   authMiddleware.protect,
   postLimiter,
-  upload.array("documents", 20),
-  landRecordController.createLandRecord
+  upload.fields([
+    { name: 'documents', maxCount: 200 },
+    { name: 'profile_pictures', maxCount: 10 }
+  ]),  landRecordController.createLandRecord
 );
 router.post(
   "/:id/status",
