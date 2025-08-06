@@ -2,24 +2,25 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-const ROOT_UPLOAD_DIR = path.join(__dirname, "..", "uploads", "documents");
+// Define root directories
+const DOCUMENTS_DIR = path.join(__dirname, "..", "uploads", "documents");
+const PICTURES_DIR = path.join(__dirname, "..", "uploads", "pictures");
 
-// Ensure upload directory exists
-if (!fs.existsSync(ROOT_UPLOAD_DIR)) {
-  fs.mkdirSync(ROOT_UPLOAD_DIR, { recursive: true });
-}
+// Ensure upload directories exist
+[DOCUMENTS_DIR, PICTURES_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // const recordId = req.body.land_record_id || req.params.id || "files";
-    // const safeRecordId = recordId.toString().replace(/[^a-zA-Z0-9-_]/g, "");
-    const folderPath = path.join(ROOT_UPLOAD_DIR);
-
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-    }
-
-    cb(null, folderPath);
+    // Determine destination based on field name
+    const destination = file.fieldname === 'profile_picture' 
+      ? PICTURES_DIR 
+      : DOCUMENTS_DIR;
+    
+    cb(null, destination);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
@@ -30,7 +31,9 @@ const storage = multer.diskStorage({
     const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
     
     // Add server-relative path to the file object
-    file.serverRelativePath = `uploads/documents/${filename}`;
+    file.serverRelativePath = file.fieldname === 'profile_picture'
+      ? `uploads/pictures/${filename}`
+      : `uploads/documents/${filename}`;
     
     cb(null, filename);
   }
@@ -55,11 +58,10 @@ const fileFilter = (req, file, cb) => {
     cb(new Error("Invalid file type. Only PDF, CSV, Excel, JPEG, or PNG files are allowed."), false);
   }
 };
-
+//export the multer upload middleware
 const upload = multer({
   storage: storage,
-  fileFilter: fileFilter,
-
+  fileFilter: fileFilter
 });
 
 module.exports = upload;

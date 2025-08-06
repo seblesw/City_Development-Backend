@@ -22,18 +22,17 @@ const createLandOwner = async (
   try {
     const createdOwners = await Promise.all(
       ownersData.map(async (ownerData) => {
-        // Cast critical fields
-        const nationalId = ownerData.national_id
-          ? String(ownerData.national_id)
-          : null;
-        const phoneNumber = ownerData.phone_number
-          ? String(ownerData.phone_number)
-          : null;
+        // Sanitize and prepare data
+        const nationalId = ownerData.national_id ? String(ownerData.national_id) : null;
+        const phoneNumber = ownerData.phone_number ? String(ownerData.phone_number) : null;
+        const profilePicture = ownerData.profile_picture || null;
 
-        // Set default password if not provided
-        const password = await bcrypt.hash("12345678", 10);
+        // Set secure default password
+        const password = ownerData.password 
+          ? await bcrypt.hash(ownerData.password, 10)
+          : await bcrypt.hash("12345678", 10);
 
-        // Try to find existing user by national ID or phone number
+        // Build search query for existing user
         const whereClause = {
           [Op.or]: [],
           deletedAt: { [Op.eq]: null },
@@ -42,40 +41,40 @@ const createLandOwner = async (
         if (nationalId) whereClause[Op.or].push({ national_id: nationalId });
         if (phoneNumber) whereClause[Op.or].push({ phone_number: phoneNumber });
 
-        let owner =
-          whereClause[Op.or].length > 0
-            ? await User.findOne({ where: whereClause, transaction: t })
-            : null;
+        const existingUser = whereClause[Op.or].length > 0
+          ? await User.findOne({ where: whereClause, transaction: t })
+          : null;
 
-        if (owner) {
-          // Update existing user with new data
-          await owner.update(
+        if (existingUser) {
+          // Update existing user (preserve existing profile picture if not provided)
+          await existingUser.update(
             {
               ...ownerData,
               national_id: nationalId,
               phone_number: phoneNumber,
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
+              profile_picture: profilePicture || existingUser.profile_picture,
             },
             { transaction: t }
           );
-        } else {
-          // Create new user
-          owner = await User.create(
-            {
-              ...ownerData,
-              // national_id: nationalId,
-              // phone_number: phoneNumber,
-              administrative_unit_id: administrativeUnitId,
-              password,
-              created_by: creatorId,
-              is_active: true,
-            },
-            { transaction: t }
-          );
+          return existingUser;
         }
 
-        return owner;
+        // Create new user with profile picture if provided
+        return await User.create(
+          {
+            ...ownerData,
+            // national_id: nationalId,
+            // phone_number: phoneNumber,
+            administrative_unit_id: administrativeUnitId,
+            password,
+            profile_picture: profilePicture,
+            created_by: creatorId,
+            is_active: true,
+          },
+          { transaction: t }
+        );
       })
     );
 
@@ -83,7 +82,11 @@ const createLandOwner = async (
     return createdOwners;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(`የመሬት ባለቤቶች መፍጠር ስህተት: ${error.message}`);
+    
+    // Enhance error message with more context
+    const errorMessage = `Failed to create land owners: ${error.message}`;
+    console.error(errorMessage, { ownersData, administrativeUnitId });
+    throw new Error(errorMessage);
   }
 };
 const updateLandOwnersService = async (

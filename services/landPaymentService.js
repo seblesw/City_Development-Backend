@@ -40,11 +40,6 @@ const createLandPaymentService = async (data, options = {}) => {
       );
     }
 
-    // Validate currency against enum
-    // if (!['ETB', 'USD'].includes(data.currency)) {
-    //   throw new Error("ምንዛሪ ከ ETB ወይም USD መሆን አለበት።");
-    // }
-
     // Validate amounts
     if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {
       // console.log("Total amount validation failed:", typeof(data.total_amount));
@@ -104,7 +99,6 @@ const createLandPaymentService = async (data, options = {}) => {
       changed_by: data.created_by,
       changed_at: new Date()
     }];
-    // console.log("New action log:", data);
 
     await LandRecord.update(
       { action_log: newLog },

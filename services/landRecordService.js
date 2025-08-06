@@ -32,29 +32,27 @@ const createLandRecordService = async (data, files, user) => {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
 
-    // 1. Validate Input Data Structure
-    if (
-      !land_record ||
-      !land_record.parcel_number ||
-      !land_record.ownership_category
-    ) {
-      // console.log("land_record data:", land_record);
-      throw new Error(
-        "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
-      );
-    }
+    // 1. Enhanced Input Validation
+    const validateInputs = () => {
+      if (!land_record?.parcel_number || !land_record?.ownership_category) {
+        throw new Error(
+          "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
+        );
+      }
 
-    // 2. Validate Ownership Structure
-    if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
-      throw new Error("የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።");
-    } else if (
-      land_record.ownership_category === "የግል" &&
-      owners.length !== 1
-    ) {
-      throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
-    }
+      if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
+        throw new Error("የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።");
+      } else if (
+        land_record.ownership_category === "የግል" &&
+        owners.length !== 1
+      ) {
+        throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
+      }
+    };
 
-    // 4. Check for Duplicate Parcel
+    validateInputs();
+
+    // 2. Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -68,7 +66,24 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    // 5. Create Land Record
+    // 3. Process Profile Pictures (NEW IMPLEMENTATION)
+    const processOwnerPhotos = () => {
+      // Handle both array and single file upload
+      const profilePictures = Array.isArray(files?.profile_picture)
+        ? files.profile_picture
+        : files?.profile_picture
+        ? [files.profile_picture]
+        : [];
+
+      return owners.map((owner, index) => ({
+        ...owner,
+        profile_picture: profilePictures[index]?.serverRelativePath || null,
+      }));
+    };
+
+    const ownersWithPhotos = processOwnerPhotos();
+
+    // 4. Create Land Record
     const landRecord = await LandRecord.create(
       {
         ...land_record,
@@ -82,9 +97,9 @@ const createLandRecordService = async (data, files, user) => {
             status: RECORD_STATUSES.SUBMITTED,
             changed_by: {
               id: user.id,
-              first_name: user.first_name,
-              middle_name: user.middle_name,
-              last_name: user.last_name,
+              name: [user.first_name, user.middle_name, user.last_name]
+                .filter(Boolean)
+                .join(" "),
             },
             changed_at: new Date(),
           },
@@ -94,9 +109,9 @@ const createLandRecordService = async (data, files, user) => {
             action: "CREATED",
             changed_by: {
               id: user.id,
-              first_name: user.first_name,
-              middle_name: user.middle_name,
-              last_name: user.last_name,
+              name: [user.first_name, user.middle_name, user.last_name]
+                .filter(Boolean)
+                .join(" "),
             },
             changed_at: new Date(),
           },
@@ -105,12 +120,13 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // 6. Create and Link Owners
+    // 5. Create and Link Owners
     const createdOwners = await userService.createLandOwner(
-      owners.map((owner) => ({
+      ownersWithPhotos.map((owner) => ({
         ...owner,
-        email: owner.email || null,
-        address: owner.address || null,
+        email: owner.email?.trim() || null,
+        address: owner.address?.trim() || null,
+        administrative_unit_id: adminunit,
       })),
       adminunit,
       user.id,
@@ -128,74 +144,80 @@ const createLandRecordService = async (data, files, user) => {
                 ? 100 / createdOwners.length
                 : 100,
             verified: true,
+            created_at: new Date(),
           },
           { transaction: t }
         )
       )
     );
 
-    // 7. Handle Documents - allow missing files or fewer files than documents
-    let documentResults = [];
-    if (documents.length > 0) {
-      // Use empty array if files is missing or not an array
-      const filesArr = Array.isArray(files) ? files : [];
+    // 6. Handle Documents
+    const processDocuments = async () => {
+      if (!documents.length) return [];
 
-      documentResults = await Promise.all(
+      const filesArr = Array.isArray(files?.documents) ? files.documents : [];
+
+      return Promise.all(
         documents.map((doc, index) => {
           const file = filesArr[index];
-
-          // Pass empty array if no file or missing path
-          const fileForDoc = file && file.path ? [file] : [];
-
           return documentService.createDocumentService(
             {
               ...doc,
               land_record_id: landRecord.id,
-              file_path: null,
+              file_path: file?.serverRelativePath || null,
             },
-            fileForDoc,
+            file ? [file] : [],
             user.id,
             { transaction: t }
           );
         })
       );
-    }
+    };
 
-    // 8. Handle Payment
+    const documentResults = await processDocuments();
+
+    // 7. Handle Payment
     let landPayment = null;
-    if (land_payment && land_payment.total_amount > 0) {
-      if (
-        !land_payment.payment_type ||
-        !Object.values(PAYMENT_TYPES).includes(land_payment.payment_type)
-      ) {
-        throw new Error("የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።");
+    if (land_payment && (land_payment.total_amount > 0 || land_payment.paid_amount > 0)) {
+      // Only validate if payment data exists
+      if (!land_payment.payment_type) {
+        throw new Error("Payment type is required when providing payment information");
       }
 
-      landPayment = await landPaymentService.createLandPaymentService(
-        {
-          ...land_payment,
-          land_record_id: landRecord.id,
-          payer_id: createdOwners[0].id,
-          created_by: user.id,
-          payment_status:
-            land_payment.paid_amount >= land_payment.total_amount
-              ? PAYMENT_STATUSES.COMPLETED
-              : PAYMENT_STATUSES.PENDING,
-        },
-        { transaction: t }
-      );
+      landPayment = await landPaymentService.createLandPaymentService({
+        ...land_payment,
+        land_record_id: landRecord.id,
+        payer_id: createdOwners[0].id,
+        created_by: user.id,
+        payment_status: calculatePaymentStatus(land_payment)
+      }, { transaction: t });
     }
+
+    // const landPayment = await processPayment();
 
     await t.commit();
 
     return {
-      landRecord,
-      owners: createdOwners,
+      landRecord: landRecord.toJSON(),
+      owners: createdOwners.map((o) => o.toJSON()),
       documents: documentResults,
-      landPayment,
+      landPayment: landPayment?.toJSON(),
     };
   } catch (error) {
     await t.rollback();
+
+    // Cleanup uploaded files if transaction fails remove file
+    if (files) {
+      const cleanupFiles = Object.values(files).flat();
+      cleanupFiles.forEach((file) => {
+        try {
+          if (file.path) fs.unlinkSync(file.path);
+        } catch (cleanupError) {
+          console.error("File cleanup failed:", cleanupError);
+        }
+      });
+    }
+
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
@@ -352,7 +374,7 @@ async function transformXLSXData(rows, adminUnitId) {
     administrative_unit_id: adminUnitId,
     land_use: primaryRow.land_use || "መኖሪያ",
     ownership_type: primaryRow.ownership_type || "የግል",
-    lease_ownership_type:primaryRow.lease_ownership_type || null,
+    lease_ownership_type: primaryRow.lease_ownership_type || null,
     zoning_type: primaryRow.zoning_type || "መኖሪያ",
     priority: primaryRow.priority || "መካከለኛ",
     block_number: primaryRow.block_number || null,

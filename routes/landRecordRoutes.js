@@ -7,13 +7,13 @@ const upload = require("../middlewares/fileStorage");
 
 // Rate limiters
 const getLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000, 
   max: 100,
   message: "በጣም ብዙ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
 
 const postLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000, 
   max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
@@ -67,8 +67,10 @@ router.post(
   "/",
   authMiddleware.protect,
   postLimiter,
-  upload.array("documents", 20),
-  landRecordController.createLandRecord
+  upload.fields([
+    { name: 'documents', maxCount: 200 },
+    { name: 'profile_picture', maxCount: 10 }
+  ]),  landRecordController.createLandRecord
 );
 router.post(
   "/:id/status",

@@ -38,6 +38,7 @@ module.exports = (db, DataTypes) => {
     {
       tableName: "regions",
       timestamps: true,
+      paranoid: true,
       freezeTableName: true,
       indexes: [
         {
