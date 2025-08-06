@@ -14,7 +14,7 @@ module.exports = (db, DataTypes) => {
       },
       plot_number: {
         type: DataTypes.STRING,
-        unique:true,
+        // unique:true,
         allowNull: false,
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
