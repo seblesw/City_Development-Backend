@@ -104,6 +104,22 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      updated_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
+      deleted_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+      },
+
       relationship_type: {
         type: DataTypes.STRING,
         allowNull: true,

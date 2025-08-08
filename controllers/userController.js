@@ -92,36 +92,25 @@ const getUserByIdController = async (req, res) => {
   }
 };
 
+
 const updateUserController = async (req, res) => {
   try {
     const { id } = req.params;
     const { body, user: authUser } = req;
+    
     if (!authUser) {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
     }
-    const data = {
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone_number: body.phone_number,
-      role_id: body.role_id,
-      administrative_unit_id: body.administrative_unit_id,
-      oversight_office_id: body.oversight_office_id,
-      national_id: body.national_id,
-      address: body.address,
-      gender: body.gender,
-      relationship_type: body.relationship_type,
-      marital_status: body.marital_status,
-      primary_owner_id: body.primary_owner_id,
-      is_active: body.is_active,
-    };
-    const user = await updateUser(id, data, authUser.id);
+
+    const updatedUser = await updateUser(id, body, authUser.id);
+    
     return res.status(200).json({
-      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ �ሁኔታ ተቀይሯል።`,
-      data: user,
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተቀይሯል።`,
+      data: updatedUser,
     });
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    const statusCode = error.message.includes('አልተገኘም') ? 404 : 400;
+    return res.status(statusCode).json({ error: error.message });
   }
 };
 

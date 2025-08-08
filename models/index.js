@@ -32,6 +32,24 @@ Role.hasMany(User, {
 });
 
 // User associations
+User.belongsTo(User, {
+  foreignKey: "updated_by",
+  as: "updater",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+User.belongsTo(User, {
+  foreignKey: "created_by",
+  as: "creator",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+User.belongsTo(User, {
+  foreignKey: "deleted_by",
+  as: "deleter",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
 User.belongsTo(Role, {
   foreignKey: "role_id",
   as: "role",
