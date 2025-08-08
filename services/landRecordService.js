@@ -356,6 +356,7 @@ async function transformXLSXData(rows, adminUnitId) {
   } else if (ownershipCategory === "የግል") {
     owners.push({
       first_name: primaryRow.first_name || "Unknown",
+      middle_name: primaryRow.middle_name || "Unknown",
       last_name: primaryRow.last_name || "Unknown",
       national_id: String(primaryRow.national_id || ""),
       email: primaryRow.email?.trim() || null,
@@ -487,7 +488,7 @@ const saveLandRecordAsDraftService = async (
           {
             model: User,
             as: "user",
-            attributes: ["id", "first_name", "last_name", "email"],
+            attributes: ["id", "first_name","middle_name", "last_name", "email"],
           },
         ],
         transaction: t,
@@ -2635,7 +2636,7 @@ const getTrashItemsService = async (user, options = {}) => {
         {
           model: User,
           as: "deleter",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name","middle_name", "last_name"],
         },
       ],
       order: [["deletedAt", "DESC"]],

@@ -214,6 +214,7 @@ const getAllUserService = async (options = {}) => {
       attributes: [
         "id",
         "first_name",
+        "middle_name",
         "last_name",
         "email",
         "phone_number",
@@ -260,6 +261,7 @@ const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
         "id",
         "first_name",
         "last_name",
+        "middle_name",
         "email",
         "phone_number",
         "role_id",
@@ -302,6 +304,7 @@ const getUserById = async (id, options = {}) => {
       attributes: [
         "id",
         "first_name",
+        "middle_name",
         "last_name",
         "email",
         "phone_number",
@@ -473,8 +476,8 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     return await User.findByPk(id, {
       transaction: t,
       include: [
-        { model: User, as: 'updater', attributes: ['id', 'first_name', 'last_name'] },
-        { model: User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] }
+        { model: User, as: 'updater', attributes: ['id', 'first_name','middle_name', 'last_name'] },
+        { model: User, as: 'creator', attributes: ['id', 'first_name', 'middle_name','last_name'] }
       ],
       attributes: { exclude: ['password'] }
     });

@@ -127,7 +127,7 @@ const login = async ({ email, password }, options = {}) => {
       where: { email, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
       transaction: t,
-      attributes: ['id', 'first_name', 'last_name', 'phone_number','middle_name','email','national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
+      attributes: ['id', 'first_name','middle_name', 'last_name', 'phone_number','middle_name','email','national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin']
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
