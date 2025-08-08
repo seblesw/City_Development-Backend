@@ -5,6 +5,8 @@ const {
   deleteUser,
   getAllUserService,
   getAllUserByAdminUnitService,
+  deactivateUserService,
+  activateUserService,
 } = require("../services/userService");
 const bcrypt = require("bcryptjs");
 
@@ -146,8 +148,35 @@ const deleteUserController = async (req, res) => {
   }
 };
 
+const deactivateUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deactivatorId = req.user.id;
+
+    const result = await deactivateUserService(id, deactivatorId);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+const activateUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const activatorId = req.user.id;
+
+    const result = await activateUserService(id, activatorId, { isActive: true });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createLandOwnerController,
+  deactivateUserController,
+  activateUserController,
   getUserByIdController,
   updateUserController,
   getAllUsersController,

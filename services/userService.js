@@ -484,11 +484,96 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     throw new Error(`ተጠቃሚ መቀየር ስህተት: ${error.message}`);
   }
 };
+const deactivateUserService = async (id, deactivatorId, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
+
+  try {
+    t = t || (await sequelize.transaction());
+
+    const user = await User.findByPk(id, { transaction: t });
+    if (!user) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
+    }
+
+    if (user.is_active === false) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ ታግዷል!`);
+    }
+
+    // Set is_active to false and track who deactivated
+    await user.update(
+      { 
+        is_active: false,
+        deleted_by: deactivatorId 
+      },
+      { transaction: t }
+    );
+
+    // Fetch with deactivator info
+    const userWithDeactivator = await User.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "deleter",
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!transaction) await t.commit();
+
+    return {
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተሰናክሏል።`,
+      deactivatedUser: userWithDeactivator,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ተጠቃሚ ማሰናከል ስህተት: ${error.message}`);
+  }
+};
+const activateUserService= async (id, activatorId, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
+  try {
+    t = t || (await sequelize.transaction());
+
+    const user = await User.findByPk(id, { transaction: t });
+    if (!user) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
+    }
+
+    if (user.is_active === true) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ አክቲቭ  ነበር።`);
+    }
+
+    // Set is_active to true and track who activated
+    await user.update(
+      { 
+        is_active: true,
+        updated_by: activatorId 
+      },
+      { transaction: t }
+    );
+
+    if (!transaction) await t.commit();
+
+    return {
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተነሳ።`,
+      activatedUser: user,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ተጠቃሚ መነሳት ስህተት: ${error.message}`);
+  }
+}
 
 module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
+  deactivateUserService,
+  activateUserService,
   updateUser,
   deleteUser,
   getAllUserService,
