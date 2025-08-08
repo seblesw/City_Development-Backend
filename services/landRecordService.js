@@ -362,22 +362,21 @@ async function transformXLSXData(rows, adminUnitId) {
       email: primaryRow.email?.trim() || null,
       gender: primaryRow.gender || null,
       phone_number: primaryRow.phone_number || null,
-      relationship_type: primaryRow.relationship_type || "ባለቤት",
+      relationship_type: primaryRow.relationship_type || null,
     });
   }
 
   // 2. Prepare Land Record
   const landRecordData = {
     parcel_number: primaryRow.parcel_number,
-    plot_number: primaryRow.plot_number,
     land_level: parseInt(primaryRow.land_level) || 1,
     area: parseFloat(primaryRow.area) || 0,
     administrative_unit_id: adminUnitId,
-    land_use: primaryRow.land_use || "መኖሪያ",
-    ownership_type: primaryRow.ownership_type || "የግል",
+    land_use: primaryRow.land_use,
+    ownership_type: primaryRow.ownership_type ,
     lease_ownership_type: primaryRow.lease_ownership_type || null,
-    zoning_type: primaryRow.zoning_type || "መኖሪያ",
-    priority: primaryRow.priority || "መካከለኛ",
+    zoning_type: primaryRow.zoning_type || null,
+    priority: primaryRow.priority || null,
     block_number: primaryRow.block_number || null,
     block_special_name: primaryRow.block_special_name || null,
     ownership_category: ownershipCategory,
@@ -1365,6 +1364,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
         "area",
         "land_use",
         "ownership_type",
+        "lease_ownership_type",
         "ownership_category",
         "zoning_type",
         "record_status",
