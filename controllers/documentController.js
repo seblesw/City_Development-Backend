@@ -1,3 +1,4 @@
+const { Document } = require("../models");
 const {
   createDocumentService,
   addFilesToDocumentService,
@@ -5,6 +6,8 @@ const {
   updateDocumentService,
   deleteDocumentService,
   importPDFs,
+  inactivateDocumentService,
+  getAllDocumentService,
 } = require("../services/documentService");
 const path = require("path");
 
@@ -40,8 +43,17 @@ const createDocumentController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
-
-
+const getAllDocumentsController = async (req, res) => {
+  try {
+    const documents = await getAllDocumentService();
+    return res.status(200).json({
+      message: documents.message || "ሁሉም ሰነዶች በተሳካ ሁኔታ ተገኝተዋል",
+      data: documents,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
 const importPDFDocuments = async (req, res) => {
   try {
     const uploaderId = req.user?.id;
@@ -65,10 +77,6 @@ const importPDFDocuments = async (req, res) => {
     });
   }
 };
-
-
-
-
 const addFilesToDocumentController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -91,7 +99,7 @@ const getDocumentByIdController = async (req, res) => {
     const { id } = req.params;
     const document = await getDocumentByIdService(id);
     return res.status(200).json({
-      message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተገኝቷል።`,
+      message: document.message || `ሰነድ በመለያ ቁጥር ${id} ተገኝተዋል`,
       data: document,
     });
   } catch (error) {
@@ -107,7 +115,7 @@ const updateDocumentController = async (req, res) => {
       return res.status(401).json({ error: "እባክዎ መጀመሪያ ሎጊን ያድርጉ!" });
     }
     const data = {
-      map_number: body.map_number,
+      plot_number: body.plot_number,
       document_type: body.document_type,
       reference_number: body.reference_number,
       description: body.description,
@@ -143,12 +151,65 @@ const deleteDocumentController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+const inactiveDocumentController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { inActived_reason } = req.body; 
+    const deactivator = req.user; 
+    if (!deactivator || !deactivator.id) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    if (!inActived_reason) {
+      return res.status(400).json({ error: "እባክዎ ምክንያት ያስገቡ።" });
+    }
+    const result = await inactivateDocumentService(deactivator, id, inActived_reason);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+const activateDocumentController = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find the document
+    const document = await Document.findByPk(id);
+    if (!document) {
+      return res.status(404).json({ error: "የሰነድ መለያ ቁጥር አልተገኘም።" });
+    }
+
+    // Check if already active
+    if (document.isActive) {
+      return res.status(400).json({ error: "ይህ ሰነድ ቀድሞውኑ አልታገደም።" });
+    }
+
+    // Update document to active
+    await document.update({
+      inActived_reason: null,
+      inactived_by: null,
+      isActive: true
+    });
+
+    return res.status(200).json({
+      message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተገኝቷል።`,
+      data: document
+    });
+
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
 
 module.exports = {
   createDocumentController,
+  activateDocumentController,
   importPDFDocuments,
+  getAllDocumentsController,
   addFilesToDocumentController,
   getDocumentByIdController,
   updateDocumentController,
+  inactiveDocumentController,
   deleteDocumentController,
 };

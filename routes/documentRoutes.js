@@ -21,6 +21,14 @@ router.post(
   upload.array("documents", 10), // Allow up to 10 files
   documentController.createDocumentController
 );
+// Get all documents (requires authentication, accessible to መዝጋቢ and አስተዳደር)
+router.get(
+  "/",
+  // authMiddleware.protect,
+  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  getLimiter,
+  documentController.getAllDocumentsController
+);
 router.post(
   "/import-pdfs",
   authMiddleware.protect,
@@ -38,13 +46,13 @@ router.post(
 );
 
 // Get a document by ID (requires authentication, accessible to መዝጋቢ and አስተዳደር)
-// router.get(
-//   "/:id",
-//   authMiddleware.protect,
-//   //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
-//   getLimiter,
-//   documentController.getDocumentByIdController
-// );
+router.get(
+  "/:id",
+  // authMiddleware.protect,
+  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  getLimiter,
+  documentController.getDocumentByIdController
+);
 
 // Update a document (requires authentication, optional multiple file upload, restricted to አስተዳደር)
 router.put(
@@ -61,6 +69,20 @@ router.delete(
   authMiddleware.protect,
   //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.deleteDocumentController
+);
+// Inactivate a document (requires authentication, restricted to አስተዳደር)
+router.post(
+  "/:id/inactivate",
+  authMiddleware.protect,
+  //   authMiddleware.restrictTo("አስተዳደር"),
+  documentController.inactiveDocumentController
+);
+//re active document 
+router.post(
+  "/:id/activate",
+  // authMiddleware.protect,
+  //   authMiddleware.restrictTo("አስተዳደር"),
+  documentController.activateDocumentController
 );
 
 

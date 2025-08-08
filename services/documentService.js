@@ -6,7 +6,7 @@ const {
   User,
   Role,
 } = require("../models");
-const { Op, where } = require("sequelize");
+const { Op } = require("sequelize");
 const path = require("path");
 const fs = require("fs/promises");
 
@@ -129,8 +129,48 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };
+const getAllDocumentService= async (options = {}) => {
+  const { transaction } = options;
+  try {
+    const documents = await Document.findAll({
+      where: { deletedAt: { [Op.eq]: null } },
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: ["id", "parcel_number"],
+        },
+        {
+          model: User,
+          as: "uploader",
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+        },
+      ],
+      attributes: [
+        "id",
+        "plot_number",
+        "document_type",
+        "reference_number",
+        "description",
+        "issue_date",
+        "land_record_id",
+        "preparer_name",
+        "approver_name",
+        "isActive",
+        "inActived_reason",
+        "files",
+        "createdAt",
+        "updatedAt",
+        "deletedAt"
+      ],
+      transaction,
+    });
 
-
+    return documents || [];
+  } catch (error) {
+    throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
+  }
+}
 const importPDFs = async ({ files, uploaderId }) => {
   const updatedDocuments = [];
   const unmatchedLogs = [];
@@ -235,11 +275,6 @@ const importPDFs = async ({ files, uploaderId }) => {
     unmatchedLogs,
   };
 };
-
-
-
-
-
 const addFilesToDocumentService = async (id, files, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -333,6 +368,11 @@ const getDocumentByIdService = async (id, options = {}) => {
           as: "landRecord",
           attributes: ["id", "parcel_number"],
         },
+        {
+          model: User,
+          as: "uploader",
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+        }
       ],
       attributes: [
         "id",
@@ -399,8 +439,6 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
-
-// Update Documents Service
 const updateDocumentsService = async (
   landRecordId,
   existingDocuments,
@@ -510,7 +548,6 @@ const updateDocumentsService = async (
     throw error;
   }
 };
-
 const deleteDocumentService = async (id, deleterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -558,11 +595,61 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
     throw new Error(`የሰነድ መሰረዝ ስህተት: ${error.message}`);
   }
 };
+const inactivateDocumentService = async (deactivator, documentId, reason, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
 
+  try {
+    t = t || (await sequelize.transaction());
+
+    const document = await Document.findByPk(documentId, { transaction: t });
+    if (!document) {
+      throw new Error(`መለያ ቁጥር ${documentId} ያለው ሰነድ አልተገኘም።`);
+    }
+
+    if (!document.isActive) {
+      throw new Error(`መለያ ቁጥር ${documentId} ያለው ሰነድ ቀድሞውኑ ታግዷል።`);
+    }
+
+    await document.update(
+      {
+        isActive: false,
+        inactived_by: deactivator.id,
+        inActived_reason: reason,
+      },
+      { transaction: t }
+    );
+
+    // Fetch with inactivator info
+    const documentWithInactiver = await Document.findByPk(documentId, {
+      include: [
+        {
+          model: User,
+          as: "inactivator",
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!transaction) await t.commit();
+
+    return {
+      message: `መለያ ቁጥር ${documentId} ያለው ሰነድ በተሳካ ሁኔታ ተሰናክሏል።`,
+      inactivatedDocument: documentWithInactiver,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ሰነድ ማሰናከል ስህተት: ${error.message}`);
+  }
+};
 module.exports = {
   createDocumentService,
+  getAllDocumentService,
+  getDocumentByIdService,
   importPDFs,
   addFilesToDocumentService,
+  inactivateDocumentService,
   getDocumentByIdService,
   updateDocumentsService,
   deleteDocumentService,
