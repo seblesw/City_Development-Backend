@@ -234,6 +234,54 @@ const getAllUserService = async (options = {}) => {
     throw new Error(`ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
   }
 };
+const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
+  const { transaction } = options;
+  try {
+    const users = await User.findAll({
+      where: {
+        administrative_unit_id: adminUnitId,
+        deletedAt: { [Op.eq]: null },
+      },
+      include: [
+        { model: Role, as: "role", attributes: ["id", "name"] },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: OversightOffice,
+          as: "oversightOffice",
+          attributes: ["id", "name"],
+        },
+
+      ],
+      attributes: [
+        "id",
+        "first_name",
+        "last_name",
+        "email",
+        "phone_number",
+        "role_id",
+        "administrative_unit_id",
+        "oversight_office_id",
+        "national_id",
+        "address",
+        "is_active",
+        "last_login",
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+    return users;
+  } catch (error) {
+    throw new Error(`በአስተዳደሩ ውስጥ ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
+
+
+
 const getUserById = async (id, options = {}) => {
   const { transaction } = options;
   try {
@@ -444,4 +492,5 @@ module.exports = {
   updateUser,
   deleteUser,
   getAllUserService,
+  getAllUserByAdminUnitService,
 };

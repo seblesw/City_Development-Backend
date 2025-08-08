@@ -4,6 +4,7 @@ const {
   updateUser,
   deleteUser,
   getAllUserService,
+  getAllUserByAdminUnitService,
 } = require("../services/userService");
 const bcrypt = require("bcryptjs");
 
@@ -92,6 +93,26 @@ const getUserByIdController = async (req, res) => {
   }
 };
 
+const getAllUserByAdminUnitController = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    } 
+    const administrativeUnitId = req.user.administrative_unit_id;
+    if (!administrativeUnitId) {
+      return res.status(400).json({ error: "ተጠቃሚው የ መዘጋጃ ቤት መለያ ቁጥር የለዉም" });
+    }
+    const users = await getAllUserByAdminUnitService(administrativeUnitId);
+    res.status(200).json({
+      message: users.message || "ሁሉም ተጠቃሚዎች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: users,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
 
 const updateUserController = async (req, res) => {
   try {
@@ -130,5 +151,6 @@ module.exports = {
   getUserByIdController,
   updateUserController,
   getAllUsersController,
+  getAllUserByAdminUnitController,
   deleteUserController,
 };
