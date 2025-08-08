@@ -6,7 +6,7 @@ const router = express.Router();
 router.post("/",authMiddleware.protect, userController.createLandOwnerController);
 router.get("/",  userController.getAllUsersController);
 router.get("/:id", userController.getUserByIdController);
-router.put("/:id", userController.updateUserController);
-router.delete("/:id", userController.deleteUserController);
+router.put("/:id", authMiddleware.protect,userController.updateUserController);
+router.delete("/:id", authMiddleware.protect, userController.deleteUserController);
 
 module.exports = router;

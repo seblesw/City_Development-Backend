@@ -285,33 +285,46 @@ const getUserById = async (id, options = {}) => {
 const deleteUser = async (id, deleterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate deleter role
-    // const deleter = await User.findByPk(deleterId, {
-    //   include: [{ model: Role, as: "role" }],
-    //   transaction: t,
-    // });
-    // if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-    //   throw new Error("ተጠቃሚ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    // }
-
+    // Find user
     const user = await User.findByPk(id, { transaction: t });
     if (!user) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
 
-    // Soft delete user
-    await user.destroy({ transaction: t });
+    // Set deleted_by so association works
+    await user.update({ deleted_by: deleterId }, { transaction: t });
+
+    // Fetch with deleter info
+    const userWithDeleter = await User.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "deleter",
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+        },
+      ],
+      transaction: t,
+    });
+
+    // Hard delete
+    await user.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
-    return { message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተሰርዟል።` };
+
+    return {
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተሰርዟል።`,
+      deletedUser: userWithDeleter,
+    };
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw new Error(`ተጠቃሚ መሰረዝ ስህተት: ${error.message}`);
   }
 };
+
 const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
