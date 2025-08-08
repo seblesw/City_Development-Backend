@@ -1,5 +1,6 @@
-const { sequelize, RECORD_STATUSES } = require("../models");
+const { sequelize, RECORD_STATUSES,LandRecord } = require("../models");
 const fs = require("fs");
+const { Op } = require("sequelize");
 
 const {
   createLandRecordService,
@@ -522,6 +523,59 @@ const getStatusCodeForError = (error) => {
     return 403;
   return 500;
 };
+
+
+const getRecentActions = async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    
+    // Get all land records with action logs
+    const landRecords = await LandRecord.findAll({
+      attributes: ['id', 'parcel_number', 'action_log'],
+      where: {
+        action_log: {
+          [Op.ne]: null
+        }
+      }
+    });
+
+    // Process action logs
+    let allActions = [];
+    landRecords.forEach(record => {
+      const actions = Array.isArray(record.action_log) ? record.action_log : [];
+      actions.forEach(action => {
+        allActions.push({
+          land_record_id: record.id,
+          parcel_number: record.parcel_number,
+          ...action,
+          changed_at: new Date(action.changed_at) // Convert to Date object for sorting
+        });
+      });
+    });
+
+    // Sort by date (newest first)
+    allActions.sort((a, b) => b.changed_at - a.changed_at);
+    
+    // Limit results and convert dates back to strings
+    const recentActions = allActions.slice(0, parseInt(limit)).map(action => ({
+      ...action,
+      changed_at: action.changed_at.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: recentActions
+    });
+  } catch (error) {
+    console.error("Error fetching recent actions:", error);
+    res.status(500).json({
+      success: false,
+      message: `Error fetching recent actions: ${error.message}`
+    });
+  }
+};
+
+
 // Changing the status of a land record
 const changeRecordStatus = async (req, res) => {
   try {
@@ -696,4 +750,5 @@ module.exports = {
   updateDraftLandRecord,
   submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
+  getRecentActions,
 };

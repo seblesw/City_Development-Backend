@@ -25,6 +25,7 @@ router.post(
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
+router.get('/actions/recent', landRecordController.getRecentActions);
 router.get("/trash", authMiddleware.protect, landRecordController.getTrash);
 router.get(
   "/stats",
