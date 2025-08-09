@@ -178,19 +178,27 @@ const createLandRecordService = async (data, files, user) => {
 
     // 7. Handle Payment
     let landPayment = null;
-    if (land_payment && (land_payment.total_amount > 0 || land_payment.paid_amount > 0)) {
+    if (
+      land_payment &&
+      (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
+    ) {
       // Only validate if payment data exists
       if (!land_payment.payment_type) {
-        throw new Error("Payment type is required when providing payment information");
+        throw new Error(
+          "Payment type is required when providing payment information"
+        );
       }
 
-      landPayment = await landPaymentService.createLandPaymentService({
-        ...land_payment,
-        land_record_id: landRecord.id,
-        payer_id: createdOwners[0].id,
-        created_by: user.id,
-        payment_status: calculatePaymentStatus(land_payment)
-      }, { transaction: t });
+      landPayment = await landPaymentService.createLandPaymentService(
+        {
+          ...land_payment,
+          land_record_id: landRecord.id,
+          payer_id: createdOwners[0].id,
+          created_by: user.id,
+          payment_status: calculatePaymentStatus(land_payment),
+        },
+        { transaction: t }
+      );
     }
 
     // const landPayment = await processPayment();
@@ -345,20 +353,20 @@ async function transformXLSXData(rows, adminUnitId) {
         first_name: row.first_name || "Unknown",
         middle_name: row.middle_name || "Unknown",
         last_name: row.last_name || "Unknown",
-        national_id: String(row.national_id || "").trim(),
+        national_id: row.national_id ? String(row.national_id).trim() : null,
         email: row.email?.trim() || null,
         phone_number: row.phone_number || null,
         gender: row.gender || null,
-        relationship_type: row.relationship_type || "ተጋሪ",
+        relationship_type: row.relationship_type || null,
         address: row.address || null,
       }))
-      .filter((owner) => owner.national_id);
+      
   } else if (ownershipCategory === "የግል") {
     owners.push({
       first_name: primaryRow.first_name || "Unknown",
       middle_name: primaryRow.middle_name || "Unknown",
       last_name: primaryRow.last_name || "Unknown",
-      national_id: String(primaryRow.national_id || ""),
+      national_id: primaryRow.national_id ? String(primaryRow.national_id).trim() : null,
       email: primaryRow.email?.trim() || null,
       gender: primaryRow.gender || null,
       phone_number: primaryRow.phone_number || null,
@@ -372,14 +380,19 @@ async function transformXLSXData(rows, adminUnitId) {
     land_level: parseInt(primaryRow.land_level) || 1,
     area: parseFloat(primaryRow.area) || 0,
     administrative_unit_id: adminUnitId,
+    north_neighbor: primaryRow.north_neighbor || null,
+    east_neighbor: primaryRow.east_neighbor || null,
+    south_neighbor: primaryRow.south_neighbor || null,
+    west_neighbor: primaryRow.west_neighbor || null,
     land_use: primaryRow.land_use,
-    ownership_type: primaryRow.ownership_type ,
+    ownership_type: primaryRow.ownership_type,
     lease_ownership_type: primaryRow.lease_ownership_type || null,
     zoning_type: primaryRow.zoning_type || null,
     priority: primaryRow.priority || null,
     block_number: primaryRow.block_number || null,
     block_special_name: primaryRow.block_special_name || null,
     ownership_category: ownershipCategory,
+    remark: primaryRow.remark || null,
   };
 
   // 3. Prepare Documents (one shared for የጋራ, first row only)
@@ -487,7 +500,13 @@ const saveLandRecordAsDraftService = async (
           {
             model: User,
             as: "user",
-            attributes: ["id", "first_name","middle_name", "last_name", "email"],
+            attributes: [
+              "id",
+              "first_name",
+              "middle_name",
+              "last_name",
+              "email",
+            ],
           },
         ],
         transaction: t,
@@ -1306,7 +1325,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
-          attributes: ["id", "name", "max_land_levels"],
+          attributes: ["id", "name","type", "unit_level","max_land_levels"],
         },
         // Creator info
         {
@@ -1379,6 +1398,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
         "block_number",
         "block_special_name",
         "rejection_reason",
+        "remark",
         "createdAt",
         "updatedAt",
         "deletedAt",
@@ -2636,7 +2656,7 @@ const getTrashItemsService = async (user, options = {}) => {
         {
           model: User,
           as: "deleter",
-          attributes: ["id", "first_name","middle_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name"],
         },
       ],
       order: [["deletedAt", "DESC"]],
