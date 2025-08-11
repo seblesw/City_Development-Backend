@@ -6,7 +6,7 @@ const {
   resetPasswordService,
   verifyOTP,
 } = require("../services/authServices");
-
+const fs= require("fs")
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
