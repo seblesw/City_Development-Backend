@@ -1,9 +1,12 @@
 const express = require("express");
 const userController = require("../controllers/userController");
 const authMiddleware = require("../middlewares/authMiddleware");
+const upload = require("../middlewares/fileStorage");
 const router = express.Router();
 
-router.post("/",authMiddleware.protect, userController.createLandOwnerController);
+router.post(  "/:land_record_id/owners",
+  upload.array("profile_picture"),
+  authMiddleware.protect, userController.addNewLandOwnerController);
 router.get("/",  userController.getAllUsersController);
 router.get("/admin-unit", authMiddleware.protect, userController.getAllUserByAdminUnitController);
 router.post("/deactivate/:id", authMiddleware.protect, userController.deactivateUserController);
