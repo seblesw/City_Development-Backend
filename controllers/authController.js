@@ -10,6 +10,7 @@ const {
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
+    const profilePicture = req.file ? `/uploads/pictures/${req.file.filename}` : null;
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
@@ -23,6 +24,7 @@ const registerOfficialController = async (req, res) => {
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
+      profile_picture,
       relationship_type: null,
       marital_status: body.marital_status || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
@@ -35,6 +37,8 @@ const registerOfficialController = async (req, res) => {
       data: official,
     });
   } catch (error) {
+     if (req.file) fs.unlinkSync(req.file.path);
+    
     return res.status(400).json({ error: error.message });
   }
 };
