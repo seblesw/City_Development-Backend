@@ -129,7 +129,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      deleteion_reason: {
+      deletion_reason: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
