@@ -54,8 +54,13 @@ module.exports = (db, DataTypes) => {
         defaultValue: true,
       },
       inActived_reason: {
-        type: DataTypes.DATE,
+        type: DataTypes.TEXT,
         allowNull: true,
+      },
+      inactived_by:{
+        type:DataTypes.INTEGER,
+        allowNull:true,
+        references: { model: "users", key: "id" },
       },
       files: {
         type: DataTypes.JSONB,

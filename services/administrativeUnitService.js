@@ -77,7 +77,7 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -91,7 +91,7 @@ const getAllAdministrativeUnitsService = async () => {
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
     order: [["createdAt", "DESC"]],
@@ -106,7 +106,7 @@ const getAdministrativeUnitByIdService = async (id) => {
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
+      { model: User, as: "users", attributes: ["id", "first_name","middle_name","last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -247,7 +247,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
         { model: Zone, as: "zone" },
         { model: Woreda, as: "woreda" },
         { model: OversightOffice, as: "oversightOffice" },
-        { model: User, as: "users", attributes: ["id", "first_name", "last_name"] },
+        { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
         { model: LandRecord, as: "landRecords" },
       ],
       transaction

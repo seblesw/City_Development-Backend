@@ -10,12 +10,6 @@ const {
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
-    // const user = req.user;
-
-    // if (!user) {
-    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    // }
-
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
@@ -54,13 +48,6 @@ const loginController = async (req, res) => {
     }
 
     const result = await login({ email, password });
-    
-    // if (result.requiresOTPVerification) {
-    //   return res.status(200).json({
-    //     message: "OTP ወደ ኢሜይልዎ ተልኳል። እባክዎ ያረጋግጡ።",
-    //     data: result
-    //   });
-    // }
 
     return res.status(200).json({
       message: "መግባት ተሳክቷል።", 

@@ -214,6 +214,7 @@ const getAllUserService = async (options = {}) => {
       attributes: [
         "id",
         "first_name",
+        "middle_name",
         "last_name",
         "email",
         "phone_number",
@@ -254,12 +255,12 @@ const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
           as: "oversightOffice",
           attributes: ["id", "name"],
         },
-
       ],
       attributes: [
         "id",
         "first_name",
         "last_name",
+        "middle_name",
         "email",
         "phone_number",
         "role_id",
@@ -278,10 +279,6 @@ const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
     throw new Error(`በአስተዳደሩ ውስጥ ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-
-
-
-
 const getUserById = async (id, options = {}) => {
   const { transaction } = options;
   try {
@@ -302,6 +299,7 @@ const getUserById = async (id, options = {}) => {
       attributes: [
         "id",
         "first_name",
+        "middle_name",
         "last_name",
         "email",
         "phone_number",
@@ -312,6 +310,7 @@ const getUserById = async (id, options = {}) => {
         "address",
         "gender",
         "relationship_type",
+        "profile_picture",
         "marital_status",
         "is_active",
         "last_login",
@@ -329,7 +328,6 @@ const getUserById = async (id, options = {}) => {
     throw new Error(`ተጠቃሚ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
-
 const deleteUser = async (id, deleterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -352,7 +350,13 @@ const deleteUser = async (id, deleterId, options = {}) => {
         {
           model: User,
           as: "deleter",
-          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+          ],
         },
       ],
       transaction: t,
@@ -372,7 +376,6 @@ const deleteUser = async (id, deleterId, options = {}) => {
     throw new Error(`ተጠቃሚ መሰረዝ ስህተት: ${error.message}`);
   }
 };
-
 const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -434,14 +437,14 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     t = t || (await sequelize.transaction());
 
     // 1. Get the user to be updated
-    const user = await User.findByPk(id, { 
+    const user = await User.findByPk(id, {
       transaction: t,
       include: [
-        { model: User, as: 'updater' },
-        { model: User, as: 'creator' }
-      ]
+        { model: User, as: "updater" },
+        { model: User, as: "creator" },
+      ],
     });
-    
+
     if (!user) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
@@ -463,32 +466,290 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     if (Object.keys(updateData).length > 0) {
       updateData.updated_at = new Date();
       updateData.updated_by = updaterId; // Track who made the update
-      
+
       await user.update(updateData, { transaction: t });
     }
 
     if (!transaction) await t.commit();
-    
+
     // Return user with updater/creator information
     return await User.findByPk(id, {
       transaction: t,
       include: [
-        { model: User, as: 'updater', attributes: ['id', 'first_name', 'last_name'] },
-        { model: User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] }
+        {
+          model: User,
+          as: "updater",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
+        {
+          model: User,
+          as: "creator",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+        },
       ],
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ["password"] },
     });
-    
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw new Error(`ተጠቃሚ መቀየር ስህተት: ${error.message}`);
   }
 };
+const deactivateUserService = async (id, deactivatorId, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
 
+  try {
+    t = t || (await sequelize.transaction());
+
+    const user = await User.findByPk(id, { transaction: t });
+    if (!user) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
+    }
+
+    if (user.is_active === false) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ ታግዷል!`);
+    }
+
+    // Set is_active to false and track who deactivated
+    await user.update(
+      {
+        is_active: false,
+        deleted_by: deactivatorId,
+      },
+      { transaction: t }
+    );
+
+    // Fetch with deactivator info
+    const userWithDeactivator = await User.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "deleter",
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+          ],
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!transaction) await t.commit();
+
+    return {
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተሰናክሏል።`,
+      deactivatedUser: userWithDeactivator,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ተጠቃሚ ማሰናከል ስህተት: ${error.message}`);
+  }
+};
+const activateUserService = async (id, activatorId, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
+  try {
+    t = t || (await sequelize.transaction());
+
+    const user = await User.findByPk(id, { transaction: t });
+    if (!user) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
+    }
+
+    if (user.is_active === true) {
+      throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ አክቲቭ  ነበር።`);
+    }
+
+    // Set is_active to true and track who activated
+    await user.update(
+      {
+        is_active: true,
+        updated_by: activatorId,
+      },
+      { transaction: t }
+    );
+
+    if (!transaction) await t.commit();
+
+    return {
+      message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተነሳ።`,
+      activatedUser: user,
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ተጠቃሚ መነሳት ስህተት: ${error.message}`);
+  }
+};
+const addNewLandOwnerService = async ({
+  land_record_id,
+  userData,
+  ownership_percentage,
+  authUser,
+}) => {
+  const transaction = await LandOwner.sequelize.transaction();
+
+  try {
+    // 1. Validate land record exists and is shared ownership
+    const landRecord = await LandRecord.findByPk(land_record_id, {
+      include: [
+        { model: User,
+          
+           as: "owners",
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "national_id",
+            "phone_number",
+            "profile_picture",
+          ],
+          through: {
+            model: LandOwner,
+            as: "landOwner",
+            attributes: ["ownership_percentage"],
+          },
+           },
+        { model: User, as: "creator" },
+      ],
+      transaction,
+    });
+
+    if (!landRecord) {
+      throw { status: 404, message: "የመሬት መዝገብ አልተገኘም" };
+    }
+
+    if (landRecord.ownership_category !== "የጋራ") {
+      throw {
+        status: 400,
+        message: "የጋራ ባለቤትነት ያለው የመሬት መዝገብ ብቻ ነው ተጨማሪ ባለቤቶች የሚጨመሩት",
+      };
+    }
+
+    // 2. Check if user exists by national ID
+    const existingUser = await User.findOne({
+      where: { national_id: userData.national_id },
+      transaction,
+    });
+
+    if (existingUser) {
+      // Check if user is already an owner
+      const isAlreadyOwner = landRecord.owners.some(
+        (owner) => owner.user_id === existingUser.id
+      );
+
+      if (isAlreadyOwner) {
+        throw { status: 400, message: "ይህ ሰው ቀደም ሲል �ዚህ መሬት ባለቤት ነው" };
+      }
+    }
+
+    // 3. Create new user or use existing one
+    let user;
+    if (existingUser) {
+      user = existingUser;
+    } else {
+      // Hash default password
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+      user = await User.create(
+        {
+          ...userData,
+          password: hashedPassword,
+          administrative_unit_id: authUser.administrative_unit_id,
+          is_active: true,
+          created_by: authUser.id,
+        },
+        { transaction }
+      );
+    }
+
+    // 4. Calculate ownership percentage
+    let finalPercentage = ownership_percentage;
+
+    if (!ownership_percentage) {
+      const existingPercentageSum = landRecord.owners.reduce(
+        (sum, owner) => sum + (owner.ownership_percentage || 0),
+        0
+      );
+
+      finalPercentage =
+        (100 - existingPercentageSum) / (landRecord.owners.length + 1);
+    }
+
+    // 5. Create land owner relationship
+    const newOwner = await LandOwner.create(
+      {
+        user_id: user.id,
+        land_record_id,
+        ownership_percentage: finalPercentage,
+        created_by: authUser.id,
+      },
+      { transaction }
+    );
+
+    // 6. Update land record action log
+    const actionLogEntry = {
+      action: `አዲስ ባለቤት ታክሏል: ${user.first_name} ${user.last_name}`,
+      details: {
+        user_id: user.id,
+        ownership_percentage: finalPercentage,
+      },
+      changed_by: {
+        id: authUser.id,
+        name: `${authUser.first_name} ${authUser.last_name}`,
+        role: authUser.role,
+      },
+      changed_at: new Date(),
+    };
+
+    await landRecord.update(
+      {
+        action_log: [...(landRecord.action_log || []), actionLogEntry],
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    return {
+      success: true,
+      message: "አዲስ ባለቤት በትክክል ታክሏል",
+      data: {
+        user: {
+          id: user.id,
+          full_name: `${user.first_name} ${
+            user.middle_name ? user.middle_name + " " : ""
+          }${user.last_name}`,
+          national_id: user.national_id,
+          phone_number: user.phone_number,
+        },
+        ownership: {
+          percentage: finalPercentage,
+          land_record_id,
+          relationship_type: userData.relationship_type,
+        },
+        created_by: {
+          id: authUser.id,
+          name: `${authUser.first_name} ${authUser.last_name}`,
+        },
+      },
+    };
+  } catch (error) {
+    await transaction.rollback();
+    console.error("የባለቤት አገልግሎት ስህተት:", error);
+    throw error;
+  }
+};
 module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
+  addNewLandOwnerService,
+  deactivateUserService,
+  activateUserService,
   updateUser,
   deleteUser,
   getAllUserService,

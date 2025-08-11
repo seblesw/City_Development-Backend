@@ -106,6 +106,12 @@ User.hasMany(Document, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+User.hasMany(Document, {
+  foreignKey: "inactived_by",
+  as: "inactivedDocuments",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
 User.hasMany(LandPayment, {
   as: "payerPayments",
   foreignKey: "payer_id",
@@ -321,6 +327,19 @@ Document.belongsTo(LandRecord, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+Document.belongsTo(User,{
+  foreignKey: "uploaded_by",
+  as: "uploader",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+})
+Document.belongsTo(User, {
+  foreignKey: "inactived_by",
+  as: "inactivator",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
 
 
 // Export Sequelize instance, models, and constants

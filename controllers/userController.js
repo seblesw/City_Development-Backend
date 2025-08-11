@@ -1,70 +1,72 @@
 const {
-  createLandOwner,
   getUserById,
   updateUser,
   deleteUser,
   getAllUserService,
   getAllUserByAdminUnitService,
+  deactivateUserService,
+  activateUserService,
+  addNewLandOwnerService,
 } = require("../services/userService");
-const bcrypt = require("bcryptjs");
 
-const createLandOwnerController = async (req, res) => {
+const addNewLandOwnerController = async (req, res) => {
   try {
-    const { body, user: authUser } = req;
+    const { land_record_id } = req.params;
+    const authUser = req.user;
 
-    if (!authUser) {
-      return res.status(401).json({ error: "የመዝጋቢ ማረጋገጫ ያስፈልጋል። እባክዎ ሎጊን ያድርጉ።" });
+    // Extract all fields from body
+    const { 
+      first_name,
+      middle_name,
+      last_name,
+      email,
+      phone_number,
+      national_id,
+      relationship_type,
+      gender,
+      ownership_percentage
+    } = req.body;
+
+    // Get uploaded file path (relative to your server root)
+    const profile_picture = req.file ? `/uploads/pictures/${req.file.filename}` : null;
+
+    // Basic validation
+    if (!land_record_id) {
+      // Clean up uploaded file if validation fails
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "Land record ID is required" });
     }
 
-    const hashedPassword = await bcrypt.hash("12345678", 10);
-
-    const primaryOwnerData = {
-      first_name: body.first_name,
-      middle_name: body.middle_name,
-      last_name: body.last_name,
-      email: body.email || null,
-      phone_number: body.phone_number || null,
-      password: hashedPassword,
-      role_id: body.role_id || null,
-      administrative_unit_id: authUser.administrative_unit_id,
-      oversight_office_id: body.oversight_office_id || null,
-      national_id: body.national_id,
-      address: body.address || null,
-      gender: body.gender,
-      marital_status: body.marital_status,
-      ownership_category: body.ownership_category,
-      is_active: body.is_active !== undefined ? body.is_active : true,
-    };
-
-    const coOwnersData = Array.isArray(body.co_owners)
-      ? body.co_owners.map((co) => ({
-          first_name: co.first_name,
-          middle_name: co.middle_name,
-          last_name: co.last_name,
-          email: co.email || null,
-          gender: co.gender,
-          address: co.address || null,
-          phone_number: co.phone_number || null,
-          national_id: co.national_id || null,
-          relationship_type: co.relationship_type,
-        }))
-      : [];
-
-    const owner = await createLandOwner(primaryOwnerData, coOwnersData, authUser.id);
-
-    return res.status(201).json({
-      status: "success",
-      message: "የመሬት ባለቤት እና ተጋሪዎች በተሳካ ሁኔታ ተመዝግበዋል።",
-      data: owner,
+    const result = await addNewLandOwnerService({
+      land_record_id,
+      userData: {
+        first_name,
+        middle_name,
+        last_name,
+        profile_picture, 
+        email,
+        phone_number,
+        national_id,
+        relationship_type,
+        gender,
+        password: "12345678" 
+      },
+      ownership_percentage,
+      authUser
     });
+
+    res.status(200).json(result);
+
   } catch (error) {
-    return res.status(400).json({
-      status: "error",
-      message: `የባለቤት መመዝገብ ስህተት፡፡ ${error.message}`,
+    // Clean up uploaded file if error occurs
+    if (req.file) fs.unlinkSync(req.file.path);
+    
+    console.error("Error adding land owner:", error);
+    res.status(error.status || 500).json({
+      error: error.message || "Failed to add land owner"
     });
   }
 };
-
 
 const getAllUsersController = async (req, res) => {
   try {
@@ -73,12 +75,10 @@ const getAllUsersController = async (req, res) => {
       message: "ሁሉም ተጠቃሚዎች በተሳካ ሁኔታ ተገኝተዋል።",
       data: users,
     });
-    
   } catch (error) {
     return res.status(400).json({ error: error.message });
-    
-  }};
-
+  }
+};
 
 const getUserByIdController = async (req, res) => {
   try {
@@ -98,7 +98,7 @@ const getAllUserByAdminUnitController = async (req, res) => {
     const userId = req.user.id;
     if (!userId) {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    } 
+    }
     const administrativeUnitId = req.user.administrative_unit_id;
     if (!administrativeUnitId) {
       return res.status(400).json({ error: "ተጠቃሚው የ መዘጋጃ ቤት መለያ ቁጥር የለዉም" });
@@ -113,24 +113,23 @@ const getAllUserByAdminUnitController = async (req, res) => {
   }
 };
 
-
 const updateUserController = async (req, res) => {
   try {
     const { id } = req.params;
     const { body, user: authUser } = req;
-    
+
     if (!authUser) {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
     }
 
     const updatedUser = await updateUser(id, body, authUser.id);
-    
+
     return res.status(200).json({
       message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተቀይሯል።`,
       data: updatedUser,
     });
   } catch (error) {
-    const statusCode = error.message.includes('አልተገኘም') ? 404 : 400;
+    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
     return res.status(statusCode).json({ error: error.message });
   }
 };
@@ -138,16 +137,45 @@ const updateUserController = async (req, res) => {
 const deleteUserController = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleterId = req.user.id; 
+    const deleterId = req.user.id;
     const result = await deleteUser(id, deleterId);
-    return res.status(200).json(result); 
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
+const deactivateUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deactivatorId = req.user.id;
+
+    const result = await deactivateUserService(id, deactivatorId);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+const activateUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const activatorId = req.user.id;
+
+    const result = await activateUserService(id, activatorId, {
+      isActive: true,
+    });
+
+    return res.status(200).json(result);
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
 };
 
 module.exports = {
-  createLandOwnerController,
+  addNewLandOwnerController,
+  deactivateUserController,
+  activateUserController,
   getUserByIdController,
   updateUserController,
   getAllUsersController,
