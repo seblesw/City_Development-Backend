@@ -348,25 +348,25 @@ async function transformXLSXData(rows, adminUnitId) {
   // 1. Prepare Owners
   let owners = [];
   if (ownershipCategory === "የጋራ") {
-    owners = rows
-      .map((row) => ({
-        first_name: row.first_name || "Unknown",
-        middle_name: row.middle_name || "Unknown",
-        last_name: row.last_name || "Unknown",
-        national_id: row.national_id ? String(row.national_id).trim() : null,
-        email: row.email?.trim() || null,
-        phone_number: row.phone_number || null,
-        gender: row.gender || null,
-        relationship_type: row.relationship_type || null,
-        address: row.address || null,
-      }))
-      
+    owners = rows.map((row) => ({
+      first_name: row.first_name || "Unknown",
+      middle_name: row.middle_name || "Unknown",
+      last_name: row.last_name || "Unknown",
+      national_id: row.national_id ? String(row.national_id).trim() : null,
+      email: row.email?.trim() || null,
+      phone_number: row.phone_number || null,
+      gender: row.gender || null,
+      relationship_type: row.relationship_type || null,
+      address: row.address || null,
+    }));
   } else if (ownershipCategory === "የግል") {
     owners.push({
       first_name: primaryRow.first_name || "Unknown",
       middle_name: primaryRow.middle_name || "Unknown",
       last_name: primaryRow.last_name || "Unknown",
-      national_id: primaryRow.national_id ? String(primaryRow.national_id).trim() : null,
+      national_id: primaryRow.national_id
+        ? String(primaryRow.national_id).trim()
+        : null,
       email: primaryRow.email?.trim() || null,
       gender: primaryRow.gender || null,
       phone_number: primaryRow.phone_number || null,
@@ -399,19 +399,17 @@ async function transformXLSXData(rows, adminUnitId) {
   const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
 
   const documents = documentRows
-    .filter((row) => row.document_type)
     .map((row) => ({
-      document_type: row.document_type || DOCUMENT_TYPES.TITLE_DEED,
-      reference_number: row.document_reference_number || null,
-      description: row.document_description || "",
-      issue_date: row.document_issue_date
-        ? new Date(row.document_issue_date)
-        : null,
-      isActive: ["true", "yes", "1"].includes(
-        String(row.document_is_active || "").toLowerCase()
-      ),
+      document_type:DOCUMENT_TYPES.TITLE_DEED,
       plot_number: row.plot_number,
-      files: [], // No actual file uploaded for XLSX
+      approver_name: row.approver_name || null,
+      preparer_name: row.preparer_name || null,
+      reference_number: row.reference_number ,
+      description: row.description || null,
+      issue_date: row.issue_date
+        ? new Date(row.issue_date)
+        : null,
+      files: [], 
     }));
 
   // 4. Prepare Payments (one shared for የጋራ, from first row only)
@@ -1326,7 +1324,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
-          attributes: ["id", "name","type", "unit_level","max_land_levels"],
+          attributes: ["id", "name", "type", "unit_level", "max_land_levels"],
         },
         // Creator info
         {
