@@ -398,19 +398,16 @@ async function transformXLSXData(rows, adminUnitId) {
   // 3. Prepare Documents (one shared for የጋራ, first row only)
   const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
 
-  const documents = documentRows
-    .map((row) => ({
-      document_type:DOCUMENT_TYPES.TITLE_DEED,
-      plot_number: row.plot_number,
-      approver_name: row.approver_name || null,
-      preparer_name: row.preparer_name || null,
-      reference_number: row.reference_number ,
-      description: row.description || null,
-      issue_date: row.issue_date
-        ? new Date(row.issue_date)
-        : null,
-      files: [], 
-    }));
+  const documents = documentRows.map((row) => ({
+    document_type: DOCUMENT_TYPES.TITLE_DEED,
+    plot_number: row.plot_number,
+    approver_name: row.approver_name || null,
+    preparer_name: row.preparer_name || null,
+    reference_number: row.reference_number,
+    description: row.description || null,
+    issue_date: row.issue_date ? new Date(row.issue_date) : null,
+    files: [],
+  }));
 
   // 4. Prepare Payments (one shared for የጋራ, from first row only)
   const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
@@ -2456,48 +2453,48 @@ const changeRecordStatusService = async (
 const moveToTrashService = async (
   recordId,
   user,
-  deletionReason,
+  deleteion_reason,
   options = {}
 ) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // Validate deletion reason
+    if (!deleteion_reason || deleteion_reason.trim().length < 5) {
+      throw new Error("የመሰረዝ ምክንያት በቂ መረጃ ሊሰጥ ይገባል (ቢያንስ 5 ቁምፊዎች)");
+    }
+
     const record = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       transaction: t,
     });
 
     if (!record) {
-      throw new Error("መዝገብ አልተገኘም።");
+      throw new Error("መዝገብ አልተገኘም ወይም አስቀድሞ ተሰርዟል።");
     }
 
-    // Update action log before deletion
+    // Update action log and deletion info
     record.action_log = [
       ...(record.action_log || []),
       {
         action: "MOVED_TO_TRASH",
-        changed_by: user.id,
+        changed_by: {
+          id: user.id,
+          first_name: first_name,
+          middle_name: middle_name,
+          last_name: last_name,
+        },
         changed_at: new Date(),
-        notes: deletionReason,
+        notes: deleteion_reason,
       },
     ];
+    record.deleted_by = user.id;
 
     await record.save({ transaction: t });
 
-    // Soft delete
+    // Soft delete the record (Sequelize will cascade to Documents & LandPayments)
     await record.destroy({ transaction: t });
-
-    // You might want to soft delete associated records too
-    await Document.update(
-      { deleted_by: user.id },
-      { where: { land_record_id: recordId }, transaction: t }
-    );
-
-    await LandPayment.update(
-      { deleted_by: user.id },
-      { where: { land_record_id: recordId }, transaction: t }
-    );
 
     if (!transaction) await t.commit();
 
@@ -2505,7 +2502,13 @@ const moveToTrashService = async (
       id: record.id,
       parcel_number: record.parcel_number,
       deleted_at: new Date(),
-      deleted_by: user.id,
+      deleted_by: {
+        id: user.id,
+        first_name: first_name,
+        middle_name: middle_name,
+        last_name: last_name,
+      },
+      message: "መዝገብ ወደ ትራሽ ተዛውሯል",
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();
@@ -2518,23 +2521,12 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Find the record including soft-deleted ones
+    // 1. Find the record (including soft-deleted) with minimal associations
     const record = await LandRecord.findOne({
       where: { id: recordId },
-      paranoid: false, // Include soft-deleted records
+      paranoid: false,
       transaction: t,
-      include: [
-        {
-          model: Document,
-          as: "documents",
-          paranoid: false,
-        },
-        {
-          model: LandPayment,
-          as: "payments",
-          paranoid: false,
-        },
-      ],
+      attributes: ['id', 'action_log', 'deletedAt'] 
     });
 
     if (!record) {
@@ -2545,48 +2537,58 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
       throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም።");
     }
 
-    // 2. Restore the main record
-    await record.restore({ transaction: t });
+    // 2. Restore main record and associations in parallel
+    await Promise.all([
+      record.restore({ transaction: t }),
+      
+      // Restore all documents in bulk (more efficient than individual restores)
+      Document.restore({
+        where: { land_record_id: recordId },
+        transaction: t
+      }),
+      
+      // Restore all payments in bulk
+      LandPayment.restore({
+        where: { land_record_id: recordId },
+        transaction: t
+      })
+    ]);
 
-    // 3. Restore all associated documents
-    if (record.documents && record.documents.length > 0) {
-      await Promise.all(
-        record.documents.map((doc) => doc.restore({ transaction: t }))
-      );
-    }
-
-    // 4. Restore all associated payments
-    if (record.payments && record.payments.length > 0) {
-      await Promise.all(
-        record.payments.map((payment) => payment.restore({ transaction: t }))
-      );
-    }
-
-    // 5. Update action log
+    // 3. Update action log with full user details
     record.action_log = [
       ...(record.action_log || []),
       {
         action: "RESTORED_FROM_TRASH",
-        changed_by: user.id,
+        changed_by: {
+          id: user.id,
+          first_name: user.first_name,
+          middle_name: user.middle_name,
+          last_name: user.last_name
+        },
         changed_at: new Date(),
-        notes: "Restored from trash",
-      },
+        notes: "Record and all associations restored"
+      }
     ];
+
     await record.save({ transaction: t });
 
     if (!transaction) await t.commit();
 
-    // 6. Return the fully restored record with associations
+    // 4. Return the full record by calling existing service
     return await getLandRecordByIdService(recordId, { transaction: t });
+    
   } catch (error) {
     if (!transaction && t) await t.rollback();
-
-    // Convert Sequelize errors to more user-friendly messages
-    if (error.name === "SequelizeDatabaseError") {
+    
+    // Enhanced error handling
+    if (error.name.includes('Sequelize')) {
       throw new Error("የዳታቤዝ ስህተት፡ መልሶ ማስጀመር አልተቻለም።");
     }
-
-    throw new Error(`መልሶ ማስጀመር ስህተት፡ ${error.message}`);
+    
+    throw new Error(
+      error.message.includes('መዝገብ') ? error.message : 
+      `ያልተጠበቀ ስህተት፡ ${error.message}`
+    );
   }
 };
 
@@ -2595,10 +2597,25 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // 1. Find record (including already deleted)
     const record = await LandRecord.findOne({
       where: { id: recordId },
       paranoid: false,
       transaction: t,
+      include: [
+        {
+          model: Document,
+          as: 'documents',
+          paranoid: false,
+          attributes: ['id'] // Only get IDs for audit purposes
+        },
+        {
+          model: LandPayment,
+          as: 'payments',
+          paranoid: false,
+          attributes: ['id']
+        }
+      ]
     });
 
     if (!record) {
@@ -2609,73 +2626,158 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም። በመጀመሪያ ወደ መጥፎ ቅርጫት ይዛውሩት።");
     }
 
-    // Log before permanent deletion
-    await AuditLog.create(
-      {
-        action: "PERMANENTLY_DELETED",
-        record_id: recordId,
-        user_id: user.id,
-        data: JSON.stringify(record.toJSON()),
+    // 2. Create comprehensive audit log
+    await AuditLog.create({
+      action: "PERMANENT_DELETION",
+      user_id: user.id,
+      user_details: {
+        name: `${user.first_name} ${user.last_name}`,
+        role: user.role
       },
-      { transaction: t }
-    );
+      record_type: "LandRecord",
+      record_id: recordId,
+      metadata: {
+        parcel_number: record.parcel_number,
+        associated_documents: record.documents.map(d => d.id),
+        associated_payments: record.payments.map(p => p.id),
+        deletion_reason: record.deletion_reason // If you store this
+      },
+      ip_address: req.ip // If available from controller
+    }, { transaction: t });
 
-    // Permanently delete associated records first
-    await Document.destroy({
-      where: { land_record_id: recordId },
-      force: true,
-      transaction: t,
-    });
+    // 3. Permanent deletion order (children first)
+    await Promise.all([
+      Document.destroy({
+        where: { land_record_id: recordId },
+        force: true,
+        transaction: t
+      }),
+      LandPayment.destroy({
+        where: { land_record_id: recordId },
+        force: true,
+        transaction: t
+      }),
+      LandOwner.destroy({ // Don't forget join tables!
+        where: { land_record_id: recordId },
+        force: true,
+        transaction: t
+      })
+    ]);
 
-    await LandPayment.destroy({
-      where: { land_record_id: recordId },
-      force: true,
-      transaction: t,
-    });
-
-    // Permanently delete the main record
+    // 4. Delete main record
     await record.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
+
+    return { 
+      success: true,
+      message: "መዝገብ እና ሁሉም ተዛማጅ መዛግብቶች ለዘላለም ተሰርዘዋል።",
+      deleted_at: new Date()
+    };
+
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw error;
+    
+    // Handle specific errors
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      throw new Error("የተያያዙ መዛግብቶች ስለሌሉ ማስወገድ አልተቻለም።");
+    }
+    
+    throw new Error(`ማስወገድ አልተቻለም፡ ${error.message}`);
   }
 };
 
 const getTrashItemsService = async (user, options = {}) => {
-  const { page = 1, limit = 10 } = options;
+  const { page = 1, limit = 10, includeAssociations = false } = options;
   const offset = (page - 1) * limit;
 
   try {
-    const { count, rows } = await LandRecord.findAndCountAll({
-      where: { deletedAt: { [Op.ne]: null } },
+    // Base query configuration
+    const queryOptions = {
+      where: { 
+        deletedAt: { [Op.ne]: null },  // Only soft-deleted records
+        // Optional: Filter by user's permissions (e.g., only records they deleted)
+        // deletedBy: user.isAdmin ? { [Op.ne]: null } : user.id
+      },
       paranoid: false,
+      attributes: [
+        'id',
+        'parcel_number',
+        'deletedAt',
+        'deletedBy',
+        'deletion_reason'  
+      ],
+      order: [['deletedAt', 'DESC']],  
+      limit,
+      offset,
       include: [
         {
           model: User,
-          as: "deleter",
-          attributes: ["id", "first_name", "middle_name", "last_name"],
-        },
+          as: 'deleter',
+          attributes: ['id', 'first_name', 'middle_name', 'last_name', 'email'],
+        }
       ],
-      order: [["deletedAt", "DESC"]],
-      limit,
-      offset,
-    });
+    };
 
+    // Conditionally include associated deleted records
+    if (includeAssociations) {
+      queryOptions.include.push(
+        {
+          model: Document,
+          as: 'documents',
+          paranoid: false,
+          attributes: ['id', 'name', 'deletedAt'],
+          where: { deletedAt: { [Op.ne]: null } }, 
+          required: false,  
+        },
+        {
+          model: LandPayment,
+          as: 'payments',
+          paranoid: false,
+          attributes: ['id', 'amount', 'deletedAt'],
+          where: { deletedAt: { [Op.ne]: null } },
+          required: false,
+        }
+      );
+    }
+
+    const { count, rows } = await LandRecord.findAndCountAll(queryOptions);
+
+    // Transform response
     return {
       total: count,
-      items: rows.map((record) => ({
+      items: rows.map(record => ({
         id: record.id,
         parcel_number: record.parcel_number,
-        deletedAt: record.deletedAt,
-        deleted_by: record.deletedBy,
+        deleted_at: record.deletedAt,
+        deleted_by: {
+          id: record.deleter.id,
+          name: `${record.deleter.first_name} ${record.deleter.last_name}`,
+        },
+        deletion_reason: record.deletion_reason,
+        ...(includeAssociations && {
+          associated_items: {
+            documents: record.documents?.length || 0,
+            payments: record.payments?.length || 0,
+          }
+        }),
+        status: 'IN_TRASH'  
       })),
-      page,
-      totalPages: Math.ceil(count / limit),
+      pagination: {
+        page,
+        limit,
+        total_pages: Math.ceil(count / limit),
+        has_more: page * limit < count,
+      },
     };
   } catch (error) {
-    throw error;
+    // Log error for debugging
+    console.error(`Failed to fetch trash items: ${error.message}`);
+    throw new Error(
+      error.message.includes('timeout') ? 
+      'የመረጃ ምንጭ በጣም ተጭኗል። እባክዎ ቆይታ ካደረጉ እንደገና ይሞክሩ።' :
+      'የመጥፎ ቅርጫት ዝርዝር ማግኘት አልተቻለም።'
+    );
   }
 };
 

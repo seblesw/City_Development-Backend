@@ -615,13 +615,13 @@ const moveToTrash = async (req, res) => {
   try {
     const { id } = req.params;
     const user = req.user;
-    const { deletionReason } = req.body;
+    const { deleteion_reason } = req.body;
 
-    if (!deletionReason) {
+    if (!deleteion_reason) {
       throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
     }
 
-    const result = await moveToTrashService(id, user, deletionReason, {
+    const result = await moveToTrashService(id, user, deleteion_reason, {
       transaction: t,
     });
 
