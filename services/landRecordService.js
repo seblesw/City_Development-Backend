@@ -1317,6 +1317,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "national_id",
             "email",
             "phone_number",
+            "profile_picture",
             "address",
           ],
           paranoid: !includeDeleted,

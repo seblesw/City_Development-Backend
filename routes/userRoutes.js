@@ -5,7 +5,7 @@ const upload = require("../middlewares/fileStorage");
 const router = express.Router();
 
 router.post(  "/:land_record_id/owners",
-  upload.array("profile_picture"),
+  upload.single("profile_picture"),
   authMiddleware.protect, userController.addNewLandOwnerController);
 router.get("/",  userController.getAllUsersController);
 router.get("/admin-unit", authMiddleware.protect, userController.getAllUserByAdminUnitController);

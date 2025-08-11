@@ -310,6 +310,7 @@ const getUserById = async (id, options = {}) => {
         "address",
         "gender",
         "relationship_type",
+        "profile_picture",
         "marital_status",
         "is_active",
         "last_login",

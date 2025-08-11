@@ -12,22 +12,29 @@ const {
 const addNewLandOwnerController = async (req, res) => {
   try {
     const { land_record_id } = req.params;
-    const {
+    const authUser = req.user;
+
+    // Extract all fields from body
+    const { 
       first_name,
       middle_name,
       last_name,
-      profile_picture,
       email,
       phone_number,
       national_id,
       relationship_type,
       gender,
-      ownership_percentage,
+      ownership_percentage
     } = req.body;
-    const authUser = req.user;
 
+    // Get uploaded file path (relative to your server root)
+    const profile_picture = req.file ? `/uploads/pictures/${req.file.filename}` : null;
+
+    // Basic validation
     if (!land_record_id) {
-      return res.status(400).json({ error: "የመሬት መዝገብ መለያ ያስፈልጋል" });
+      // Clean up uploaded file if validation fails
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "Land record ID is required" });
     }
 
     const result = await addNewLandOwnerService({
@@ -36,23 +43,27 @@ const addNewLandOwnerController = async (req, res) => {
         first_name,
         middle_name,
         last_name,
-        profile_picture,
+        profile_picture, 
         email,
         phone_number,
         national_id,
         relationship_type,
         gender,
-        password: "12345678",
+        password: "12345678" 
       },
       ownership_percentage,
-      authUser,
+      authUser
     });
 
     res.status(200).json(result);
+
   } catch (error) {
-    console.error("የባለቤት መጨመር ስህተት:", error);
+    // Clean up uploaded file if error occurs
+    if (req.file) fs.unlinkSync(req.file.path);
+    
+    console.error("Error adding land owner:", error);
     res.status(error.status || 500).json({
-      error: error.message || "የባለቤት መጨመር አልተሳካም፣ እባክዎ ቆይተው ይሞክሩ",
+      error: error.message || "Failed to add land owner"
     });
   }
 };
