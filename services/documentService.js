@@ -24,9 +24,9 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     const existingDocument = await Document.findOne({
       where: {
         plot_number: data.plot_number,
-        deletedAt: null
+        deletedAt: null,
       },
-      transaction: t
+      transaction: t,
     });
 
     if (existingDocument) {
@@ -38,32 +38,38 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     }
 
     // Document versioning
-    const version = await Document.count({
-      where: {
-        land_record_id: data.land_record_id,
-        plot_number: data.plot_number,
-        deletedAt: null
-      },
-      transaction: t
-    }) + 1;
+    const version =
+      (await Document.count({
+        where: {
+          land_record_id: data.land_record_id,
+          plot_number: data.plot_number,
+          deletedAt: null,
+        },
+        transaction: t,
+      })) + 1;
 
     // Prepare file metadata with server-relative paths
     const fileMetadata = [];
     if (Array.isArray(files) && files.length > 0) {
       for (const file of files) {
         // Get server-relative path (from project root)
-        const serverRelativePath = path.relative(
-          path.join(__dirname, '..'), // Go up to project root
-          file.path
-        ).split(path.sep).join('/'); // Convert to forward slashes
+        const serverRelativePath = path
+          .relative(
+            path.join(__dirname, ".."), // Go up to project root
+            file.path
+          )
+          .split(path.sep)
+          .join("/"); // Convert to forward slashes
 
         fileMetadata.push({
           file_path: serverRelativePath,
-          file_name: file.originalname || `document_${Date.now()}${path.extname(file.originalname) || ''}`,
+          file_name:
+            file.originalname ||
+            `document_${Date.now()}${path.extname(file.originalname) || ""}`,
           mime_type: file.mimetype || "application/octet-stream",
           file_size: file.size || 0,
           uploaded_at: new Date(),
-          uploaded_by: creatorId
+          uploaded_by: creatorId,
         });
       }
     }
@@ -83,7 +89,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         approver_name: data.approver_name || null,
         issue_date: data.issue_date || new Date(),
         uploaded_by: creatorId,
-        isActive: true
+        isActive: true,
       },
       { transaction: t }
     );
@@ -91,35 +97,34 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     // Log document creation to land record
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: true
+      lock: true,
     });
 
     if (!landRecord) {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
 
-    const currentLog = Array.isArray(landRecord.action_log) 
-      ? landRecord.action_log 
+    const currentLog = Array.isArray(landRecord.action_log)
+      ? landRecord.action_log
       : [];
-    
+
     const newLog = [
       ...currentLog,
       {
-        action: `DOCUMENT_CREATE_${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
+        action: `DOCUMENT_CREATE_${
+          data.document_type || DOCUMENT_TYPES.TITLE_DEED
+        }`,
         document_id: document.id,
         changed_by: creatorId,
         changed_at: new Date(),
         details: {
           plot_number: data.plot_number,
-          files_added: fileMetadata.length
-        }
-      }
+          files_added: fileMetadata.length,
+        },
+      },
     ];
 
-    await landRecord.update(
-      { action_log: newLog },
-      { transaction: t }
-    );
+    await landRecord.update({ action_log: newLog }, { transaction: t });
 
     if (!transaction) await t.commit();
     return document;
@@ -129,7 +134,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     throw new Error(`የሰነድ መፍጠር ስህተት: ${error.message}`);
   }
 };
-const getAllDocumentService= async (options = {}) => {
+const getAllDocumentService = async (options = {}) => {
   const { transaction } = options;
   try {
     const documents = await Document.findAll({
@@ -143,7 +148,13 @@ const getAllDocumentService= async (options = {}) => {
         {
           model: User,
           as: "uploader",
-          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+          ],
         },
       ],
       attributes: [
@@ -161,7 +172,7 @@ const getAllDocumentService= async (options = {}) => {
         "files",
         "createdAt",
         "updatedAt",
-        "deletedAt"
+        "deletedAt",
       ],
       transaction,
     });
@@ -170,7 +181,7 @@ const getAllDocumentService= async (options = {}) => {
   } catch (error) {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
-}
+};
 const importPDFs = async ({ files, uploaderId }) => {
   const updatedDocuments = [];
   const unmatchedLogs = [];
@@ -189,52 +200,61 @@ const importPDFs = async ({ files, uploaderId }) => {
       if (!document) {
         const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
         unmatchedLogs.push(logMsg);
-        
+
         // Delete unmatched file
         try {
           fs.unlink(file.path);
         } catch (err) {
-          unmatchedLogs.push(`ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`);
+          unmatchedLogs.push(
+            `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`
+          );
         }
         continue;
       }
 
       // Get server-relative path (from project root)
-      const serverRelativePath = path.relative(
-        path.join(__dirname, '..'), // Go up to project root
-        file.path
-      ).split(path.sep).join('/'); // Convert to forward slashes
+      const serverRelativePath = path
+        .relative(
+          path.join(__dirname, ".."), // Go up to project root
+          file.path
+        )
+        .split(path.sep)
+        .join("/"); // Convert to forward slashes
 
       // Handle files array (convert strings to objects if needed)
-      const filesArray = Array.isArray(document.files) 
-        ? document.files.map(f => typeof f === 'string' ? { 
-            file_path: f,
-            file_name: path.basename(f),
-            mime_type: 'application/pdf',
-            file_size: 0,
-            uploaded_at: new Date(),
-            uploaded_by: null
-          } : f)
+      const filesArray = Array.isArray(document.files)
+        ? document.files.map((f) =>
+            typeof f === "string"
+              ? {
+                  file_path: f,
+                  file_name: path.basename(f),
+                  mime_type: "application/pdf",
+                  file_size: 0,
+                  uploaded_at: new Date(),
+                  uploaded_by: null,
+                }
+              : f
+          )
         : [];
 
       // Check if file already exists
-      const fileExists = filesArray.some(f => 
-        f.file_path === serverRelativePath
+      const fileExists = filesArray.some(
+        (f) => f.file_path === serverRelativePath
       );
 
       if (!fileExists) {
         filesArray.push({
           file_path: serverRelativePath,
           file_name: file.originalname,
-          mime_type: file.mimetype || 'application/pdf',
+          mime_type: file.mimetype || "application/pdf",
           file_size: file.size,
           uploaded_at: new Date(),
-          uploaded_by: uploaderId
+          uploaded_by: uploaderId,
         });
 
         await document.update({
           files: filesArray,
-          uploaded_by: uploaderId
+          uploaded_by: uploaderId,
         });
 
         updatedDocuments.push({
@@ -246,8 +266,8 @@ const importPDFs = async ({ files, uploaderId }) => {
         // Update LandRecord action log
         const landRecord = await LandRecord.findByPk(document.land_record_id);
         if (landRecord) {
-          const actionLog = Array.isArray(landRecord.action_log) 
-            ? landRecord.action_log 
+          const actionLog = Array.isArray(landRecord.action_log)
+            ? landRecord.action_log
             : [];
 
           actionLog.push({
@@ -257,15 +277,17 @@ const importPDFs = async ({ files, uploaderId }) => {
             changed_at: new Date().toISOString(),
             details: {
               file_name: file.originalname,
-              file_path: serverRelativePath
-            }
+              file_path: serverRelativePath,
+            },
           });
 
           await landRecord.update({ action_log: actionLog });
         }
       }
     } catch (error) {
-      unmatchedLogs.push(`Error processing ${file.originalname}: ${error.message}`);
+      unmatchedLogs.push(
+        `Error processing ${file.originalname}: ${error.message}`
+      );
     }
   }
 
@@ -275,7 +297,12 @@ const importPDFs = async ({ files, uploaderId }) => {
     unmatchedLogs,
   };
 };
-const addFilesToDocumentService = async (id, files, updaterId, options = {}) => {
+const addFilesToDocumentService = async (
+  id,
+  files,
+  updaterId,
+  options = {}
+) => {
   const { transaction } = options;
   let t = transaction;
 
@@ -286,11 +313,11 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
       throw new Error("ፋይሎችን ለመጨመር የሚችሉት በ ስይስተሙ ከገቡ ብቻ ነው");
     }
 
-    const document = await Document.findByPk(id, { 
+    const document = await Document.findByPk(id, {
       transaction: t,
-      lock: t.LOCK.UPDATE 
+      lock: t.LOCK.UPDATE,
     });
-    
+
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
@@ -300,43 +327,48 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
     }
 
     // Normalize existing files
-    const normalizedExistingFiles = Array.isArray(document.files) 
-      ? document.files.map(file => 
-          typeof file === 'string' 
-            ? { 
+    const normalizedExistingFiles = Array.isArray(document.files)
+      ? document.files.map((file) =>
+          typeof file === "string"
+            ? {
                 file_path: file,
-                file_name: file.split('/').pop(), 
-                mime_type: 'unknown', 
-                file_size: 0, 
+                file_name: file.split("/").pop(),
+                mime_type: "unknown",
+                file_size: 0,
                 uploaded_at: document.createdAt,
-                uploaded_by: null 
+                uploaded_by: null,
               }
-            : file 
+            : file
         )
       : [];
 
     // Prepare new files with server-relative paths
-    const newFiles = files.map(file => ({
-      file_path: file.serverRelativePath, 
+    const newFiles = files.map((file) => ({
+      file_path: file.serverRelativePath,
       file_name: file.originalname,
       mime_type: file.mimetype,
       file_size: file.size,
       uploaded_at: new Date(),
-      uploaded_by: updaterId
+      uploaded_by: updaterId,
     }));
 
     // Combine all files
     const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
     // Update the document
-    await document.update({
-      files: updatedFiles,
-      isActive: true,
-      inActived_reason: null
-    }, { transaction: t });
+    await document.update(
+      {
+        files: updatedFiles,
+        isActive: true,
+        inActived_reason: null,
+      },
+      { transaction: t }
+    );
 
     // Log the action
-    const landRecord = await LandRecord.findByPk(document.land_record_id, { transaction: t });
+    const landRecord = await LandRecord.findByPk(document.land_record_id, {
+      transaction: t,
+    });
     if (landRecord) {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
@@ -345,8 +377,8 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
           changed_by: updaterId,
           changed_at: new Date(),
           document_id: document.id,
-          details: { files_added: newFiles.length }
-        }
+          details: { files_added: newFiles.length },
+        },
       ];
       await landRecord.save({ transaction: t });
     }
@@ -371,8 +403,14 @@ const getDocumentByIdService = async (id, options = {}) => {
         {
           model: User,
           as: "uploader",
-          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
-        }
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+          ],
+        },
       ],
       attributes: [
         "id",
@@ -454,7 +492,7 @@ const updateDocumentsService = async (
     // First get the current land record to maintain its action log
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
-      transaction: t
+      transaction: t,
     });
 
     if (!landRecord) {
@@ -463,7 +501,7 @@ const updateDocumentsService = async (
 
     await Promise.all(
       newDocumentsData.map(async (docData, index) => {
-        const document = existingDocuments.find(d => d.id === docData.id);
+        const document = existingDocuments.find((d) => d.id === docData.id);
         if (!document) {
           throw new Error(`አይዲ ${docData.id} ያለው ሰነድ በዚህ መዝገብ አልተገኘም`);
         }
@@ -471,16 +509,18 @@ const updateDocumentsService = async (
         // Capture changes for logging
         const changes = {};
         const fileChanges = [];
-        
+
         // Track document field changes
-        Object.keys(docData).forEach(key => {
-          if (document[key] !== docData[key] && 
-              key !== 'updated_at' && 
-              key !== 'created_at' &&
-              key !== 'files') {
+        Object.keys(docData).forEach((key) => {
+          if (
+            document[key] !== docData[key] &&
+            key !== "updated_at" &&
+            key !== "created_at" &&
+            key !== "files"
+          ) {
             changes[key] = {
               from: document[key],
-              to: docData[key]
+              to: docData[key],
             };
           }
         });
@@ -488,19 +528,19 @@ const updateDocumentsService = async (
         // Prepare update payload
         const updatePayload = {
           ...docData,
-          updated_by: updater.id
+          updated_by: updater.id,
         };
 
         // Handle file upload if present
         if (files[index]) {
           // Get existing files or initialize empty array
           const existingFiles = document.files ? [...document.files] : [];
-          
+
           // Record file being added
           fileChanges.push({
-            action: 'FILE_ADDED',
+            action: "FILE_ADDED",
             file_name: files[index].originalname,
-            mime_type: files[index].mimetype
+            mime_type: files[index].mimetype,
           });
 
           // Add new file to the array
@@ -509,7 +549,7 @@ const updateDocumentsService = async (
             file_name: files[index].originalname,
             mime_type: files[index].mimetype,
             uploaded_at: new Date(),
-            uploaded_by: updater.id
+            uploaded_by: updater.id,
           });
 
           // Assign the updated files array to the payload
@@ -520,22 +560,27 @@ const updateDocumentsService = async (
 
         // Only log if there were actual changes
         if (Object.keys(changes).length > 0 || fileChanges.length > 0) {
-          const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-          const newLog = [...currentLog, {
-            action: 'DOCUMENT_UPDATED',
-            document_id: document.id,
-            document_type: docData.document_type || document.document_type,
-            changes: Object.keys(changes).length > 0 ? changes : undefined,
-            file_changes: fileChanges.length > 0 ? fileChanges : undefined,
-            changed_by: updater.id,
-            changed_at: new Date()
-          }];
+          const currentLog = Array.isArray(landRecord.action_log)
+            ? landRecord.action_log
+            : [];
+          const newLog = [
+            ...currentLog,
+            {
+              action: "DOCUMENT_UPDATED",
+              document_id: document.id,
+              document_type: docData.document_type || document.document_type,
+              changes: Object.keys(changes).length > 0 ? changes : undefined,
+              file_changes: fileChanges.length > 0 ? fileChanges : undefined,
+              changed_by: updater.id,
+              changed_at: new Date(),
+            },
+          ];
 
           await LandRecord.update(
             { action_log: newLog },
             {
               where: { id: landRecordId },
-              transaction: t
+              transaction: t,
             }
           );
         }
@@ -595,53 +640,49 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
     throw new Error(`የሰነድ መሰረዝ ስህተት: ${error.message}`);
   }
 };
-const inactivateDocumentService = async (deactivator, documentId, reason, options = {}) => {
-  const { transaction } = options;
-  let t = transaction;
+const toggleDocumentStatusService = async (
+  documentId,
+  action,
+  userId,
+  reason
+) => {
+  const document = await Document.findByPk(documentId);
 
-  try {
-    t = t || (await sequelize.transaction());
-
-    const document = await Document.findByPk(documentId, { transaction: t });
-    if (!document) {
-      throw new Error(`መለያ ቁጥር ${documentId} ያለው ሰነድ አልተገኘም።`);
-    }
-
-    if (!document.isActive) {
-      throw new Error(`መለያ ቁጥር ${documentId} ያለው ሰነድ ቀድሞውኑ ታግዷል።`);
-    }
-
-    await document.update(
-      {
-        isActive: false,
-        inactived_by: deactivator.id,
-        inActived_reason: reason,
-      },
-      { transaction: t }
-    );
-
-    // Fetch with inactivator info
-    const documentWithInactiver = await Document.findByPk(documentId, {
-      include: [
-        {
-          model: User,
-          as: "inactivator",
-          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number"],
-        },
-      ],
-      transaction: t,
-    });
-
-    if (!transaction) await t.commit();
-
-    return {
-      message: `መለያ ቁጥር ${documentId} ያለው ሰነድ በተሳካ ሁኔታ ተሰናክሏል።`,
-      inactivatedDocument: documentWithInactiver,
-    };
-  } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(`ሰነድ ማሰናከል ስህተት: ${error.message}`);
+  if (!document) {
+    throw new Error("የሰነድ መለያ ቁጥር አልተገኘም።");
   }
+
+  // Prevent redundant operations
+  if (action === "activate" && document.isActive) {
+    throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ ሁኗል");
+  }
+  if (action === "deactivate" && !document.isActive) {
+    throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ አይደለም");
+  }
+
+  // Toggle status
+  document.isActive = action === "activate";
+
+  // Only set reason when deactivating
+  if (action === "deactivate") {
+    document.inActived_reason = reason;
+    document.inactived_by = userId;
+  } else {
+    document.inActived_reason = null;
+    document.inactived_by = null;
+  }
+
+  await document.save();
+
+  return {
+    documentId: document.id,
+    isActive: document.isActive,
+    updatedAt: document.updatedAt,
+    ...(!document.isActive && {
+      deactivatedBy: userId,
+      reason,
+    }),
+  };
 };
 module.exports = {
   createDocumentService,
@@ -649,7 +690,7 @@ module.exports = {
   getDocumentByIdService,
   importPDFs,
   addFilesToDocumentService,
-  inactivateDocumentService,
+  toggleDocumentStatusService,
   getDocumentByIdService,
   updateDocumentsService,
   deleteDocumentService,
