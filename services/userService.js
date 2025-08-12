@@ -270,6 +270,7 @@ const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
         "address",
         "is_active",
         "last_login",
+        "profile_picture",
       ],
       order: [["createdAt", "DESC"]],
       transaction,
