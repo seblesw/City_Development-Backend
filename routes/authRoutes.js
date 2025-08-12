@@ -4,9 +4,7 @@ const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
 const router = express.Router();
 // Importing the authController methods
-router.post("/register",upload.fields([
-    { name: 'profile_picture', maxCount: 1 }
-  ]), authController.registerOfficialController);
+router.post("/register", upload.single("profile_picture"), authController.registerOfficialController);
 router.post("/login", authController.loginController);
 router.post("/verify-otp",authController.verifyOtpController)
 router.post("/logout", authMiddleware.protect, authController.logoutController);

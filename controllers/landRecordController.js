@@ -259,6 +259,9 @@ const getAllLandRecords = async (req, res) => {
 const getLandRecordById = async (req, res) => {
   try {
     const landRecord = await getLandRecordByIdService(req.params.id);
+    if (!landRecord) {
+      throw new Error(`መለያ ቁጥር ${req.params.id} ያለው የመሬት መዝገብ አልተገኘም።`);
+    }
     return res.status(200).json({
       status: "success",
       message: `መለያ ቁጥር ${req.params.id} ያለው የመሬት መዝገብ በተሳካ ሁኔታ ተገኝቷል።`,
@@ -615,13 +618,13 @@ const moveToTrash = async (req, res) => {
   try {
     const { id } = req.params;
     const user = req.user;
-    const { deletionReason } = req.body;
+    const { deletion_reason } = req.body;
 
-    if (!deletionReason) {
+    if (!deletion_reason) {
       throw new Error("የመሰረዝ ምክንያት ያስፈልጋል።");
     }
 
-    const result = await moveToTrashService(id, user, deletionReason, {
+    const result = await moveToTrashService(id, user, deletion_reason, {
       transaction: t,
     });
 
@@ -671,7 +674,7 @@ const permanentlyDelete = async (req, res) => {
     const { id } = req.params;
     const user = req.user;
 
-    await permanentlyDeleteService(id, user, { transaction: t });
+    await permanentlyDeleteService(id, user);
 
     await t.commit();
     res.status(200).json({
@@ -680,9 +683,13 @@ const permanentlyDelete = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    res.status(400).json({
+    
+    const statusCode = error.message.includes("አልተገኘም") ? 404 : 
+                     error.message.includes("Validation") ? 422 : 400;
+    
+    res.status(statusCode).json({
       status: "error",
-      message: error.message,
+      message: error.message.replace(/Validation error: /, ""),
     });
   }
 };

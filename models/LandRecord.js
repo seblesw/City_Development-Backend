@@ -129,6 +129,13 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      deletion_reason: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 200], msg: "የማጥፊያ ምክንያት ከ0 እስከ 200  መሆን አለበት።" },
+        },
+       },
       block_number: {
         type: DataTypes.STRING,
         allowNull: true,
