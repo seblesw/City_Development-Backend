@@ -317,7 +317,7 @@ const addFilesToDocumentService = async (id, files, updaterId, options = {}) => 
 
     // Prepare new files with server-relative paths
     const newFiles = files.map(file => ({
-      file_path: file.serverRelativePath, // Use the server-relative path
+      file_path: file.serverRelativePath, 
       file_name: file.originalname,
       mime_type: file.mimetype,
       file_size: file.size,

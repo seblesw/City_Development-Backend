@@ -326,7 +326,7 @@ const forgotPasswordService = async (email) => {
   // Generate JWT token (expires in 1h)
   const resetToken = jwt.sign(
     {
-      userId: user.id, // Use consistent naming (userId instead of just id)
+      userId: user.id, 
       email: user.email,
     },
     process.env.JWT_SECRET,
@@ -335,13 +335,13 @@ const forgotPasswordService = async (email) => {
 
   // Save token to DB
   user.resetPasswordToken = resetToken;
-  user.resetPasswordExpires = Date.now() + 3600000; // 1h
+  user.resetPasswordExpires = Date.now() + 3600000;
   await user.save();
 
   // Send email
   await sendPasswordResetEmail(user.email, user.name, resetToken);
 
-  return { success: true, message: "Reset link sent to email." };
+  return { success: true, message: "የሪሴት ሊንክ ወደ ኢሜልዎ ተልኳል" };
 };
 
 const resetPasswordService = async (token, newPassword) => {

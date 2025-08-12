@@ -4,9 +4,6 @@ const documentController = require("../controllers/documentController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
 const rateLimit = require("express-rate-limit");
-const path = require('path');
-const fs = require('fs');
-
 const getLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 100,
