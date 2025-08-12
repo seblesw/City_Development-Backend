@@ -291,8 +291,8 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
-    if (!user.otp || !user.otpExpiry) throw new Error("OTP አልተጠየቀም");
-    if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
+    if (!user.otp ) throw new Error("OTP አልተጠየቀም");
+    // if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
     if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
 
     // Complete verification
