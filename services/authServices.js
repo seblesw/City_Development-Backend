@@ -199,16 +199,16 @@ const sendOTP = async (email, options = {}) => {
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
     // Check for existing valid OTP
-    if (user.otpExpiry && user.otpExpiry > new Date()) {
-      const remainingMinutes = Math.ceil((user.otpExpiry - new Date()) / (1000 * 60));
-      throw new Error(`እባክዎ ቀድሞ የተላከውን OTP ይጠቀሙ (${remainingMinutes} ደቂቃ ይቀራል)`);
-    }
+    // if (user.otpExpiry && user.otpExpiry > new Date()) {
+    //   const remainingMinutes = Math.ceil((user.otpExpiry - new Date()) / (1000 * 60));
+    //   throw new Error(`እባክዎ ቀድሞ የተላከውን OTP ይጠቀሙ (${remainingMinutes} ደቂቃ ይቀራል)`);
+    // }
 
     // Generate and save new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log("Generated OTP:", otp); 
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-    await user.update({ otp, otpExpiry }, { transaction: t });
+    // const otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
+    await user.update({ otp, }, { transaction: t });
 
     // Send OTP email
     const transporter = nodemailer.createTransport({
@@ -242,7 +242,43 @@ const sendOTP = async (email, options = {}) => {
     throw error;
   }
 };
+const resendOTP = async (email, options = {}) => {
+  // Use provided transaction or create new one
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
 
+  try {
+    // Validate input
+    if (!email) throw new Error("ኢሜል ያስፈልጋል");
+
+    // Find user with transaction
+    const user = await User.findOne({
+      where: { email, deletedAt: null, is_active: true },
+      transaction: t,
+      attributes: ['id', 'email', 'isFirstLogin']
+    });
+
+    if (!user) throw new Error("ተጠቃሚ አልተገኘም");
+    
+    // Check if user is in first-time login state
+    if (!user.isFirstLogin) {
+      throw new Error("OTP የሚልክበት ለመጀመሪያ ጊዜ የገባ ተጠቃሚ ነው");
+    }
+
+    // Resend OTP
+    await sendOTP(user.email, { transaction: t });
+    
+    if (shouldCommit) await t.commit();
+    return { 
+      success: true, 
+      message: "አዲስ OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
+      requiresOTPVerification: true 
+    };
+  } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
+    throw error;
+  }
+};
 const verifyOTP = async ({ email, otp }, options = {}) => {
   const t = options.transaction || await sequelize.transaction();
   const shouldCommit = !options.transaction;
@@ -411,6 +447,7 @@ module.exports = {
   login,
   verifyOTP,
   sendOTP,
+  resendOTP,
   logoutService,
   forgotPasswordService,
 };

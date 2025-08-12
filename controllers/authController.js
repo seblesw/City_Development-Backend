@@ -5,6 +5,7 @@ const {
   changePasswordService,
   resetPasswordService,
   verifyOTP,
+  resendOTP,
 } = require("../services/authServices");
 const fs= require("fs")
 const registerOfficialController = async (req, res) => {
@@ -68,6 +69,28 @@ const loginController = async (req, res) => {
 
     return res.status(400).json({ 
       error: errorMessage 
+    });
+  }
+};
+const resendOTPController = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "ኢሜል ያስፈልጋል",
+      });
+    }
+
+    const result = await resendOTP(email);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error resending OTP:", error.message);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "የOTP እንደገና ላክ አልተሳካም", 
     });
   }
 };
@@ -174,6 +197,7 @@ module.exports = {
   registerOfficialController,
   resetPassword,
   loginController,
+  resendOTPController,
   logoutController,
   verifyOtpController,
   forgotPasswordController,
