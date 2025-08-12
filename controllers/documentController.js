@@ -9,7 +9,6 @@ const {
   inactivateDocumentService,
   getAllDocumentService,
 } = require("../services/documentService");
-const path = require("path");
 
 const createDocumentController = async (req, res) => {
   try {

@@ -10,7 +10,7 @@ const fs= require("fs")
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
-    const profilePicture = req.file ? `/uploads/pictures/${req.file.filename}` : null;
+    const profilePicture = req.file ? `uploads/pictures/${req.file.filename}` : null;
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
