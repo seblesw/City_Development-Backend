@@ -4,6 +4,7 @@ const {
   getLandPaymentByIdService,
   updateLandPaymentService,
   deleteLandPaymentService,
+  getPaymentsByLandRecordId,
   
 } = require("../services/landPaymentService");
 
@@ -65,6 +66,22 @@ const getLandPaymentByIdController = async (req, res) => {
   }
 };
 
+const getPaymentsByLandRecordIdController = async (req, res) => {
+  try {
+    const { landId } = req.params;
+    const payments = await getPaymentsByLandRecordId(landId);
+    if (!payments || payments.length === 0) {
+      return res.status(404).json({ error: "No payments found for this land record." });
+    }
+    return res.status(200).json({
+      message: `የመሬት መዝገብ መለያ ${landId} ያለው የመሬት ክፍያ በተሳካ ሁኔታ ተገኝቷል።`,
+      data: payments, 
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+}
+
 const updateLandPaymentController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -112,6 +129,7 @@ const deleteLandPaymentController = async (req, res) => {
 
 module.exports = {
   addNewPaymentController,
+  getPaymentsByLandRecordIdController,
   getLandPaymentByIdController,
   updateLandPaymentController,
   deleteLandPaymentController,

@@ -181,7 +181,6 @@ const getLandPaymentByIdService = async (id, options = {}) => {
         "payment_status",
         "penalty_reason",
         "description",
-        "payer_name",
         "createdAt",
         "updatedAt",
         "deletedAt",
