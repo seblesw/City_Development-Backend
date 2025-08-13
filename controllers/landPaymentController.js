@@ -1,39 +1,57 @@
+const { User, LandRecord, LandPayment } = require("../models");
 const {
   createLandPaymentService,
   getLandPaymentByIdService,
-  updateLandPaymentService,
   deleteLandPaymentService,
+  getPaymentsByLandRecordId,
+  updateLandPaymentsService,
+  
 } = require("../services/landPaymentService");
 
-const createLandPaymentController = async (req, res) => {
+const addNewPaymentController = async (req, res) => {
   try {
-    const { body,  } = req;
-    // if (!user) {
-    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    // }
-    const data = {
-      land_record_id: body.land_record_id,
-      payment_type: body.payment_type,
-      total_amount: body.total_amount,
-      paid_amount: body.paid_amount,
-      annual_payment: body.annual_payment || null,
-      initial_payment: body.initial_payment || null,
-      currency: body.currency || "ETB",
-      payment_status: body.payment_status || PAYMENT_STATUSES.PENDING,
-      penalty_reason: body.penalty_reason || null,
-      description: body.description || null,
-      payer_id: body.payer_id,
-      created_by: req.user.id,
+    const land_record_id = parseInt(req.params.landId, 10); 
+    
+    if (isNaN(land_record_id)) {
+      return res.status(400).json({ error: "Invalid land_record_id" });
+    }  
+
+     const landRecord = await LandRecord.findByPk(land_record_id, {
+      include: [
+        {
+          model: User,
+          through: { attributes: [] },
+          as: "owners", 
+          attributes: ["id", "first_name", "middle_name", "email"],
+        },
+      ],
+    });
+
+    if (!landRecord || !landRecord.owners || landRecord.owners.length === 0) {
+      return res.status(404).json({ error: "No owners found for this land record" });
+    }
+
+    const payer_id = landRecord.owners[0].id; 
+    const user = req.user;
+
+    const paymentData = {
+      ...req.body,
+      land_record_id,
+      payer_id,
+      created_by: user.id
     };
-    const payment = await createLandPaymentService(data);
+
+    const payment = await createLandPaymentService(paymentData);
+
     return res.status(201).json({
-      message: "የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
+      message: "ተጨማሪ የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
       data: payment,
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
 };
+
 
 const getLandPaymentByIdController = async (req, res) => {
   try {
@@ -48,33 +66,83 @@ const getLandPaymentByIdController = async (req, res) => {
   }
 };
 
-const updateLandPaymentController = async (req, res) => {
+const getPaymentsByLandRecordIdController = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { body, user } = req;
-    if (!user) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    const { landId } = req.params;
+    const payments = await getPaymentsByLandRecordId(landId);
+    if (!payments || payments.length === 0) {
+      return res.status(404).json({ error: "በዚህ መዝገብ ውስጥ ምንም አይነት ክፍያ የለም" });
     }
-    const data = {
-      land_record_id: body.land_record_id,
-      payment_type: body.payment_type,
-      total_amount: body.total_amount,
-      paid_amount: body.paid_amount,
-      currency: body.currency,
-      payment_status: body.payment_status,
-      penalty_reason: body.penalty_reason,
-      description: body.description,
-      payer_name: body.payer_name,
-    };
-    const payment = await updateLandPaymentService(id, data, user.id);
     return res.status(200).json({
-      message: `መለያ ቁጥር ${id} ያለው የመሬት ክፍያ በተሳካ ሁኔታ ተቀይሯል።`,
-      data: payment,
+      message: `የመሬት መዝገብ መለያ ${landId} ያለው የመሬት ክፍያ በተሳካ ሁኔታ ተገኝቷል።`,
+      data: payments, 
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
+}
+
+const updateSinglePaymentController = async (req, res) => {
+  const { landRecordId, paymentId } = req.params;
+  const parsedPaymentId = parseInt(paymentId, 10); 
+  const paymentUpdates = req.body;
+  const updater = req.user;
+
+  try {
+    // 1. Fetch the land record with its payments
+    const landRecord = await LandRecord.findOne({
+      where: { id: landRecordId },
+      include: [{ model: LandPayment, as: 'payments' }],
+    });
+
+    if (!landRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "Land record not found",
+      });
+    }
+
+    // 2. Find the specific payment to update
+    const existingPayments = landRecord.payments || [];
+    const paymentToUpdate = existingPayments.find(
+      (p) => p.id === parsedPaymentId 
+    );
+
+    if (!paymentToUpdate) {
+      return res.status(404).json({
+        success: false,
+        message: `ይህ የክፍያ አይዲ ${paymentId} ያለው ክፍያ አልተገኘም።`,
+      });
+    }
+
+    // 3. Prepare the payload (only the single payment to update)
+    const newPaymentsData = [{
+      id: parsedPaymentId, 
+      ...paymentUpdates,
+    }];
+
+    // 4. Reuse the existing service
+    const updatedPayments = await updateLandPaymentsService(
+      landRecordId,
+      existingPayments,
+      newPaymentsData,
+      updater
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: updatedPayments[0],
+      message: "ክፍያ በተሳካ ሁኔታ ዘምኗል",
+    });
+  } catch (error) {
+    console.error("Error updating payment:", error.message);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "ክፍያ �ማዘመን አልተሳካም",
+    });
+  }
 };
+
 
 const deleteLandPaymentController = async (req, res) => {
   try {
@@ -92,16 +160,11 @@ const deleteLandPaymentController = async (req, res) => {
   }
 };
 
-const PAYMENT_STATUSES = {
-    PENDING: 'በመጠባበቅ ላይ',
-    PAID: 'ተሳክቷል',
-    PARTIAL: 'ከጅምገማ ተደርጓል',
-    OVERDUE: 'ማረጋገጫ ላይ'
-};
 
 module.exports = {
-  createLandPaymentController,
+  addNewPaymentController,
+  getPaymentsByLandRecordIdController,
   getLandPaymentByIdController,
-  updateLandPaymentController,
+  updateSinglePaymentController,
   deleteLandPaymentController,
 };

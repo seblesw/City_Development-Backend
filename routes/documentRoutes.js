@@ -67,19 +67,12 @@ router.delete(
   //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.deleteDocumentController
 );
-// Inactivate a document (requires authentication, restricted to አስተዳደር)
+//document status toggle (activate/deactivate)
 router.post(
-  "/:id/inactivate",
+  "/:id/status",
   authMiddleware.protect,
   //   authMiddleware.restrictTo("አስተዳደር"),
-  documentController.inactiveDocumentController
-);
-//re active document 
-router.post(
-  "/:id/activate",
-  // authMiddleware.protect,
-  //   authMiddleware.restrictTo("አስተዳደር"),
-  documentController.activateDocumentController
+  documentController.toggleDocumentStatus
 );
 
 

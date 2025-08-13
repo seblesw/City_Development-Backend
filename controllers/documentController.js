@@ -8,6 +8,7 @@ const {
   importPDFs,
   inactivateDocumentService,
   getAllDocumentService,
+  toggleDocumentStatusService,
 } = require("../services/documentService");
 
 const createDocumentController = async (req, res) => {
@@ -150,65 +151,45 @@ const deleteDocumentController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
-const inactiveDocumentController = async (req, res) => {
+const toggleDocumentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { inActived_reason } = req.body; 
-    const deactivator = req.user; 
-    if (!deactivator || !deactivator.id) {
-      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    }
-    if (!inActived_reason) {
-      return res.status(400).json({ error: "እባክዎ ምክንያት ያስገቡ።" });
-    }
-    const result = await inactivateDocumentService(deactivator, id, inActived_reason);
+    const { action, reason } = req.body; // action: 'activate' or 'deactivate'
+    const userId = req.user.id;
 
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
-};
-const activateDocumentController = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Find the document
-    const document = await Document.findByPk(id);
-    if (!document) {
-      return res.status(404).json({ error: "የሰነድ መለያ ቁጥር አልተገኘም።" });
+    // Validate deactivation reason
+    if (action === 'deactivate' && !reason) {
+      return res.status(400).json({ 
+        status: "error",
+        message: "የኢን አክቲቭ ማድረጊያ ምክንያት ያስፈልጋል።" 
+      });
     }
 
-    // Check if already active
-    if (document.isActive) {
-      return res.status(400).json({ error: "ይህ ሰነድ ቀድሞውኑ አልታገደም።" });
-    }
-
-    // Update document to active
-    await document.update({
-      inActived_reason: null,
-      inactived_by: null,
-      isActive: true
-    });
+    const result = await toggleDocumentStatusService(id, action, userId, reason);
 
     return res.status(200).json({
-      message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተገኝቷል።`,
-      data: document
+      status: "success",
+      data: result
     });
 
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
+    return res.status(statusCode).json({
+      status: "error",
+      message: error.message
+    });
   }
 };
 
 
 module.exports = {
   createDocumentController,
-  activateDocumentController,
+  toggleDocumentStatus,
   importPDFDocuments,
   getAllDocumentsController,
   addFilesToDocumentController,
   getDocumentByIdController,
   updateDocumentController,
-  inactiveDocumentController,
+  toggleDocumentStatus,
   deleteDocumentController,
 };
