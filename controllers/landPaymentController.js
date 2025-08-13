@@ -105,7 +105,7 @@ const updateSinglePaymentController = async (req, res) => {
     // 2. Find the specific payment to update
     const existingPayments = landRecord.payments || [];
     const paymentToUpdate = existingPayments.find(
-      (p) => p.id === parsedPaymentId // Compare numbers
+      (p) => p.id === parsedPaymentId 
     );
 
     if (!paymentToUpdate) {
@@ -117,7 +117,7 @@ const updateSinglePaymentController = async (req, res) => {
 
     // 3. Prepare the payload (only the single payment to update)
     const newPaymentsData = [{
-      id: parsedPaymentId, // Use the parsed number
+      id: parsedPaymentId, 
       ...paymentUpdates,
     }];
 
