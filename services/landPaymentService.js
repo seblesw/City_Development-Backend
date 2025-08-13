@@ -347,15 +347,6 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate deleter role
-    const deleter = await User.findByPk(deleterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-      throw new Error("ክፍያ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    }
-
     const payment = await LandPayment.findByPk(id, { transaction: t });
     if (!payment) {
       throw new Error(`መለያ ቁጥር ${id} ያለው የመሬት ክፍያ አልተገኘም።`);
@@ -379,7 +370,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
     }
 
     // Soft delete payment
-    await payment.destroy({ transaction: t });
+    await payment.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው የመሬት ክፍያ በተሳካ ሁኔታ ተሰርዟል።` };
