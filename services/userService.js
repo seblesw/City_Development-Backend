@@ -743,10 +743,37 @@ const addNewLandOwnerService = async ({
     throw error;
   }
 };
+
+const removeOwnerFromLandRecord = async (landRecordId, ownerId) => {
+  // Convert to numbers
+  const parsedLandRecordId = parseInt(landRecordId, 10);
+  const parsedOwnerId = parseInt(ownerId, 10);
+
+  // Remove from join table
+  const result = await LandOwner.destroy({
+    where: {
+      land_record_id: parsedLandRecordId,
+      user_id: parsedOwnerId
+    }
+  });
+
+  if (result === 0) {
+    throw new Error("በዚህ መዝገብ ዉስጥ  ባለቤት አልተገኘም።");
+  }
+
+  return {
+    success: true,
+    message: "ባለቤት በተሳካ ሁኔታ ከመዝገብ ውስጥ ተሰርዟል።",
+  };
+};
+
+
+
 module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
+  removeOwnerFromLandRecord,
   addNewLandOwnerService,
   deactivateUserService,
   activateUserService,

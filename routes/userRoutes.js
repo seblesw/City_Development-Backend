@@ -14,5 +14,6 @@ router.post("/activate/:id", authMiddleware.protect, userController.activateUser
 router.get("/:id", userController.getUserByIdController);
 router.put("/:id", authMiddleware.protect,userController.updateUserController);
 router.delete("/:id", authMiddleware.protect, userController.deleteUserController);
+router.delete("/:landRecordId/owners/:ownerId", authMiddleware.protect, userController.removeOwnerController);
 
 module.exports = router;

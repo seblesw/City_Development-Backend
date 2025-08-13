@@ -7,15 +7,16 @@ const {
   deactivateUserService,
   activateUserService,
   addNewLandOwnerService,
+  removeOwnerFromLandRecord,
 } = require("../services/userService");
-
+const fs = require("fs");
 const addNewLandOwnerController = async (req, res) => {
   try {
     const { land_record_id } = req.params;
     const authUser = req.user;
 
     // Extract all fields from body
-    const { 
+    const {
       first_name,
       middle_name,
       last_name,
@@ -24,11 +25,13 @@ const addNewLandOwnerController = async (req, res) => {
       national_id,
       relationship_type,
       gender,
-      ownership_percentage
+      ownership_percentage,
     } = req.body;
 
     // Get uploaded file path (relative to your server root)
-    const profile_picture = req.file ? `/uploads/pictures/${req.file.filename}` : null;
+    const profile_picture = req.file
+      ? `/uploads/pictures/${req.file.filename}`
+      : null;
 
     // Basic validation
     if (!land_record_id) {
@@ -43,27 +46,26 @@ const addNewLandOwnerController = async (req, res) => {
         first_name,
         middle_name,
         last_name,
-        profile_picture, 
+        profile_picture,
         email,
         phone_number,
         national_id,
         relationship_type,
         gender,
-        password: "12345678" 
+        password: "12345678",
       },
       ownership_percentage,
-      authUser
+      authUser,
     });
 
     res.status(200).json(result);
-
   } catch (error) {
     // Clean up uploaded file if error occurs
     if (req.file) fs.unlinkSync(req.file.path);
-    
+
     console.error("Error adding land owner:", error);
     res.status(error.status || 500).json({
-      error: error.message || "Failed to add land owner"
+      error: error.message || "Failed to add land owner",
     });
   }
 };
@@ -172,9 +174,32 @@ const activateUserController = async (req, res) => {
   }
 };
 
+const removeOwnerController = async (req, res) => {
+  try {
+    const { landRecordId, ownerId } = req.params;
+    const result = await removeOwnerFromLandRecord(landRecordId, ownerId);
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error removing owner:", error);
+    
+    if (error.message === "Owner not found in this land record") {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Failed to remove owner"
+    });
+  }
+};
 module.exports = {
   addNewLandOwnerController,
   deactivateUserController,
+  removeOwnerController,
   activateUserController,
   getUserByIdController,
   updateUserController,
