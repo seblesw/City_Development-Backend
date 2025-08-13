@@ -1,114 +1,159 @@
-const { sequelize, LandPayment,PAYMENT_STATUSES,PAYMENT_TYPES, LandRecord, User, Role } = require("../models");
+const {
+  sequelize,
+  LandPayment,
+  PAYMENT_STATUSES,
+  PAYMENT_TYPES,
+  LandRecord,
+  User,
+  Role,
+} = require("../models");
 const { Op } = require("sequelize");
+const addNewPaymentService = async (landRecordId, user, data) => {
+  const {
+    payment_type,
+    total_amount,
+    paid_amount,
+    annual_payment,
+    initial_payment,
+    currency,
+    payment_status,
+    penalty_reason,
+    description,
+    payer_id,
+  } = data;
 
+  // 1. Validate land record exists
+  const landRecord = await LandRecord.findByPk(landRecordId);
+  if (!landRecord) {
+    throw new Error("የመሬት መዝገብ አልተገኘም።");
+  }
+  
 
+  // 2. Create new payment record
+  const payment = await LandPayment.create({
+    land_record_id: landRecordId,
+    payment_type,
+    total_amount,
+    paid_amount,
+    annual_payment: annual_payment || null,
+    initial_payment: initial_payment || null,
+    currency: currency || "ETB",
+    payment_status: payment_status || PAYMENT_STATUSES.PENDING,
+    penalty_reason: penalty_reason || null,
+    description: description || null,
+    payer_id,
+    created_by: user.id,
+  });
+
+  return payment;
+};
 
 const createLandPaymentService = async (data, options = {}) => {
   const { transaction } = options;
-  const t = transaction || await sequelize.transaction();
+  const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate required fields
+    // --- 1. Required field validation ---
     const requiredFields = [
-      'payment_type', 
-      'total_amount', 
-      'paid_amount', 
-      'land_record_id',
-      'payer_id'
+      "payment_type",
+      "total_amount",
+      "paid_amount",
+      "land_record_id",
+      "payer_id",
     ];
-    
-    const missingFields = requiredFields.filter(field => !data[field]);
+    const missingFields = requiredFields.filter(
+      (field) => data[field] === undefined || data[field] === null
+    );
     if (missingFields.length > 0) {
-      throw new Error(
-        `የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(', ')}`
-      );
+      throw new Error(`የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(", ")}`);
     }
 
-    // Validate field types
-    if (typeof data.land_record_id !== 'number' || data.land_record_id <= 0) {
+    // --- 2. Type & value validation ---
+    if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-
-    if (typeof data.payer_id !== 'number' || data.payer_id <= 0) {
+    if (typeof data.payer_id !== "number" || data.payer_id <= 0) {
       throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
     }
-
-    // Validate payment type against enum
     if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
       throw new Error(
-        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(', ')}`
+        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(
+          ", "
+        )}`
       );
     }
-
-    // Validate amounts
-    if (typeof data.total_amount !== 'number' || data.total_amount <= 0) {
-      // console.log("Total amount validation failed:", typeof(data.total_amount));
+    if (typeof data.total_amount !== "number" || data.total_amount <= 0) {
       throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
     }
-
-    if (typeof data.paid_amount !== 'number' || data.paid_amount < 0) {
+    if (typeof data.paid_amount !== "number" || data.paid_amount < 0) {
       throw new Error("የተከፈለው መጠን ከ 0 በላይ ወይም እኩል ትክክለኛ ቁጥር መሆን አለበት።");
     }
-
     if (data.paid_amount > data.total_amount) {
-      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ �ይችልም።");
+      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ አይችልም።");
     }
 
-    // Auto-set payment status based on amounts
-    const payment_status = data.paid_amount >= data.total_amount
-      ? PAYMENT_STATUSES.COMPLETED
-      : data.paid_amount > 0
+    // --- 3. Auto-set payment status ---
+    const payment_status =
+      data.paid_amount >= data.total_amount
+        ? PAYMENT_STATUSES.COMPLETED
+        : data.paid_amount > 0
         ? PAYMENT_STATUSES.PARTIAL
         : PAYMENT_STATUSES.PENDING;
 
-    // Create payment record
-    const payment = await LandPayment.create({
-      land_record_id: data.land_record_id,
-      payment_type: data.payment_type,
-      total_amount: data.total_amount,
-      paid_amount: data.paid_amount,
-      anual_payment:data.anual_payment,
-      initial_payment:data.initial_payment,
-      currency: data.currency,
-      payment_status,
-      penalty_reason: data.penalty_reason || null,
-      description: data.description || null,
-      payer_id: data.payer_id,
-      created_by: data.created_by,
-      is_draft: false
-    }, { transaction: t });
+    // --- 4. Create payment record ---
+    const payment = await LandPayment.create(
+      {
+        land_record_id: data.land_record_id,
+        payment_type: data.payment_type,
+        total_amount: data.total_amount,
+        paid_amount: data.paid_amount,
+        anual_payment: data.anual_payment || null,
+        initial_payment: data.initial_payment || null,
+        currency: data.currency || "ETB",
+        payment_status,
+        penalty_reason: data.penalty_reason || null,
+        description: data.description || null,
+        payer_id: data.payer_id,
+        created_by: data.created_by,
+        is_draft: false,
+      },
+      { transaction: t }
+    );
 
-    // Get the current land record to update action log
-    const landRecord = await LandRecord.findByPk(data.land_record_id, { 
+    // --- 5. Lock and update land record action log ---
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: true
+      lock: transaction ? undefined : t.LOCK.UPDATE, // only lock if we're managing transaction
     });
 
     if (!landRecord) {
       throw new Error("Land record not found");
     }
 
-    // Update action log - PostgreSQL compatible approach
-    const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-    const newLog = [...currentLog, {
-      action: 'PAYMENT_CREATED',
-      payment_id: payment.id,
-      amount: payment.paid_amount,
-      currency: payment.currency,
-      payment_type: payment.payment_type,
-      changed_by: data.created_by,
-      changed_at: new Date()
-    }];
+    const currentLog = Array.isArray(landRecord.action_log)
+      ? landRecord.action_log
+      : [];
+    const newLog = [
+      ...currentLog,
+      {
+        action: "PAYMENT_CREATED",
+        payment_id: payment.id,
+        amount: payment.paid_amount,
+        currency: payment.currency,
+        payment_type: payment.payment_type,
+        changed_by: data.created_by,
+        changed_at: new Date(),
+      },
+    ];
 
     await LandRecord.update(
       { action_log: newLog },
-      {
-        where: { id: data.land_record_id },
-        transaction: t
-      }
+      { where: { id: data.land_record_id }, transaction: t }
     );
 
+    // --- 6. Commit only if we started the transaction ---
     if (!transaction) await t.commit();
+
     return payment;
   } catch (error) {
     if (!transaction && t) await t.rollback();
@@ -119,7 +164,13 @@ const getLandPaymentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
     const payment = await LandPayment.findByPk(id, {
-      include: [{ model: LandRecord, as: "landRecord", attributes: ["id", "parcel_number"] }],
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: ["id", "parcel_number"],
+        },
+      ],
       attributes: [
         "id",
         "land_record_id",
@@ -151,7 +202,13 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
   try {
     const payments = await LandPayment.findAll({
       where: { land_record_id: landRecordId, deletedAt: null },
-      include: [{ model: LandRecord, as: "landRecord", attributes: ["id", "parcel_number"] }],
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: ["id", "parcel_number"],
+        },
+      ],
       attributes: [
         "id",
         "land_record_id",
@@ -188,7 +245,7 @@ const updateLandPaymentsService = async (
     // First get the current land record to maintain its action log
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
-      transaction: t
+      transaction: t,
     });
 
     if (!landRecord) {
@@ -197,21 +254,25 @@ const updateLandPaymentsService = async (
 
     const updatedPayments = await Promise.all(
       newPaymentsData.map(async (paymentData) => {
-        const paymentToUpdate = existingPayments.find(p => p.id === paymentData.id);
-        
+        const paymentToUpdate = existingPayments.find(
+          (p) => p.id === paymentData.id
+        );
+
         if (!paymentToUpdate) {
           throw new Error(`ይህ የክፍያ አይዲ ${paymentData.id} ያለው ክፍያ አልተገኘም።`);
         }
 
         // Capture changes for logging
         const changes = {};
-        Object.keys(paymentData).forEach(key => {
-          if (paymentToUpdate[key] !== paymentData[key] && 
-              key !== 'updated_at' && 
-              key !== 'created_at') {
+        Object.keys(paymentData).forEach((key) => {
+          if (
+            paymentToUpdate[key] !== paymentData[key] &&
+            key !== "updated_at" &&
+            key !== "created_at"
+          ) {
             changes[key] = {
               from: paymentToUpdate[key],
-              to: paymentData[key]
+              to: paymentData[key],
             };
           }
         });
@@ -219,12 +280,15 @@ const updateLandPaymentsService = async (
         // Directly use the paymentData from body, only adding updated_by
         const updatePayload = {
           ...paymentData,
-          updated_by: updater.id
+          updated_by: updater.id,
         };
 
         // Auto-calculate status if paid_amount was provided
         if (paymentData.paid_amount !== undefined) {
-          if (paymentData.paid_amount >= (paymentData.total_amount || paymentToUpdate.total_amount)) {
+          if (
+            paymentData.paid_amount >=
+            (paymentData.total_amount || paymentToUpdate.total_amount)
+          ) {
             updatePayload.payment_status = PAYMENT_STATUSES.COMPLETED;
           } else if (paymentData.paid_amount > 0) {
             updatePayload.payment_status = PAYMENT_STATUSES.PARTIAL;
@@ -237,23 +301,32 @@ const updateLandPaymentsService = async (
 
         // Only log if there were actual changes
         if (Object.keys(changes).length > 0) {
-          const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-          const newLog = [...currentLog, {
-            action: 'PAYMENT_UPDATED',
-            payment_id: paymentToUpdate.id,
-            amount: paymentData.paid_amount !== undefined ? paymentData.paid_amount : paymentToUpdate.paid_amount,
-            currency: paymentData.currency || paymentToUpdate.currency,
-            payment_type: paymentData.payment_type || paymentToUpdate.payment_type,
-            changes: changes, // Detailed changes object
-            changed_by: updater.id,
-            changed_at: new Date()
-          }];
+          const currentLog = Array.isArray(landRecord.action_log)
+            ? landRecord.action_log
+            : [];
+          const newLog = [
+            ...currentLog,
+            {
+              action: "PAYMENT_UPDATED",
+              payment_id: paymentToUpdate.id,
+              amount:
+                paymentData.paid_amount !== undefined
+                  ? paymentData.paid_amount
+                  : paymentToUpdate.paid_amount,
+              currency: paymentData.currency || paymentToUpdate.currency,
+              payment_type:
+                paymentData.payment_type || paymentToUpdate.payment_type,
+              changes: changes, // Detailed changes object
+              changed_by: updater.id,
+              changed_at: new Date(),
+            },
+          ];
 
           await LandRecord.update(
             { action_log: newLog },
             {
               where: { id: landRecordId },
-              transaction: t
+              transaction: t,
             }
           );
         }
@@ -290,7 +363,9 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
     }
 
     // Log deletion in LandRecord.action_log
-    const landRecord = await LandRecord.findByPk(payment.land_record_id, { transaction: t });
+    const landRecord = await LandRecord.findByPk(payment.land_record_id, {
+      transaction: t,
+    });
     if (landRecord) {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
@@ -317,6 +392,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
 
 module.exports = {
   createLandPaymentService,
+  addNewPaymentService,
   getLandPaymentByIdService,
   updateLandPaymentsService,
   deleteLandPaymentService,

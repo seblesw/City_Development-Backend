@@ -1,39 +1,56 @@
+const { User, LandRecord } = require("../models");
 const {
   createLandPaymentService,
   getLandPaymentByIdService,
   updateLandPaymentService,
   deleteLandPaymentService,
+  
 } = require("../services/landPaymentService");
 
-const createLandPaymentController = async (req, res) => {
+const addNewPaymentController = async (req, res) => {
   try {
-    const { body,  } = req;
-    // if (!user) {
-    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    // }
-    const data = {
-      land_record_id: body.land_record_id,
-      payment_type: body.payment_type,
-      total_amount: body.total_amount,
-      paid_amount: body.paid_amount,
-      annual_payment: body.annual_payment || null,
-      initial_payment: body.initial_payment || null,
-      currency: body.currency || "ETB",
-      payment_status: body.payment_status || PAYMENT_STATUSES.PENDING,
-      penalty_reason: body.penalty_reason || null,
-      description: body.description || null,
-      payer_id: body.payer_id,
-      created_by: req.user.id,
+    const land_record_id = parseInt(req.params.landId, 10); 
+    
+    if (isNaN(land_record_id)) {
+      return res.status(400).json({ error: "Invalid land_record_id" });
+    }  
+
+     const landRecord = await LandRecord.findByPk(land_record_id, {
+      include: [
+        {
+          model: User,
+          through: { attributes: [] },
+          as: "owners", 
+          attributes: ["id", "first_name", "middle_name", "email"],
+        },
+      ],
+    });
+
+    if (!landRecord || !landRecord.owners || landRecord.owners.length === 0) {
+      return res.status(404).json({ error: "No owners found for this land record" });
+    }
+
+    const payer_id = landRecord.owners[0].id; 
+    const user = req.user;
+
+    const paymentData = {
+      ...req.body,
+      land_record_id,
+      payer_id,
+      created_by: user.id
     };
-    const payment = await createLandPaymentService(data);
+
+    const payment = await createLandPaymentService(paymentData);
+
     return res.status(201).json({
-      message: "የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
+      message: "ተጨማሪ የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
       data: payment,
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
 };
+
 
 const getLandPaymentByIdController = async (req, res) => {
   try {
@@ -92,15 +109,9 @@ const deleteLandPaymentController = async (req, res) => {
   }
 };
 
-const PAYMENT_STATUSES = {
-    PENDING: 'በመጠባበቅ ላይ',
-    PAID: 'ተሳክቷል',
-    PARTIAL: 'ከጅምገማ ተደርጓል',
-    OVERDUE: 'ማረጋገጫ ላይ'
-};
 
 module.exports = {
-  createLandPaymentController,
+  addNewPaymentController,
   getLandPaymentByIdController,
   updateLandPaymentController,
   deleteLandPaymentController,

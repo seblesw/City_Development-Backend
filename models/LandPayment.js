@@ -1,7 +1,7 @@
 
 const PAYMENT_TYPES = {
   LEASE_PAYMENT: "የሊዝ ክፍያ",
-  TAX: "የግብር ክፍያ",
+  TAX: "የቦታ ኪራይ ክፍያ",
   SERVICE_FEE: "የአገልግሎት ክፍያ",
   COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
@@ -93,9 +93,67 @@ module.exports = (db, DataTypes) => {
         },
       
       },
+      penality_amount: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የቅጣት ክፍያ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የቅጣት ክፍያ 0 ወይም ከዚያ በታች መሆን የለበትም።",
+          },
+        },
+      },
+      penality_rate: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የቅጣት መጠን ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የቅጣት መጠን 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      },
+      remaining_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የቀረው ገንዘብ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የቀረው ገንዘብ 0 ወይም  ከዚህ በላይ መሆን አለበት።",
+          },
+        },
+      },
+      receipt_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የክፍያ ሪሲት ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።",
+          },
+        },
+      },
+      payment_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        validate: {
+          isDate: {
+            msg: "የክፍያ ቀን ትክክለኛ መሆን አለበት።",
+          },
+        },
+      },
       currency: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         defaultValue: "ETB",
       },
       payment_status: {
@@ -140,7 +198,7 @@ module.exports = (db, DataTypes) => {
       },
       payer_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "users", key: "id" },
       },
     },
