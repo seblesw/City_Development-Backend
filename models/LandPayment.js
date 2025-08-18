@@ -1,7 +1,7 @@
 
 const PAYMENT_TYPES = {
   LEASE_PAYMENT: "የሊዝ ክፍያ",
-  TAX: "የቦታ ኪራይ ክፍያ",
+  TAX: "የግብር ክፍያ",
   SERVICE_FEE: "የአገልግሎት ክፍያ",
   COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
