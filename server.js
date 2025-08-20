@@ -23,7 +23,7 @@ const port = process.env.PORT ;
 // Middleware
 app.use(cors(
   {
-    origin: '*', // Allow all origins, you can specify specific origins if needed
+    origin: '*', 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     // credentials: true,
   }
