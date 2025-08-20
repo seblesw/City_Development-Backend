@@ -8,6 +8,7 @@ const {
   activateUserService,
   addNewLandOwnerService,
 } = require("../services/userService");
+const fs = require("fs");
 
 const addNewLandOwnerController = async (req, res) => {
   try {
