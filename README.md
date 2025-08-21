@@ -67,10 +67,7 @@ JWT_SECRET=your_jwt_secret
 ```sql
 CREATE DATABASE your_database_name;
 ```
-3. Run database migrations (if applicable):
-```bash
-npm run migrate
-```
+
 
 ---
 
@@ -110,7 +107,7 @@ You can test the API endpoints using tools like Postman, Insomnia, or curl.
 
 ### Example health check:
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:3000/
 ```
 
 ---
@@ -159,7 +156,7 @@ git push origin feature/AmazingFeature
 
 ## 📄 License
 
-This project is licensed under the ISC License.
+This project is licensed under the Apache License.
 
 ---
 
