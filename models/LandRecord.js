@@ -1,4 +1,3 @@
-
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ተልኳል",
@@ -96,6 +95,18 @@ module.exports = (db, DataTypes) => {
           min: { args: [0.1], msg: "ስፋት ከ1 ካሬ ሜትር በታች መሆን አይችልም።" },
         },
       },
+      land_use_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 50], msg: "የመሬት ኮድ ከ0 እስከ 50  መሆን አለበት።" },
+        },
+      },
+      has_debt: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+      },
       north_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -110,7 +121,6 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
         },
       },
-
       south_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -135,7 +145,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: { args: [0, 200], msg: "የማጥፊያ ምክንያት ከ0 እስከ 200  መሆን አለበት።" },
         },
-       },
+      },
       block_number: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -189,17 +199,17 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      lease_ownership_type:{
-        type:DataTypes.STRING,
-        allowNull:true,
-        validate:{
-          isIn:{
-            args:[Object.values(LEASE_OWNERSHIP_TYPE)],
+      lease_ownership_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(LEASE_OWNERSHIP_TYPE)],
             msg: `የ ሊዝ ይዞታ አግባብ አይነት ከተፈቀዱት  (${Object.values(
               LEASE_OWNERSHIP_TYPE
             ).join(", ")}) ውስጥ መሆን አለበት።`,
-          }
-        }
+          },
+        },
       },
       remark: {
         type: DataTypes.STRING,
