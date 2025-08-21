@@ -24,6 +24,7 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
+const{fs}=require("fs");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();

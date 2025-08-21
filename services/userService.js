@@ -744,6 +744,76 @@ const addNewLandOwnerService = async ({
     throw error;
   }
 };
+
+const removeLandOwnerFromLandService = async (
+  land_record_id,
+  owner_id,
+  authUserId,
+  options = {}
+) => {
+  const { transaction } = options;
+  let t = transaction;
+  try {
+    t = t || (await sequelize.transaction());
+
+    // 1. Validate land record exists
+    const landRecord = await LandRecord.findByPk(land_record_id, {
+      include: [
+        {
+          model: User,
+          as: "owners",
+          attributes: ["id", "first_name", "last_name"],
+          through: { model: LandOwner, as: "landOwner" },
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!landRecord) {
+      throw new Error("የመሬት መዝገብ አልተገኘም");
+    }
+
+    // 2. Check if owner exists in this land record
+    const owner = landRecord.owners.find((o) => o.id === parseInt(owner_id));
+    if (!owner) {
+      throw new Error("ይህ ባለቤት የሚያስፈልገው መሬት አልተገኘም");
+    }
+
+    // 3. Remove the owner
+    await LandOwner.destroy({
+      where: { user_id: owner.id, land_record_id },
+      transaction: t,
+    });
+
+    // 4. Update action log
+    const actionLogEntry = {
+      action: `ባለቤት ወጥቷል: ${owner.first_name} ${owner.last_name}`,
+      details: { user_id: owner.id },
+      changed_by: authUserId,
+      changed_at: new Date(),
+    };
+
+    await landRecord.update(
+      {
+        action_log: [...(landRecord.action_log || []), actionLogEntry],
+      },
+      { transaction: t }
+    );
+
+    if (!transaction) await t.commit();
+
+    return {
+      success: true,
+      message: "ባለቤት በተሳካ ሁኔታ ወጥቷል",
+      data: { owner_id, land_record_id },
+    };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    console.error("የባለቤት እንደገና ማስተካከያ ስህተት:", error);
+    throw new Error(`ባለቤት ማስተካከያ ስህተት: ${error.message}`);
+  }
+};
+
 module.exports = {
   createLandOwner,
   updateLandOwnersService,
@@ -755,4 +825,5 @@ module.exports = {
   deleteUser,
   getAllUserService,
   getAllUserByAdminUnitService,
+  removeLandOwnerFromLandService,
 };

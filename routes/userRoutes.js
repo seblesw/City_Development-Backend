@@ -12,6 +12,7 @@ router.get("/admin-unit", authMiddleware.protect, userController.getAllUserByAdm
 router.post("/deactivate/:id", authMiddleware.protect, userController.deactivateUserController);
 router.post("/activate/:id", authMiddleware.protect, userController.activateUserController);
 router.get("/:id", userController.getUserByIdController);
+router.post("/:land_record_id/remove-owner", authMiddleware.protect, userController.removeLandOwnerFromLandController);
 router.put("/:id", authMiddleware.protect,userController.updateUserController);
 router.delete("/:id", authMiddleware.protect, userController.deleteUserController);
 

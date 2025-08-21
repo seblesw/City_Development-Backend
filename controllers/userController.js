@@ -7,6 +7,7 @@ const {
   deactivateUserService,
   activateUserService,
   addNewLandOwnerService,
+  removeLandOwnerFromLandService,
 } = require("../services/userService");
 const fs = require("fs");
 
@@ -65,6 +66,28 @@ const addNewLandOwnerController = async (req, res) => {
     console.error("Error adding land owner:", error);
     res.status(error.status || 500).json({
       error: error.message || "Failed to add land owner"
+    });
+  }
+};
+
+const removeLandOwnerFromLandController = async (req, res) => {
+  try {
+    const { land_record_id } = req.params;
+    const authUser = req.user;
+    const { owner_id } = req.body;
+    
+
+    if (!land_record_id || !owner_id) {
+      return res.status(400).json({ error: "Land record ID and owner ID are required" });
+    }
+
+    const result = await removeLandOwnerFromLandService(land_record_id, owner_id, authUser.id);
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error removing land owner:", error);
+    res.status(error.status || 500).json({
+      error: error.message || "Failed to remove land owner"
     });
   }
 };
@@ -182,4 +205,5 @@ module.exports = {
   getAllUsersController,
   getAllUserByAdminUnitController,
   deleteUserController,
+  removeLandOwnerFromLandController,
 };
