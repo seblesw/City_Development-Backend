@@ -763,7 +763,7 @@ const removeLandOwnerFromLandService = async (
           model: User,
           as: "owners",
           attributes: ["id", "first_name", "last_name"],
-          through: { model: LandOwner, as: "landOwner" },
+          through: {},
         },
       ],
       transaction: t,
@@ -776,7 +776,7 @@ const removeLandOwnerFromLandService = async (
     // 2. Check if owner exists in this land record
     const owner = landRecord.owners.find((o) => o.id === parseInt(owner_id));
     if (!owner) {
-      throw new Error("ይህ ባለቤት የሚያስፈልገው መሬት አልተገኘም");
+      throw new Error("ይህ ባለቤት በዚህ  የመሬት መዝገብ አልተገኘም");
     }
 
     // 3. Remove the owner

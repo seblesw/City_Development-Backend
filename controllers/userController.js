@@ -70,29 +70,6 @@ const addNewLandOwnerController = async (req, res) => {
     });
   }
 };
-
-const removeLandOwnerFromLandController = async (req, res) => {
-  try {
-    const { land_record_id } = req.params;
-    const authUser = req.user;
-    const { owner_id } = req.body;
-    
-
-    if (!land_record_id || !owner_id) {
-      return res.status(400).json({ error: "Land record ID and owner ID are required" });
-    }
-
-    const result = await removeLandOwnerFromLandService(land_record_id, owner_id, authUser.id);
-
-    res.status(200).json(result);
-  } catch (error) {
-    console.error("Error removing land owner:", error);
-    res.status(error.status || 500).json({
-      error: error.message || "Failed to remove land owner"
-    });
-  }
-};
-
 const getAllUsersController = async (req, res) => {
   try {
     const users = await getAllUserService();
@@ -200,7 +177,8 @@ const activateUserController = async (req, res) => {
 const removeOwnerController = async (req, res) => {
   try {
     const { landRecordId, ownerId } = req.params;
-    const result = await removeOwnerFromLandRecord(landRecordId, ownerId);
+    userId = req.user.id;
+    const result = await removeLandOwnerFromLandService(landRecordId, ownerId, userId);
     
     return res.status(200).json(result);
   } catch (error) {
@@ -229,5 +207,4 @@ module.exports = {
   getAllUsersController,
   getAllUserByAdminUnitController,
   deleteUserController,
-  removeLandOwnerFromLandController,
 };
