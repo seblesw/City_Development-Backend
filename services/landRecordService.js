@@ -2845,6 +2845,36 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
             )),
           ],
 
+          // Total area statistics
+          area_stats: {
+            total_area: await LandRecord.sum('area', {
+              where: baseWhere,
+              transaction: t,
+            }),
+            by_zoning: await LandRecord.findAll({
+              attributes: [
+                'zoning_type',
+                [sequelize.fn('SUM', sequelize.col('area')), 'total_area'],
+              ],
+              where: baseWhere,
+              group: ['zoning_type'],
+              order: [[sequelize.col('total_area'), 'DESC']],
+              transaction: t,
+              raw: true,
+            }),
+            by_land_use: await LandRecord.findAll({
+              attributes: [
+                'land_use',
+                [sequelize.fn('SUM', sequelize.col('area')), 'total_area'],
+              ],
+              where: baseWhere,
+              group: ['land_use'],
+              order: [[sequelize.col('total_area'), 'DESC']],
+              transaction: t,
+              raw: true,
+            }),
+          },
+
           // Owners count in this admin unit
           owners_count: await User.count({
             include: [
