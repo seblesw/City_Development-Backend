@@ -200,19 +200,24 @@ const sendOTP = async (email, options = {}) => {
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check for existing valid OTP
-    // if (user.otpExpiry && user.otpExpiry > new Date()) {
-    //   const remainingMinutes = Math.ceil((user.otpExpiry - new Date()) / (1000 * 60));
-    //   throw new Error(`እባክዎ ቀድሞ የተላከውን OTP ይጠቀሙ (${remainingMinutes} ደቂቃ ይቀራል)`);
-    // }
+    // Check if previous OTP is still valid (not expired)
+    const now = new Date();
+    if (user.otpExpiry && user.otpExpiry > now) {
+      const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
+      const remainingMinutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      throw new Error(
+      `እባክዎ ያለፈውን OTP ይጠቀሙ ወይም ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+      );
+    }
 
     // Generate and save new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log("Generated OTP:", otp); 
-    // const otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
-    await user.update({ otp, }, { transaction: t });
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
+    await user.update({ otp, otpExpiry }, { transaction: t });
 
-    // Send OTP email
+    // Send OTP email (same as before)
     const transporter = nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE,
       auth: {
@@ -226,13 +231,17 @@ const sendOTP = async (email, options = {}) => {
       to: email,
       subject: 'የእርስዎ OTP ኮድ',
       html: `
-        <div dir="rtl">
-          <h2>የእርስዎ OTP ኮድ</h2>
-          <p>የእርስዎ OTP ኮድ፡ <strong>${otp}</strong> ነው።</p>
-          <p>ለ<strong>10 ደቂቃዎች</strong> የሚሰራ ነው።</p>
-          <p>እናመሰግናለን!</p>
-          <p>ቲምዎርክ አይቲ ሶሊውሽን</p>
+      <div style="background:linear-gradient(135deg,#e0e7ff 0%,#f0fdf4 100%);padding:32px;border-radius:16px;max-width:400px;margin:auto;font-family:'Segoe UI',Arial,sans-serif;">
+        <h2 style="color:#2563eb;text-align:center;margin-bottom:16px;">OTP ኮድ ለመግባት</h2>
+        <p style="font-size:18px;color:#334155;text-align:center;">እንኳን ደህና መጡ!</p>
+        <div style="background:#f1f5f9;padding:24px;border-radius:12px;margin:24px 0;text-align:center;">
+        <span style="font-size:32px;letter-spacing:8px;color:#059669;font-weight:bold;">${otp}</span>
+        <p style="color:#64748b;margin-top:8px;">ይህ ኮድ ለ <strong style="color:#2563eb;">5 ደቂቃ</strong> ብቻ ይሰራል።</p>
         </div>
+        <p style="color:#475569;text-align:center;">እባክዎ ይህን ኮድ በመግባት ገፅ ያስገቡ።</p>
+        <hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;">
+        <p style="text-align:center;color:#64748b;">እናመሰግናለን!<br>ቲምዎርክ አይቲ ሶሊውሽን</p>
+      </div>
       `,
     });
 
@@ -240,34 +249,40 @@ const sendOTP = async (email, options = {}) => {
     return { success: true, message: "OTP በትክክል ተልኳል" };
   } catch (error) {
     if (shouldCommit && !t.finished) await t.rollback();
-    console.error("የOTP ስርወት ስህተት:", error);
     throw error;
   }
 };
+
 const resendOTP = async (email, options = {}) => {
-  // Use provided transaction or create new one
   const t = options.transaction || await sequelize.transaction();
   const shouldCommit = !options.transaction;
 
   try {
-    // Validate input
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
 
-    // Find user with transaction
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
       transaction: t,
-      attributes: ['id', 'email', 'isFirstLogin']
+      attributes: ['id', 'email', 'isFirstLogin', 'otp', 'otpExpiry']
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check if user is in first-time login state
+    // Check if previous OTP is still valid
+    const now = new Date();
+    if (user.otpExpiry && user.otpExpiry > now) {
+      const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
+      const remainingMinutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      throw new Error(
+      `ያለፈው OTP አሁንም የሚሰራ ነው። ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+      );
+    }
+
     if (!user.isFirstLogin) {
       throw new Error("OTP የሚልክበት ለመጀመሪያ ጊዜ የገባ ተጠቃሚ ነው");
     }
 
-    // Resend OTP
     await sendOTP(user.email, { transaction: t });
     
     if (shouldCommit) await t.commit();
@@ -294,7 +309,7 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     if (!user.otp ) throw new Error("OTP አልተጠየቀም");
-    // if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
+    if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
     if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
 
     // Complete verification

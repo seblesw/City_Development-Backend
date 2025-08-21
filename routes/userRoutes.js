@@ -15,5 +15,6 @@ router.get("/:id", userController.getUserByIdController);
 router.post("/:land_record_id/remove-owner", authMiddleware.protect, userController.removeLandOwnerFromLandController);
 router.put("/:id", authMiddleware.protect,userController.updateUserController);
 router.delete("/:id", authMiddleware.protect, userController.deleteUserController);
+router.delete("/:landRecordId/owners/:ownerId", authMiddleware.protect, userController.removeOwnerController);
 
 module.exports = router;
