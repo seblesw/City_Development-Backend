@@ -818,7 +818,7 @@ module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
-  removeOwnerFromLandRecord,
+  // removeOwnerFromLandRecord,
   addNewLandOwnerService,
   deactivateUserService,
   activateUserService,
