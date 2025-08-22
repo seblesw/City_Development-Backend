@@ -693,7 +693,7 @@ const addNewLandOwnerService = async ({
 
     // 6. Update land record action log
     const actionLogEntry = {
-      action: `አዲስ ባለቤት ታክሏል: ${user.first_name} ${user.last_name}`,
+      action: `አዲስ ባለቤት ተጨምሯል: ${user.first_name} ${user.last_name}`,
       details: {
         user_id: user.id,
         ownership_percentage: finalPercentage,

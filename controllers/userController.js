@@ -179,22 +179,9 @@ const removeOwnerController = async (req, res) => {
     const { landRecordId, ownerId } = req.params;
     userId = req.user.id;
     const result = await removeLandOwnerFromLandService(landRecordId, ownerId, userId);
-    
     return res.status(200).json(result);
-  } catch (error) {
-    console.error("Error removing owner:", error);
-    
-    if (error.message === "Owner not found in this land record") {
-      return res.status(404).json({
-        success: false,
-        message: error.message
-      });
-    }
-    
-    return res.status(400).json({
-      success: false,
-      message: error.message || "Failed to remove owner"
-    });
+  } catch (error) {    
+        return res.status(400).json({ error: error.message });
   }
 };
 module.exports = {

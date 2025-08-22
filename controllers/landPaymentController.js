@@ -13,7 +13,7 @@ const addNewPaymentController = async (req, res) => {
     const land_record_id = parseInt(req.params.landId, 10); 
     
     if (isNaN(land_record_id)) {
-      return res.status(400).json({ error: "Invalid land_record_id" });
+      return res.status(400).json({ error: "የተሳሳተ የ መዝገብ ቁጥር" });
     }  
 
      const landRecord = await LandRecord.findByPk(land_record_id, {
@@ -28,7 +28,7 @@ const addNewPaymentController = async (req, res) => {
     });
 
     if (!landRecord || !landRecord.owners || landRecord.owners.length === 0) {
-      return res.status(404).json({ error: "No owners found for this land record" });
+      return res.status(404).json({ error: "በዚህ መዝገብ ባለቤት አይገኝም" });
     }
 
     const payer_id = landRecord.owners[0].id; 
