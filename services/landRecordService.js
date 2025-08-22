@@ -1644,15 +1644,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           limit: 3, // Get only 3 most recent payments
         },
       ],
-      attributes: [
-        "id",
-        "parcel_number",
-        "land_level",
-        "area",
-        "land_use",
-        "record_status",
-        "createdAt",
-      ],
       order: [["createdAt", "DESC"]],
       offset,
       limit: pageSize,
