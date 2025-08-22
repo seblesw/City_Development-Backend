@@ -123,7 +123,7 @@ const createLandPaymentService = async (data, options = {}) => {
     // --- 5. Lock and update land record action log ---
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: transaction ? undefined : t.LOCK.UPDATE, // only lock if we're managing transaction
+      lock: transaction ? undefined : t.LOCK.UPDATE, 
     });
 
     if (!landRecord) {
@@ -136,7 +136,7 @@ const createLandPaymentService = async (data, options = {}) => {
     const newLog = [
       ...currentLog,
       {
-        action: "PAYMENT_CREATED",
+        action: "ክፍያ ተጨምሯል",
         payment_id: payment.id,
         amount: payment.paid_amount,
         currency: payment.currency,

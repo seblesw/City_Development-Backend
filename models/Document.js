@@ -14,7 +14,6 @@ module.exports = (db, DataTypes) => {
       },
       plot_number: {
         type: DataTypes.STRING,
-        // unique:true,
         allowNull: false,
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
@@ -46,6 +45,14 @@ module.exports = (db, DataTypes) => {
             msg: "የሰነድ አመላካች ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
          
+        },
+      },
+      numebr_of_pages: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: { msg: "የገጾች ቁጥር ትክክለኛ መሆን አለበት።" },
+          min: { args: [1], msg: "የገጾች ቁጥር ከ1 በላይ መሆን አለበት።" },
         },
       },
       isActive: {
