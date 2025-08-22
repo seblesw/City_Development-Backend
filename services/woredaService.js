@@ -113,7 +113,7 @@ const deleteWoredaService = async (id, deletedByUserId) => {
     throw new Error("ወረዳ አልተገኘም።");
   }
 
-  await woreda.update({ deletedAt: new Date(), deleted_by: deletedByUserId || null });
+  await woreda.destroy({force:true});
 };
 
 module.exports = {

@@ -62,10 +62,10 @@ User.belongsTo(AdministrativeUnit, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-User.hasMany(OversightOffice, {
+User.belongsTo(OversightOffice, {
   foreignKey: "oversight_office_id",
   as: "oversightOffice",
-  onDelete: "RESTRICT",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 User.belongsToMany(LandRecord, {
