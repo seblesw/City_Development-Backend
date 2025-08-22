@@ -59,7 +59,7 @@ User.belongsTo(Role, {
 User.belongsTo(AdministrativeUnit, {
   foreignKey: "administrative_unit_id",
   as: "administrativeUnit",
-  onDelete: "RESTRICT",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 User.hasMany(OversightOffice, {
@@ -75,7 +75,6 @@ User.belongsToMany(LandRecord, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-
 User.hasMany(LandRecord, {
   as: "createdLandRecords",
   foreignKey: "created_by",
@@ -155,13 +154,13 @@ Zone.hasMany(Woreda, {
 Zone.hasMany(AdministrativeUnit, {
   foreignKey: "zone_id",
   as: "administrativeUnits",
-  onDelete: "CASCADE",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 Zone.hasMany(OversightOffice, {
-  foreignKey: "oversight_office_id",
+  foreignKey: "zone_id",
   as: "oversightOffices",
-  onDelete: "CASCADE",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
@@ -179,9 +178,9 @@ Woreda.hasMany(AdministrativeUnit, {
   onUpdate: "CASCADE",
 });
 Woreda.hasMany(OversightOffice, {
-  foreignKey: "oversight_office_id",
+  foreignKey: "woreda_id",
   as: "oversightOffices",
-  onDelete: "CASCADE",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
@@ -245,7 +244,7 @@ AdministrativeUnit.belongsTo(Region, {
 AdministrativeUnit.hasMany(User, {
   foreignKey: "administrative_unit_id",
   as: "users",
-  onDelete: "RESTRICT",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.hasMany(LandRecord, {

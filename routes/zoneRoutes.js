@@ -7,11 +7,11 @@ const {
   updateZone,
   deleteZone,
 } = require("../controllers/zoneController");
-
-router.post("/", createZone);
+const authmiddleware = require("../middlewares/authMiddleware");
+router.post("/", authmiddleware.protect,createZone);
 router.get("/", getAllZones);
 router.get("/:id", getZoneById);
-router.put("/:id", updateZone);
-router.delete("/:id", deleteZone);
+router.put("/:id", authmiddleware.protect,updateZone);
+router.delete("/:id", authmiddleware.protect,deleteZone);
 
 module.exports = router;

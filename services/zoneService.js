@@ -111,14 +111,16 @@ const updateZoneService = async (id, zoneData, updatedByUserId) => {
     ],
   });
 };
-
 const deleteZoneService = async (id, deletedByUserId) => {
   const zone = await Zone.findByPk(id, { where: { deletedAt: null } });
   if (!zone) {
     throw new Error("ዞን አልተገኘም።");
   }
 
-  await zone.update({ deletedAt: new Date(), deleted_by: deletedByUserId || null });
+  // Hard delete the zone
+  await zone.destroy({ force: true });
+
+  return { message: "ዞን ተሰርዟል።", id };
 };
 
 module.exports = {
