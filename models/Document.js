@@ -34,8 +34,7 @@ module.exports = (db, DataTypes) => {
             msg: "የሰነድ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።",
           },
         },
-      },
-  
+      }, 
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,

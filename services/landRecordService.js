@@ -416,7 +416,7 @@ async function transformXLSXData(rows, adminUnitId) {
   const payments = paymentRows
     .filter((row) => row.payment_type)
     .map((row) => ({
-      payment_type: row.payment_type || null,
+      payment_type: row.payment_type || PAYMENT_TYPES.TAX,
       total_amount: parseFloat(row.total_amount) || 0,
       paid_amount: parseFloat(row.paid_amount) || 0,
       currency: row.currency || "ETB",
