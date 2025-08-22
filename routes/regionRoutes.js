@@ -7,11 +7,11 @@ const {
   updateRegion,
   deleteRegion,
 } = require("../controllers/regionController");
-
-router.post("/", createRegion);
-router.get("/", getAllRegions);
-router.get("/:id", getRegionById);
-router.put("/:id", updateRegion);
-router.delete("/:id", deleteRegion);
+const authMiddleware = require("../middlewares/authMiddleware");
+router.post("/",authMiddleware.protect, createRegion);
+router.get("/",authMiddleware.protect, getAllRegions);
+router.get("/:id", authMiddleware.protect,getRegionById);
+router.put("/:id",authMiddleware.protect, updateRegion);
+router.delete("/:id", authMiddleware.protect,deleteRegion);
 
 module.exports = router;
