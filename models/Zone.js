@@ -19,7 +19,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
-        validate: { is: /^[A-Z]{3}-Z\d+$/ },
       },
       region_id: {
         type: DataTypes.INTEGER,
