@@ -17,7 +17,7 @@ const postLimiter = rateLimit({
   max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
-// Import Land Records from CSV
+// Import Land Records from an XLSX file
 router.post(
   "/import",
   authMiddleware.protect,
@@ -69,7 +69,7 @@ router.post(
   authMiddleware.protect,
   postLimiter,
   upload.fields([
-    { name: 'documents', maxCount: 200 },
+    { name: 'documents', maxCount: 20 },
     { name: 'profile_picture', maxCount: 10 }
   ]),  landRecordController.createLandRecord
 );
