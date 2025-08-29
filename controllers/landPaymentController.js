@@ -8,6 +8,16 @@ const {
   
 } = require("../services/landPaymentService");
 
+//get all payments 
+const getAllPaymentsController = async (req, res) => {
+  try {
+    const payments = await LandPayment.findAll();
+    return res.status(200).json({ data: payments });
+  } catch (error) { 
+    return res.status(400).json({ error: error.message });
+  }
+};
+
 const addNewPaymentController = async (req, res) => {
   try {
     const land_record_id = parseInt(req.params.landId, 10); 
@@ -65,6 +75,8 @@ const getLandPaymentByIdController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+
+
 
 const getPaymentsByLandRecordIdController = async (req, res) => {
   try {
@@ -162,6 +174,7 @@ const deleteLandPaymentController = async (req, res) => {
 
 
 module.exports = {
+  getAllPaymentsController,
   addNewPaymentController,
   getPaymentsByLandRecordIdController,
   getLandPaymentByIdController,
