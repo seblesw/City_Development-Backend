@@ -37,7 +37,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Teamwork IT Solution Land Management System API',
     version: '1.0',
-    endpoints: '/api/v1 => the first version',
+    endpoints: '/api/v1 the first version',
   });
 });
 
