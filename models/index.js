@@ -142,25 +142,25 @@ Region.hasMany(OversightOffice, {
 Zone.belongsTo(Region, {
   foreignKey: "region_id",
   as: "region",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Zone.hasMany(Woreda, {
   foreignKey: "zone_id",
   as: "woredas",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Zone.hasMany(AdministrativeUnit, {
   foreignKey: "zone_id",
   as: "administrativeUnits",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Zone.hasMany(OversightOffice, {
   foreignKey: "zone_id",
   as: "oversightOffices",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
@@ -168,19 +168,19 @@ Zone.hasMany(OversightOffice, {
 Woreda.belongsTo(Zone, {
   foreignKey: "zone_id",
   as: "zone",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Woreda.hasMany(AdministrativeUnit, {
   foreignKey: "woreda_id",
   as: "administrativeUnits",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Woreda.hasMany(OversightOffice, {
   foreignKey: "woreda_id",
   as: "oversightOffices",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
@@ -226,25 +226,25 @@ AdministrativeUnit.belongsTo(OversightOffice, {
 AdministrativeUnit.belongsTo(Woreda, {
   foreignKey: "woreda_id",
   as: "woreda",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.belongsTo(Zone, {
   foreignKey: "zone_id",
   as: "zone",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.belongsTo(Region, {
   foreignKey: "region_id",
   as: "region",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.hasMany(User, {
   foreignKey: "administrative_unit_id",
   as: "users",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.hasMany(LandRecord, {
