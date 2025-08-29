@@ -84,19 +84,19 @@ User.hasMany(LandRecord, {
 User.hasMany(LandRecord, {
   as: "updatedLandRecords",
   foreignKey: "updated_by",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.hasMany(LandRecord, {
   as: "approvedLandRecords",
   foreignKey: "approved_by",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.hasMany(LandRecord, {
   as: "deletedLandRecords",
   foreignKey: "deleted_by",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.hasMany(Document, {
@@ -108,7 +108,7 @@ User.hasMany(Document, {
 User.hasMany(Document, {
   foreignKey: "inactived_by",
   as: "inactivedDocuments",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.hasMany(LandPayment, {
@@ -122,19 +122,19 @@ User.hasMany(LandPayment, {
 Region.hasMany(Zone, {
   foreignKey: "region_id",
   as: "zones",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Region.hasMany(AdministrativeUnit, {
   foreignKey: "region_id",
   as: "administrativeUnits",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 Region.hasMany(OversightOffice, {
   foreignKey: "region_id",
   as: "oversightOffices",
-  onDelete: "CASCADE",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
