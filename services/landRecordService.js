@@ -377,7 +377,7 @@ async function parseAndValidateXLSX(filePath) {
     const validatedData = xlsxData.filter((row, index) => {
       if (!row.parcel_number || !row.plot_number) {
         throw new Error(
-          `Row ${index + 2} must contain both parcel_number and plot_number.`
+          `ሮው ${index + 2} የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።`
         );
       }
       return true;
@@ -385,7 +385,7 @@ async function parseAndValidateXLSX(filePath) {
 
     return validatedData;
   } catch (error) {
-    throw new Error(`Failed to parse XLSX file: ${error.message}`);
+    throw new Error(`ፋይሉን ፓርስ ማድረግ አልተቻለም: ${error.message}`);
   }
 }
 
@@ -398,7 +398,7 @@ function groupXLSXRows(xlsxData) {
       return groups;
     }, {});
   } catch (error) {
-    throw new Error(`Failed to group XLSX rows: ${error.message}`);
+    throw new Error(`ሮው በቡድን መመደብ አልተቻለም: ${error.message}`);
   }
 }
 
@@ -409,24 +409,24 @@ async function transformXLSXData(rows, adminUnitId) {
 
     // Validate required fields
     if (!primaryRow.parcel_number || !primaryRow.plot_number) {
-      throw new Error("Parcel number and plot number are required");
+      throw new Error("የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።");
     }
 
     if (!primaryRow.land_use || !primaryRow.ownership_type) {
-      throw new Error("Land use and ownership type are required");
+      throw new Error("የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።");
     }
 
     // 1. Prepare Owners
     let owners = [];
     if (ownershipCategory === "የጋራ") {
       owners = rows.map((row, index) => {
-        if (!row.first_name || !row.last_name) {
-          throw new Error(`Owner ${index + 1} must have first name and last name`);
+        if (!row.first_name || !row.middle_name) {
+          throw new Error(`ተጋሪ ${index + 1} ሙሉ ስም ያስፈልጋል።`);
         }
         
         return {
           first_name: row.first_name || "Unknown",
-          middle_name: row.middle_name || "",
+          middle_name: row.middle_name || "unknown",
           last_name: row.last_name || "Unknown",
           national_id: row.national_id ? String(row.national_id).trim() : null,
           email: row.email?.trim() || null,
@@ -437,13 +437,13 @@ async function transformXLSXData(rows, adminUnitId) {
         };
       });
     } else if (ownershipCategory === "የግል") {
-      if (!primaryRow.first_name || !primaryRow.last_name) {
-        throw new Error("Owner must have first name and last name");
+      if (!primaryRow.first_name || !primaryRow.middle_name) {
+        throw new Error("ዋና ባለቤት ሙሉ ስም ያስፈልጋል።");
       }
       
       owners.push({
         first_name: primaryRow.first_name || "Unknown",
-        middle_name: primaryRow.middle_name || "",
+        middle_name: primaryRow.middle_name || "unknown",
         last_name: primaryRow.last_name || "Unknown",
         national_id: primaryRow.national_id
           ? String(primaryRow.national_id).trim()
@@ -454,7 +454,7 @@ async function transformXLSXData(rows, adminUnitId) {
         relationship_type: primaryRow.relationship_type || null,
       });
     } else {
-      throw new Error(`Invalid ownership category: ${ownershipCategory}`);
+      throw new Error(`የተሳሳተ የይዞታ ምድብ: ${ownershipCategory}`);
     }
 
     // 2. Prepare Land Record
