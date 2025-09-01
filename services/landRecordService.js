@@ -236,7 +236,7 @@ const importLandRecordsFromXLSXService = async (
   user,
   options = {}
 ) => {
-  const { transaction } = options;
+  const { transaction, progressCallback } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
@@ -253,12 +253,29 @@ const importLandRecordsFromXLSXService = async (
       errorDetails: [],
     };
 
+    // Send progress update
+    if (progressCallback) {
+      progressCallback(5, "Parsing XLSX file...");
+    }
+
     // 1. Parse and validate XLSX
     const xlsxData = await parseAndValidateXLSX(filePath);
     results.totalRows = xlsxData.length;
 
+    // Send progress update
+    if (progressCallback) {
+      progressCallback(15, "Grouping data by parcel and plot numbers...");
+    }
+
     // 2. Group rows by parcel_number + plot_number
     const recordsGrouped = groupXLSXRows(xlsxData);
+    const totalGroups = Object.keys(recordsGrouped).length;
+    let processedGroups = 0;
+
+    // Send progress update
+    if (progressCallback) {
+      progressCallback(20, `Found ${totalGroups} unique parcels to process...`);
+    }
 
     // 3. Process each group
     for (const [groupKey, rows] of Object.entries(recordsGrouped)) {
@@ -274,6 +291,15 @@ const importLandRecordsFromXLSXService = async (
         ) + 1;
 
       try {
+        // Send progress update
+        if (progressCallback) {
+          const groupProgress = 20 + Math.floor((processedGroups / totalGroups) * 75);
+          progressCallback(
+            groupProgress, 
+            `Processing parcel ${primaryRow.parcel_number}, plot ${primaryRow.plot_number}...`
+          );
+        }
+
         const { owners, landRecordData, documents, payments } =
           await transformXLSXData(rows, adminUnitId);
 
@@ -297,144 +323,206 @@ const importLandRecordsFromXLSXService = async (
       } catch (error) {
         await rowTransaction.rollback();
         handleImportError(error, primaryRow, rowNum, results);
+        
+        // Send error progress update
+        if (progressCallback) {
+          progressCallback(
+            -1, 
+            `Error processing parcel ${primaryRow.parcel_number}: ${error.message}`
+          );
+        }
       }
+      
+      processedGroups++;
+    }
+
+    // Send completion progress update
+    if (progressCallback) {
+      progressCallback(
+        100, 
+        `Import completed. ${results.createdCount} records created, ${results.skippedCount} skipped.`
+      );
     }
 
     if (!transaction) await t.commit();
     return results;
   } catch (error) {
+    // Send error progress update
+    if (progressCallback) {
+      progressCallback(0, `Import failed: ${error.message}`);
+    }
+    
     if (!transaction) await t.rollback();
     throw new Error(`XLSX import failed: ${error.message}`);
   }
 };
 
-// ------------------ Helper Functions ------------------
+// ------------------ Enhanced Helper Functions ------------------
 
 async function parseAndValidateXLSX(filePath) {
-  // Using xlsx library to parse the file
-  const workbook = XLSX.readFile(filePath);
-  const firstSheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[firstSheetName];
+  try {
+    // Using xlsx library to parse the file
+    const workbook = XLSX.readFile(filePath);
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
 
-  // Convert to JSON
-  const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
-    raw: false, // Get formatted strings
-    defval: null, // Use null for empty cells
-    dateNF: "DD/MM/YYYY", // Date format
-  });
+    // Convert to JSON
+    const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false,
+      defval: null, 
+      dateNF: "DD/MM/YYYY", 
+    });
 
-  return xlsxData.filter((row) => {
-    if (!row.parcel_number || !row.plot_number) {
-      throw new Error(
-        "Each row must contain both parcel_number and plot_number."
-      );
-    }
-    return true;
-  });
+    // Validate data
+    const validatedData = xlsxData.filter((row, index) => {
+      if (!row.parcel_number || !row.plot_number) {
+        throw new Error(
+          `Row ${index + 2} must contain both parcel_number and plot_number.`
+        );
+      }
+      return true;
+    });
+
+    return validatedData;
+  } catch (error) {
+    throw new Error(`Failed to parse XLSX file: ${error.message}`);
+  }
 }
 
 function groupXLSXRows(xlsxData) {
-  return xlsxData.reduce((groups, row) => {
-    const key = `${row.parcel_number}_${row.plot_number}`;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(row);
-    return groups;
-  }, {});
+  try {
+    return xlsxData.reduce((groups, row) => {
+      const key = `${row.parcel_number}_${row.plot_number}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+      return groups;
+    }, {});
+  } catch (error) {
+    throw new Error(`Failed to group XLSX rows: ${error.message}`);
+  }
 }
 
 async function transformXLSXData(rows, adminUnitId) {
-  const primaryRow = rows[0];
-  const ownershipCategory = primaryRow.ownership_category?.trim();
+  try {
+    const primaryRow = rows[0];
+    const ownershipCategory = primaryRow.ownership_category?.trim();
 
-  // 1. Prepare Owners
-  let owners = [];
-  if (ownershipCategory === "የጋራ") {
-    owners = rows.map((row) => ({
-      first_name: row.first_name || "Unknown",
-      middle_name: row.middle_name || "Unknown",
-      last_name: row.last_name || "Unknown",
-      national_id: row.national_id ? String(row.national_id).trim() : null,
-      email: row.email?.trim() || null,
-      phone_number: row.phone_number || null,
-      gender: row.gender || null,
-      relationship_type: row.relationship_type || null,
-      address: row.address || null,
+    // Validate required fields
+    if (!primaryRow.parcel_number || !primaryRow.plot_number) {
+      throw new Error("Parcel number and plot number are required");
+    }
+
+    if (!primaryRow.land_use || !primaryRow.ownership_type) {
+      throw new Error("Land use and ownership type are required");
+    }
+
+    // 1. Prepare Owners
+    let owners = [];
+    if (ownershipCategory === "የጋራ") {
+      owners = rows.map((row, index) => {
+        if (!row.first_name || !row.last_name) {
+          throw new Error(`Owner ${index + 1} must have first name and last name`);
+        }
+        
+        return {
+          first_name: row.first_name || "Unknown",
+          middle_name: row.middle_name || "",
+          last_name: row.last_name || "Unknown",
+          national_id: row.national_id ? String(row.national_id).trim() : null,
+          email: row.email?.trim() || null,
+          phone_number: row.phone_number || null,
+          gender: row.gender || null,
+          relationship_type: row.relationship_type || null,
+          address: row.address || null,
+        };
+      });
+    } else if (ownershipCategory === "የግል") {
+      if (!primaryRow.first_name || !primaryRow.last_name) {
+        throw new Error("Owner must have first name and last name");
+      }
+      
+      owners.push({
+        first_name: primaryRow.first_name || "Unknown",
+        middle_name: primaryRow.middle_name || "",
+        last_name: primaryRow.last_name || "Unknown",
+        national_id: primaryRow.national_id
+          ? String(primaryRow.national_id).trim()
+          : null,
+        email: primaryRow.email?.trim() || null,
+        gender: primaryRow.gender || null,
+        phone_number: primaryRow.phone_number || null,
+        relationship_type: primaryRow.relationship_type || null,
+      });
+    } else {
+      throw new Error(`Invalid ownership category: ${ownershipCategory}`);
+    }
+
+    // 2. Prepare Land Record
+    const landRecordData = {
+      parcel_number: primaryRow.parcel_number,
+      land_level: parseInt(primaryRow.land_level) || 1,
+      area: parseFloat(primaryRow.area) || 0,
+      administrative_unit_id: adminUnitId,
+      north_neighbor: primaryRow.north_neighbor || null,
+      east_neighbor: primaryRow.east_neighbor || null,
+      south_neighbor: primaryRow.south_neighbor || null,
+      west_neighbor: primaryRow.west_neighbor || null,
+      land_use: primaryRow.land_use,
+      ownership_type: primaryRow.ownership_type,
+      lease_ownership_type: primaryRow.lease_ownership_type || null,
+      zoning_type: primaryRow.zoning_type || null,
+      priority: primaryRow.priority || null,
+      block_number: primaryRow.block_number || null,
+      block_special_name: primaryRow.block_special_name || null,
+      ownership_category: ownershipCategory,
+      remark: primaryRow.remark || null,
+    };
+
+    // 3. Prepare Documents (one shared for የጋራ, first row only)
+    const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+
+    const documents = documentRows.map((row) => ({
+      document_type: DOCUMENT_TYPES.TITLE_DEED,
+      plot_number: row.plot_number,
+      approver_name: row.approver_name || null,
+      preparer_name: row.preparer_name || null,
+      reference_number: row.reference_number,
+      description: row.description || null,
+      issue_date: row.issue_date ? new Date(row.issue_date) : null,
+      files: [],
     }));
-  } else if (ownershipCategory === "የግል") {
-    owners.push({
-      first_name: primaryRow.first_name || "Unknown",
-      middle_name: primaryRow.middle_name || "Unknown",
-      last_name: primaryRow.last_name || "Unknown",
-      national_id: primaryRow.national_id
-        ? String(primaryRow.national_id).trim()
-        : null,
-      email: primaryRow.email?.trim() || null,
-      gender: primaryRow.gender || null,
-      phone_number: primaryRow.phone_number || null,
-      relationship_type: primaryRow.relationship_type || null,
-    });
+
+    // 4. Prepare Payments (one shared for የጋራ, from first row only)
+    const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
+
+    const payments = paymentRows
+      .filter((row) => row.payment_type)
+      .map((row) => ({
+        payment_type: row.payment_type || PAYMENT_TYPES.TAX,
+        total_amount: parseFloat(row.total_amount) || 0,
+        paid_amount: parseFloat(row.paid_amount) || 0,
+        currency: row.currency || "ETB",
+        payment_status: calculatePaymentStatus(row),
+        description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
+      }));
+
+    return { owners, landRecordData, documents, payments };
+  } catch (error) {
+    throw new Error(`Failed to transform XLSX data: ${error.message}`);
   }
-
-  // 2. Prepare Land Record
-  const landRecordData = {
-    parcel_number: primaryRow.parcel_number,
-    land_level: parseInt(primaryRow.land_level) || 1,
-    area: parseFloat(primaryRow.area) || 0,
-    administrative_unit_id: adminUnitId,
-    north_neighbor: primaryRow.north_neighbor || null,
-    east_neighbor: primaryRow.east_neighbor || null,
-    south_neighbor: primaryRow.south_neighbor || null,
-    west_neighbor: primaryRow.west_neighbor || null,
-    land_use: primaryRow.land_use,
-    ownership_type: primaryRow.ownership_type,
-    lease_ownership_type: primaryRow.lease_ownership_type || null,
-    zoning_type: primaryRow.zoning_type || null,
-    priority: primaryRow.priority || null,
-    block_number: primaryRow.block_number || null,
-    block_special_name: primaryRow.block_special_name || null,
-    ownership_category: ownershipCategory,
-    remark: primaryRow.remark || null,
-  };
-
-  // 3. Prepare Documents (one shared for የጋራ, first row only)
-  const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
-
-  const documents = documentRows.map((row) => ({
-    document_type: DOCUMENT_TYPES.TITLE_DEED,
-    plot_number: row.plot_number,
-    approver_name: row.approver_name || null,
-    preparer_name: row.preparer_name || null,
-    reference_number: row.reference_number,
-    description: row.description || null,
-    issue_date: row.issue_date ? new Date(row.issue_date) : null,
-    files: [],
-  }));
-
-  // 4. Prepare Payments (one shared for የጋራ, from first row only)
-  const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
-
-  const payments = paymentRows
-    .filter((row) => row.payment_type)
-    .map((row) => ({
-      payment_type: row.payment_type || PAYMENT_TYPES.TAX,
-      total_amount: parseFloat(row.total_amount) || 0,
-      paid_amount: parseFloat(row.paid_amount) || 0,
-      currency: row.currency || "ETB",
-      payment_status: calculatePaymentStatus(row),
-      description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
-    }));
-
-  return { owners, landRecordData, documents, payments };
 }
 
-// The calculatePaymentStatus and handleImportError functions remain the same
 function calculatePaymentStatus(row) {
-  const total = parseFloat(row.total_amount) || 0;
-  const paid = parseFloat(row.paid_amount) || 0;
+  try {
+    const total = parseFloat(row.total_amount) || 0;
+    const paid = parseFloat(row.paid_amount) || 0;
 
-  if (paid >= total) return "ተጠናቋል";
-  if (paid > 0 && paid < total) return "በመጠባበቅ ላይ";
-  return "አልተከፈለም";
+    if (paid >= total) return "ተጠናቋል";
+    if (paid > 0 && paid < total) return "በመጠባበቅ ላይ";
+    return "አልተከፈለም";
+  } catch (error) {
+    return "አልተከፈለም"; 
+  }
 }
 
 function handleImportError(error, row, rowNum, results) {
@@ -451,6 +539,7 @@ function handleImportError(error, row, rowNum, results) {
 
   console.error("Import error:", {
     parcel_number: row.parcel_number,
+    plot_number: row.plot_number,
     error: error.message,
   });
 }

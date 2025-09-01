@@ -4,6 +4,7 @@ const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
+const progressMiddlewareSSE = require("../middlewares/uploadProgressSSE");
 
 // Rate limiters
 const getLimiter = rateLimit({
@@ -17,11 +18,11 @@ const postLimiter = rateLimit({
   max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
-// Import Land Records from an XLSX file
+// Import Land Records from an XLSX file with server-sent events (SSE) for progress tracking
 router.post(
   "/import",
   authMiddleware.protect,
-  postLimiter,
+  progressMiddlewareSSE,
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
