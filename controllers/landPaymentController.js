@@ -62,7 +62,6 @@ const addNewPaymentController = async (req, res) => {
   }
 };
 
-
 const getLandPaymentByIdController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -75,8 +74,6 @@ const getLandPaymentByIdController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
-
-
 
 const getPaymentsByLandRecordIdController = async (req, res) => {
   try {
@@ -154,7 +151,6 @@ const updateSinglePaymentController = async (req, res) => {
     });
   }
 };
-
 
 const deleteLandPaymentController = async (req, res) => {
   try {
