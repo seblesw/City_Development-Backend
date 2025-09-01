@@ -370,7 +370,7 @@ async function parseAndValidateXLSX(filePath) {
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
       defval: null, 
-      dateNF: "DD/MM/YYYY", 
+      // dateNF: "DD/MM/YYYY", 
     });
 
     // Validate data
