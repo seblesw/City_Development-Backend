@@ -11,7 +11,7 @@ const progressMiddlewareSSE = (req, res, next) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('X-Accel-Buffering', 'no'); // Important for Nginx
+  res.setHeader('X-Accel-Buffering', 'no'); 
 
   const totalBytes = parseInt(req.headers['content-length']) || 0;
   let uploadedBytes = 0;
