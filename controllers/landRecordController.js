@@ -89,7 +89,7 @@ const importLandRecordsFromXLSX = async (req, res) => {
         // Add progress callback for processing phase if SSE is active
         progressCallback: req.uploadProgress 
           ? (progress, message) => {
-              // Processing phase: 100-200% scale
+              // Processing phase
               const overallProgress = 100 + Math.floor(progress);
               req.uploadProgress.progress(
                 Math.min(200, overallProgress), 
