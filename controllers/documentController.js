@@ -180,7 +180,6 @@ const toggleDocumentStatus = async (req, res) => {
   }
 };
 
-
 module.exports = {
   createDocumentController,
   toggleDocumentStatus,
