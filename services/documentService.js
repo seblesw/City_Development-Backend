@@ -182,16 +182,19 @@ const getAllDocumentService = async (options = {}) => {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
+
+
 const importPDFs = async ({ files, uploaderId }) => {
   const updatedDocuments = [];
   const unmatchedLogs = [];
 
   for (const file of files) {
     try {
-      const basePlotNumber = path.basename(
-        file.originalname,
-        path.extname(file.originalname)
-      );
+      // Use preserved Unicode name for matching
+      const basePlotNumber = (
+        file.originalnameUnicode ||
+        path.basename(file.originalname, path.extname(file.originalname))
+      ).normalize("NFC"); // normalize Unicode for safety
 
       const document = await Document.findOne({
         where: { plot_number: basePlotNumber },
@@ -201,7 +204,6 @@ const importPDFs = async ({ files, uploaderId }) => {
         const logMsg = `በዚህ ፋይል ስም የተሰየመ plot_number የለም: '${basePlotNumber}'። እባክዎ ፋይሉን እንደገና ይመልከቱ።`;
         unmatchedLogs.push(logMsg);
 
-        // Delete unmatched file
         try {
           fs.unlink(file.path);
         } catch (err) {
@@ -212,16 +214,11 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // Get server-relative path (from project root)
       const serverRelativePath = path
-        .relative(
-          path.join(__dirname, ".."), // Go up to project root
-          file.path
-        )
+        .relative(path.join(__dirname, ".."), file.path)
         .split(path.sep)
-        .join("/"); // Convert to forward slashes
+        .join("/");
 
-      // Handle files array (convert strings to objects if needed)
       const filesArray = Array.isArray(document.files)
         ? document.files.map((f) =>
             typeof f === "string"
@@ -237,7 +234,6 @@ const importPDFs = async ({ files, uploaderId }) => {
           )
         : [];
 
-      // Check if file already exists
       const fileExists = filesArray.some(
         (f) => f.file_path === serverRelativePath
       );
