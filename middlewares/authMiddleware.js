@@ -26,6 +26,7 @@ const protect = async (req, res, next) => {
         "first_name",
         "middle_name",
         "last_name",
+        "national_id",
         "email",
         "phone_number",
         "role_id",
