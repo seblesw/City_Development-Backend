@@ -68,7 +68,7 @@ router.post(
 router.post(
   "/",
   authMiddleware.protect,
-  postLimiter,
+  // postLimiter,
   upload.fields([
     { name: 'documents', maxCount: 20 },
     { name: 'profile_picture', maxCount: 10 }
