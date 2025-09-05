@@ -23,10 +23,10 @@ const storage = multer.diskStorage({
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const ext = path.extname(file.originalname);
 
-    // Keep Amharic + other Unicode letters, 
+    // Keep Amharic + other Unicode letters
     const sanitizedName = path
       .basename(file.originalname, ext)
-      .replace(/[/\\?%*:|"<>]/g, "") 
+      .replace(/[/\\?%*:|"<>]/g, "")
       .slice(0, 100);
 
     const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
@@ -34,7 +34,7 @@ const storage = multer.diskStorage({
     // Preserve original Unicode name for DB matching
     file.originalnameUnicode = sanitizedName;
 
-    // Server-relative path
+    // Save server-relative path for later
     file.serverRelativePath =
       file.fieldname === "profile_picture"
         ? `uploads/pictures/${filename}`
