@@ -24,7 +24,6 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
         name,
         region_id,
       },
-      paranoid: false, // Include soft-deleted records
       transaction,
     });
 
