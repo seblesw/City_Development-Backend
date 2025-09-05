@@ -29,7 +29,7 @@ router.get(
 router.post(
   "/import-pdfs",
   authMiddleware.protect,
-  upload.array("documents", 1000),
+  upload.array("documents", 3000),
   documentController.importPDFDocuments
 );
 
