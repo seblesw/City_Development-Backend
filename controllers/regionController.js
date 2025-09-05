@@ -6,7 +6,7 @@ const {
   deleteRegionService,
 } = require("../services/regionService");
 
-exports.createRegion = async (req, res) => {
+const createRegion = async (req, res) => {
   try {
     const userId = req.user.id;
     const region = await createRegionService(req.body, userId);
@@ -22,7 +22,7 @@ exports.createRegion = async (req, res) => {
   }
 };
 
-exports.getAllRegions = async (req, res) => {
+const getAllRegions = async (req, res) => {
   try {
     const regions = await getAllRegionsService();
     const numberOfRegions = regions.length;
@@ -39,7 +39,7 @@ exports.getAllRegions = async (req, res) => {
   }
 };
 
-exports.getRegionById = async (req, res) => {
+const getRegionById = async (req, res) => {
   try {
     const region = await getRegionByIdService(req.params.id);
     res.status(200).json({
@@ -54,7 +54,7 @@ exports.getRegionById = async (req, res) => {
   }
 };
 
-exports.updateRegion = async (req, res) => {
+const updateRegion = async (req, res) => {
   try {
     const userId =  req.user.id; 
     const region = await updateRegionService(req.params.id, req.body, userId);
@@ -70,7 +70,7 @@ exports.updateRegion = async (req, res) => {
   }
 };
 
-exports.deleteRegion = async (req, res) => {
+const deleteRegion = async (req, res) => {
   try {
     const userId = req.user.id; 
     await deleteRegionService(req.params.id, userId);
@@ -81,4 +81,11 @@ exports.deleteRegion = async (req, res) => {
       message: error.message || "ክልል መሰረዝ አልተሳካም።",
     });
   }
+};
+module.exports = {
+  createRegion,
+  getAllRegions,
+  getRegionById,
+  updateRegion,
+  deleteRegion,
 };

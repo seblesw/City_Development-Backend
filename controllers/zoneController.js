@@ -6,7 +6,7 @@ const {
   deleteZoneService,
 } = require("../services/zoneService");
 
-exports.createZone = async (req, res) => {
+const createZone = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     const zone = await createZoneService(req.body, userId);
@@ -22,7 +22,7 @@ exports.createZone = async (req, res) => {
   }
 };
 
-exports.getAllZones = async (req, res) => {
+const getAllZones = async (req, res) => {
   try {
     const zones = await getAllZonesService();
     const numberOfZones = zones.length;
@@ -39,7 +39,7 @@ exports.getAllZones = async (req, res) => {
   }
 };
 
-exports.getZoneById = async (req, res) => {
+const getZoneById = async (req, res) => {
   try {
     const zone = await getZoneByIdService(req.params.id);
     res.status(200).json({
@@ -54,7 +54,7 @@ exports.getZoneById = async (req, res) => {
   }
 };
 
-exports.updateZone = async (req, res) => {
+const updateZone = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     const zone = await updateZoneService(req.params.id, req.body, userId);
@@ -70,7 +70,7 @@ exports.updateZone = async (req, res) => {
   }
 };
 
-exports.deleteZone = async (req, res) => {
+const deleteZone = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     await deleteZoneService(req.params.id, userId);
@@ -81,4 +81,12 @@ exports.deleteZone = async (req, res) => {
       message: error.message || "ዞን መሰረዝ አልተሳካም።",
     });
   }
+
+};
+module.exports = {
+  createZone,
+  getAllZones,
+  getZoneById,
+  updateZone,
+  deleteZone,
 };

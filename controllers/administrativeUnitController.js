@@ -6,7 +6,7 @@ const {
   deleteAdministrativeUnitService,
 } = require("../services/administrativeUnitService");
 
-exports.createAdministrativeUnit = async (req, res) => {
+const createAdministrativeUnit = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     const unit = await createAdministrativeUnitService(req.body, userId);
@@ -22,7 +22,7 @@ exports.createAdministrativeUnit = async (req, res) => {
   }
 };
 
-exports.getAllAdministrativeUnits = async (req, res) => {
+const getAllAdministrativeUnits = async (req, res) => {
   try {
     const units = await getAllAdministrativeUnitsService();
     const numberOfUnits = units.length;
@@ -39,7 +39,7 @@ exports.getAllAdministrativeUnits = async (req, res) => {
   }
 };
 
-exports.getAdministrativeUnitById = async (req, res) => {
+const getAdministrativeUnitById = async (req, res) => {
   try {
     const unit = await getAdministrativeUnitByIdService(req.params.id);
     res.status(200).json({
@@ -54,7 +54,7 @@ exports.getAdministrativeUnitById = async (req, res) => {
   }
 };
 
-exports.updateAdministrativeUnit = async (req, res) => {
+const updateAdministrativeUnit = async (req, res) => {
   try {
 
 
@@ -96,7 +96,7 @@ exports.updateAdministrativeUnit = async (req, res) => {
   }
 };
 
-exports.deleteAdministrativeUnit = async (req, res) => {
+const deleteAdministrativeUnit = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     await deleteAdministrativeUnitService(req.params.id, userId);
@@ -107,4 +107,11 @@ exports.deleteAdministrativeUnit = async (req, res) => {
       message: error.message || "አስተዳደር ክፍል መሰረዝ አልተሳካም።",
     });
   }
+};
+module.exports = {
+  createAdministrativeUnit,
+  getAllAdministrativeUnits,
+  getAdministrativeUnitById,
+  updateAdministrativeUnit,
+  deleteAdministrativeUnit,
 };
