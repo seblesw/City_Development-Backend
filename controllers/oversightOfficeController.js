@@ -7,7 +7,7 @@ const {
   getOversightOfficeStatsService,
 } = require('../services/oversightOfficeService');
 
-exports.createOversightOffice = async (req, res) => {
+const createOversightOffice = async (req, res) => {
   try {
     const { name, region_id, zone_id, woreda_id } = req.body;
     const userId = req.user.id;
@@ -26,7 +26,7 @@ exports.createOversightOffice = async (req, res) => {
   }
 };
 
-exports.getAllOversightOffices = async (req, res) => {
+const getAllOversightOffices = async (req, res) => {
   try {
     const { regionId } = req.query;
     const offices = await getAllOversightOfficesService(regionId);
@@ -44,7 +44,7 @@ exports.getAllOversightOffices = async (req, res) => {
   }
 };
 
-exports.getOversightOfficeById = async (req, res) => {
+const getOversightOfficeById = async (req, res) => {
   try {
     const office = await getOversightOfficeByIdService(req.params.id);
     res.status(200).json({
@@ -59,7 +59,7 @@ exports.getOversightOfficeById = async (req, res) => {
   }
 };
 
-exports.updateOversightOffice = async (req, res) => {
+const updateOversightOffice = async (req, res) => {
   try {
     const { name, region_id, zone_id, woreda_id } = req.body;
     const userId = req.user.id;
@@ -76,7 +76,7 @@ exports.updateOversightOffice = async (req, res) => {
   }
 };
 
-exports.deleteOversightOffice = async (req, res) => {
+const deleteOversightOffice = async (req, res) => {
   try {
     await deleteOversightOfficeService(req.params.id);
     res.status(204).send();
@@ -88,7 +88,7 @@ exports.deleteOversightOffice = async (req, res) => {
   }
 };
 //get the statistics of the oversight office
-exports.getOversightOfficeStats = async (req, res) => {
+const getOversightOfficeStats = async (req, res) => {
   try {
     const userOversightOfficeId = req.user.oversight_office_id;
     if (!userOversightOfficeId) {
@@ -106,4 +106,12 @@ exports.getOversightOfficeStats = async (req, res) => {
       message: error.message || 'Failed to get oversight office statistics',
     });
   }
+};
+module.exports = {
+  createOversightOffice,
+  getAllOversightOffices,
+  getOversightOfficeById,
+  updateOversightOffice,
+  deleteOversightOffice,
+  getOversightOfficeStats,
 };
