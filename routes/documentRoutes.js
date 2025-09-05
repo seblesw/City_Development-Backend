@@ -14,15 +14,13 @@ const getLimiter = rateLimit({
 router.post(
   "/",
   authMiddleware.protect,
-  //   authMiddleware.restrictTo("መዝጋቢ"),
-  upload.array("documents", 10), // Allow up to 10 files
+  upload.array("documents", 10), 
   documentController.createDocumentController
 );
 // Get all documents (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 router.get(
   "/",
-  // authMiddleware.protect,
-  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  authMiddleware.protect,
   getLimiter,
   documentController.getAllDocumentsController
 );
@@ -37,7 +35,6 @@ router.post(
 router.post(
   "/:id/files",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ"),
   upload.array("documents", 10),
   documentController.addFilesToDocumentController
 );
@@ -45,8 +42,7 @@ router.post(
 // Get a document by ID (requires authentication, accessible to መዝጋቢ and አስተዳደር)
 router.get(
   "/:id",
-  // authMiddleware.protect,
-  //   authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
+  authMiddleware.protect,
   getLimiter,
   documentController.getDocumentByIdController
 );
@@ -55,7 +51,6 @@ router.get(
 router.put(
   "/:id",
   authMiddleware.protect,
-  //   authMiddleware.restrictTo("አስተዳደር"),
   upload.array("documents", 10),
   documentController.updateDocumentController
 );
@@ -64,14 +59,12 @@ router.put(
 router.delete(
   "/:id",
   authMiddleware.protect,
-  //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.deleteDocumentController
 );
 //document status toggle (activate/deactivate)
 router.post(
   "/:id/status",
   authMiddleware.protect,
-  //   authMiddleware.restrictTo("አስተዳደር"),
   documentController.toggleDocumentStatus
 );
 

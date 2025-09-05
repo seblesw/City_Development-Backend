@@ -339,7 +339,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // 🔍 Check if same file path already exists (rare, but double safety)
+      //  Check if same file path already exists (rare, but double safety)
       const filePathExists = filesArray.some(
         (f) => f.file_path === serverRelativePath
       );
@@ -357,7 +357,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // ✅ Save new file metadata
+      //  Save new file metadata
       filesArray.push({
         file_path: serverRelativePath,
         file_name: file.originalname,
@@ -378,7 +378,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         files: document.files,
       });
 
-      // ✅ Add to LandRecord action log
+      //  Add to LandRecord action log
       const landRecord = await LandRecord.findByPk(document.land_record_id);
       if (landRecord) {
         const actionLog = Array.isArray(landRecord.action_log)
@@ -653,7 +653,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
     }
 
     // Soft delete document
-    await document.destroy({ transaction: t });
+    await document.destroy({ transaction: t, force: true });
 
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
