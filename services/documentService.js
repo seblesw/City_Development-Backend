@@ -320,7 +320,7 @@ const importPDFs = async ({ files, uploaderId }) => {
           )
         : [];
 
-      // 🔍 Check if same file name already exists
+      // Check if same file name already exists
       const fileNameExists = filesArray.some(
         (f) => f.file_name === file.originalname
       );
@@ -621,15 +621,6 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
   try {
     t = t || (await sequelize.transaction());
 
-    // Validate deleter role
-    const deleter = await User.findByPk(deleterId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-    });
-    if (!deleter || !["አስተዳደር"].includes(deleter.role?.name)) {
-      throw new Error("ሰነድ መሰረዝ የሚችሉት አስተዳደር ብቻ ናቸው።");
-    }
-
     const document = await Document.findByPk(id, { transaction: t });
     if (!document) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
@@ -651,10 +642,8 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       ];
       await landRecord.save({ transaction: t });
     }
-
     // Soft delete document
-    await document.destroy({ transaction: t, force: true });
-
+    await document.destroy({ transaction: t, });
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
   } catch (error) {
