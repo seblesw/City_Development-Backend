@@ -2161,7 +2161,6 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
   }
 };
 //Updating an existing land record
-// Enhanced Service
 const updateLandRecordService = async (
   recordId,
   data,
@@ -2345,8 +2344,7 @@ const changeRecordStatusService = async (
         {
           model: User,
           as: "creator",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
+          attributes: ["id", "first_name", "middle_name", "last_name", "email"],},
         {
           model: User,
           as: "owners",
@@ -2419,7 +2417,7 @@ const changeRecordStatusService = async (
       if (owner.email) {
         // Get the updater's admin unit details
         const updaterWithAdminUnit = await User.findByPk(userId, {
-          attributes: ["first_name", "middle_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name", "email", "phone_number"],
           include: [
             {
               model: AdministrativeUnit,
@@ -2995,7 +2993,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
                 model: LandRecord,
                 as: "landRecord",
                 where: baseWhere,
-                attributes: [],
               },
             ],
             transaction: t,
