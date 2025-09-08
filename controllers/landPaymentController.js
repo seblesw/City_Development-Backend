@@ -32,7 +32,7 @@ const addNewPaymentController = async (req, res) => {
           model: User,
           through: { attributes: [] },
           as: "owners", 
-          attributes: ["id", "first_name", "middle_name", "email"],
+          attributes: ["id", "first_name", "middle_name","last_name","phone_number", "email"],
         },
       ],
     });

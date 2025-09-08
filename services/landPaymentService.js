@@ -168,22 +168,9 @@ const getLandPaymentByIdService = async (id, options = {}) => {
         {
           model: LandRecord,
           as: "landRecord",
-          attributes: ["id", "parcel_number"],
+          //commented to get all attribuetes of land record
+          // attributes: ["id", "parcel_number"], 
         },
-      ],
-      attributes: [
-        "id",
-        "land_record_id",
-        "payment_type",
-        "total_amount",
-        "paid_amount",
-        "currency",
-        "payment_status",
-        "penalty_reason",
-        "description",
-        "createdAt",
-        "updatedAt",
-        "deletedAt",
       ],
       transaction,
     });
@@ -206,20 +193,22 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
           model: LandRecord,
           as: "landRecord",
           attributes: ["id", "parcel_number"],
+          include: [
+            {
+              model: User,
+              through: { attributes: [] },
+              as: "owners",
+              attributes: ["id", "first_name", "middle_name","last_name", "email"],
+              include: [
+                {
+                  model: Role,
+                  as: "role",
+                  attributes: ["id", "name"],
+                },
+              ],
+            },
+          ],
         },
-      ],
-      attributes: [
-        "id",
-        "land_record_id",
-        "payment_type",
-        "total_amount",
-        "paid_amount",
-        "currency",
-        "payment_status",
-        "penalty_reason",
-        "description",
-        "createdAt",
-        "updatedAt",
       ],
       transaction,
     });
