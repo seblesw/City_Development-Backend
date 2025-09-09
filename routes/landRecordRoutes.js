@@ -91,7 +91,6 @@ router.get(
 router.get(
   "/",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getAllLandRecords
 );
@@ -135,7 +134,6 @@ router.get(
 router.put(
   "/:id",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("አስተዳደር"),
   postLimiter,
   upload.array("documents", 10),
   landRecordController.updateLandRecord
@@ -154,7 +152,6 @@ router.post(
 router.delete(
   "/:id/permanent",
   authMiddleware.protect,
-  // authMiddleware.restrictTo('admin'),
   landRecordController.permanentlyDelete
 );
 
