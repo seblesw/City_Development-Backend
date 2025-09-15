@@ -33,6 +33,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
+<<<<<<< HEAD
 // app.get('/', (req, res) => {
 //   res.json({
 //     message: 'Welcome to Teamwork IT Solution Land Management System API',
@@ -40,6 +41,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 //     endpoints: '/api/v1 => the first version',
 //   });
 // });
+=======
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to Teamwork IT Solution Land Management System API',
+    version: '1.0',
+    endpoints: '/api/v1 the first version',
+  });
+});
+>>>>>>> 7c5509d0ebc0137b38d02c7c8c9b8cd7b5fb2f47
 
 //the endpoints
 app.use('/api/v1/regions', regionRoutes);
@@ -68,7 +78,7 @@ const startServer = async () => {
     // Sync models with the database
     // Set force to true only in development to drop tables={force:true}
     // set alter to true for to add new attribuete with out drop existing table {alter:true}
-    await db.sync({alter:true}); 
+    // await db.sync({alter:true}); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

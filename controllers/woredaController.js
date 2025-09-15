@@ -6,7 +6,7 @@ const {
   deleteWoredaService,
 } = require("../services/woredaService");
 
-exports.createWoreda = async (req, res) => {
+const createWoreda = async (req, res) => {
   try {
     // const userId = req.user.id;
     const woreda = await createWoredaService(req.body);
@@ -22,7 +22,7 @@ exports.createWoreda = async (req, res) => {
   }
 };
 
-exports.getAllWoredas = async (req, res) => {
+const getAllWoredas = async (req, res) => {
   try {
     const woredas = await getAllWoredasService();
     const numberOfWoredas = woredas.length;
@@ -39,7 +39,7 @@ exports.getAllWoredas = async (req, res) => {
   }
 };
 
-exports.getWoredaById = async (req, res) => {
+const getWoredaById = async (req, res) => {
   try {
     const woreda = await getWoredaByIdService(req.params.id);
     res.status(200).json({
@@ -54,7 +54,7 @@ exports.getWoredaById = async (req, res) => {
   }
 };
 
-exports.updateWoreda = async (req, res) => {
+const updateWoreda = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     const woreda = await updateWoredaService(req.params.id, req.body, userId);
@@ -70,7 +70,7 @@ exports.updateWoreda = async (req, res) => {
   }
 };
 
-exports.deleteWoreda = async (req, res) => {
+const deleteWoreda = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
     await deleteWoredaService(req.params.id, userId);
@@ -81,4 +81,12 @@ exports.deleteWoreda = async (req, res) => {
       message: error.message || "ወረዳ መሰረዝ አልተሳካም።",
     });
   }
+};
+
+module.exports = {
+  createWoreda,
+  getAllWoredas,  
+  getWoredaById,
+  updateWoreda,
+  deleteWoreda,
 };

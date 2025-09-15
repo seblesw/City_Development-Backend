@@ -3,10 +3,9 @@ const {
   createDocumentService,
   addFilesToDocumentService,
   getDocumentByIdService,
-  updateDocumentService,
+  updateDocumentsService,
   deleteDocumentService,
   importPDFs,
-  inactivateDocumentService,
   getAllDocumentService,
   toggleDocumentStatusService,
 } = require("../services/documentService");
@@ -134,7 +133,7 @@ const updateDocumentController = async (req, res) => {
       isActive: body.isActive,
       inActived_reason: body.inActived_reason,
     };
-    const document = await updateDocumentService(id, data, files, user.id);
+    const document = await updateDocumentsService(id, data, files, user.id);
     return res.status(200).json({
       message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተቀይሯል።`,
       data: document,
@@ -162,7 +161,7 @@ const deleteDocumentController = async (req, res) => {
 const toggleDocumentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, reason } = req.body; // action: 'activate' or 'deactivate'
+    const { action, reason } = req.body; 
     const userId = req.user.id;
 
     // Validate deactivation reason
@@ -188,7 +187,6 @@ const toggleDocumentStatus = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   createDocumentController,

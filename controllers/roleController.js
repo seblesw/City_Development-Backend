@@ -6,7 +6,7 @@ const {
   deleteRoleService,
 } = require("../services/roleService");
 
-exports.createRole = async (req, res) => {
+const createRole = async (req, res) => {
   try {
     const { name, permissions } = req.body;
     const role = await createRoleService({ name, permissions });
@@ -22,7 +22,7 @@ exports.createRole = async (req, res) => {
   }
 };
 
-exports.getAllRoles = async (req, res) => {
+const getAllRoles = async (req, res) => {
   try {
     const roles = await getAllRolesService(req.query);
     const numberOfRoles = roles.length;
@@ -39,7 +39,7 @@ exports.getAllRoles = async (req, res) => {
   }
 };
 
-exports.getRoleById = async (req, res) => {
+const getRoleById = async (req, res) => {
   try {
     const role = await getRoleByIdService(req.params.id);
     res.status(200).json({
@@ -54,7 +54,7 @@ exports.getRoleById = async (req, res) => {
   }
 };
 
-exports.updateRole = async (req, res) => {
+const updateRole = async (req, res) => {
   try {
     const { name, permissions } = req.body;
     const role = await updateRoleService(req.params.id, { name, permissions });
@@ -70,7 +70,7 @@ exports.updateRole = async (req, res) => {
   }
 };
 
-exports.deleteRole = async (req, res) => {
+const deleteRole = async (req, res) => {
   try {
     await deleteRoleService(req.params.id);
     res.status(204).send();
@@ -80,4 +80,11 @@ exports.deleteRole = async (req, res) => {
       message: error.message || "ሚና መሰረዝ አልተሳካም።",
     });
   }
+};
+module.exports = {
+  createRole,
+  getAllRoles,
+  getRoleById,
+  updateRole,
+  deleteRole,
 };

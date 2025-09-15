@@ -95,7 +95,7 @@ const updateRegionService = async (id, regionData, updatedByUserId) => {
   });
 };
 
-const deleteRegionService = async (id,) => {
+const deleteRegionService = async (id) => {
   const region = await Region.findOne({
     where: { id },
   });
@@ -103,7 +103,7 @@ const deleteRegionService = async (id,) => {
     throw new Error("ክልል አልተገኘም።");
   }
 
-  await region.destroy();
+  await region.destroy({force: true});
 };
 
 module.exports = {

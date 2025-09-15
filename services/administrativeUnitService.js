@@ -120,7 +120,6 @@ const getAdministrativeUnitByIdService = async (id) => {
 
 const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, transaction = null) => {
   try {
- 
 
     // 1. Get the existing unit
     const unit = await AdministrativeUnit.findByPk(id, { 

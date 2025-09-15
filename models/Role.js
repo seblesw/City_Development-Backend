@@ -20,6 +20,7 @@ module.exports = (db, DataTypes) => {
           len: { args: [2, 50], msg: "ሚና ስም ከ2 እስከ 50 ቁምፊዎች መሆን አለበት።" },
         },
       },
+    
       permissions: {
         type: DataTypes.JSON,
         allowNull: true,

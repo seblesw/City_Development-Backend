@@ -4,6 +4,7 @@ const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
+const progressMiddlewareSSE = require("../middlewares/uploadProgressSSE");
 
 // Rate limiters
 const getLimiter = rateLimit({
@@ -17,11 +18,11 @@ const postLimiter = rateLimit({
   max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
-// Import Land Records from CSV
+// Import Land Records from an XLSX file with server-sent events (SSE) for progress tracking
 router.post(
   "/import",
   authMiddleware.protect,
-  postLimiter,
+  progressMiddlewareSSE,
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
@@ -67,9 +68,9 @@ router.post(
 router.post(
   "/",
   authMiddleware.protect,
-  postLimiter,
+  // postLimiter,
   upload.fields([
-    { name: 'documents', maxCount: 200 },
+    { name: 'documents', maxCount: 20 },
     { name: 'profile_picture', maxCount: 10 }
   ]),  landRecordController.createLandRecord
 );
@@ -90,7 +91,6 @@ router.get(
 router.get(
   "/",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("መዝጋቢ", "አስተዳደር"),
   getLimiter,
   landRecordController.getAllLandRecords
 );
@@ -134,7 +134,6 @@ router.get(
 router.put(
   "/:id",
   authMiddleware.protect,
-  // authMiddleware.restrictTo("አስተዳደር"),
   postLimiter,
   upload.array("documents", 10),
   landRecordController.updateLandRecord
@@ -153,7 +152,6 @@ router.post(
 router.delete(
   "/:id/permanent",
   authMiddleware.protect,
-  // authMiddleware.restrictTo('admin'),
   landRecordController.permanentlyDelete
 );
 

@@ -61,40 +61,95 @@ const createLandRecord = async (req, res) => {
     });
   }
 };
+// controllers/landRecordController.js
 const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
+  
   try {
     if (!req.file) {
+      // Handle both SSE and regular responses
+      if (req.uploadProgress) {
+        req.uploadProgress.error('XLSX ፋይል ያስፈልጋል።');
+        setTimeout(() => res.end(), 100);
+        return;
+      }
       throw new Error("XLSX ፋይል ያስፈልጋል።");
+    }
+
+    // Notify processing start if using SSE
+    if (req.uploadProgress) {
+      req.uploadProgress.progress(100, 'Processing started...');
     }
 
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
-      { transaction: t }
+      { 
+        transaction: t,
+        // Add progress callback for processing phase if SSE is active
+        progressCallback: req.uploadProgress 
+          ? (progress, message) => {
+              // Processing phase
+              const overallProgress = 100 + Math.floor(progress);
+              req.uploadProgress.progress(
+                Math.min(200, overallProgress), 
+                message
+              );
+            }
+          : null
+      }
     );
 
     await t.commit();
-    fs.unlinkSync(req.file.path);
+    
+    // Clean up file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
 
-    res.status(201).json({
-      status: "success",
-      message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
-      data: {
-        created: results.createdCount,
-        skipped: results.skippedCount,
-        errors: results.errors.slice(0, 10),
-      },
-    });
+    // Handle response based on whether SSE is active
+    if (req.uploadProgress) {
+      req.uploadProgress.complete({
+        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+        data: {
+          created: results.createdCount,
+          skipped: results.skippedCount,
+          errors: results.errors.slice(0, 10),
+        }
+      });
+      setTimeout(() => res.end(), 100);
+    } else {
+      // Original response format for non-SSE requests
+      res.status(201).json({
+        status: "success",
+        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+        data: {
+          created: results.createdCount,
+          skipped: results.skippedCount,
+          errors: results.errors.slice(0, 10),
+        },
+      });
+    }
+
   } catch (error) {
     await t.rollback();
-    if (req.file?.path) fs.unlinkSync(req.file.path);
+    
+    // Clean up file if it exists
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
 
-    res.status(400).json({
-      status: "error",
-      message: error.message,
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-    });
+    // Handle error based on whether SSE is active
+    if (req.uploadProgress) {
+      req.uploadProgress.error(error.message, error);
+      setTimeout(() => res.end(), 100);
+    } else {
+      res.status(400).json({
+        status: "error",
+        message: error.message,
+        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+      });
+    }
   }
 };
 const saveLandRecordAsDraft = async (req, res) => {

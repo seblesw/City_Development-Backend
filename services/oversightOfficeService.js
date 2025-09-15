@@ -14,7 +14,7 @@ const {
   User,
   LAND_USE_TYPES,
 } = require("../models");
-exports.createOversightOfficeService = async (data, userId, transaction) => {
+const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
 
   try {
@@ -24,7 +24,6 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
         name,
         region_id,
       },
-      paranoid: false, // Include soft-deleted records
       transaction,
     });
 
@@ -90,12 +89,11 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
       // Check if code already exists
       const codeExists = await OversightOffice.findOne({
         where: { code },
-        paranoid: false,
         transaction,
       });
 
       if (!codeExists) {
-        break; // Code is unique, proceed
+        break; 
       }
 
       if (attempts === maxAttempts) {
@@ -116,12 +114,12 @@ exports.createOversightOfficeService = async (data, userId, transaction) => {
       { transaction }
     );
   } catch (error) {
-    console.error("Error in createOversightOfficeService:", error);
+    console.error(error);
     throw new Error(error.message || "ቢሮ መፍጠር አልተሳካም።");
   }
 };
 
-exports.getAllOversightOfficesService = async (regionId) => {
+const getAllOversightOfficesService = async (regionId) => {
   try {
     const where = regionId
       ? { region_id: regionId, deletedAt: { [Op.eq]: null } }
@@ -142,7 +140,7 @@ exports.getAllOversightOfficesService = async (regionId) => {
   }
 };
 
-exports.getOversightOfficeByIdService = async (id) => {
+const getOversightOfficeByIdService = async (id) => {
   try {
     const office = await OversightOffice.findByPk(id, {
       include: [
@@ -161,7 +159,7 @@ exports.getOversightOfficeByIdService = async (id) => {
   }
 };
 
-exports.updateOversightOfficeService = async (
+const updateOversightOfficeService = async (
   id,
   data,
   userId,
@@ -206,7 +204,7 @@ exports.updateOversightOfficeService = async (
   }
 };
 
-exports.deleteOversightOfficeService = async (id, transaction) => {
+const deleteOversightOfficeService = async (id, transaction) => {
   try {
     const office = await OversightOffice.findByPk(id, { transaction });
     if (!office) throw new Error("ቢሮ አልተገኘም።");
@@ -217,7 +215,7 @@ exports.deleteOversightOfficeService = async (id, transaction) => {
 };
 
 
-exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
+const getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
     // 1. Get the oversight office and its hierarchy
     const oversightOffice = await OversightOffice.findByPk(oversightOfficeId, {
@@ -229,7 +227,7 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
     });
 
     if (!oversightOffice) {
-      throw new Error("Oversight office not found");
+      throw new Error("ቢሮ አልተገኘም።");
     }
 
     // 2. Determine hierarchy level and build query
@@ -292,16 +290,8 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
         through: { 
           attributes: [] 
         },
-        attributes: ["id"],
         required: false
       }],
-      attributes: [
-        'id',
-        'administrative_unit_id',
-        'ownership_type',
-        'land_use',
-        'zoning_type'
-      ]
     });
 
     // 6. Initialize statsByAdminUnit with all possible enum values
@@ -408,4 +398,12 @@ exports.getOversightOfficeStatsService = async (oversightOfficeId) => {
     console.error('Error in getOversightOfficeStatsService:', error);
     throw new Error(error.message || "Failed to get oversight office statistics");
   }
+};
+module.exports = {
+  createOversightOfficeService,
+  getAllOversightOfficesService,
+  getOversightOfficeByIdService,
+  updateOversightOfficeService,
+  deleteOversightOfficeService,
+  getOversightOfficeStatsService,
 };
