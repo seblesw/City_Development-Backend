@@ -33,13 +33,14 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-// app.get('/', (req, res) => {
-//   res.json({
-//     message: 'Welcome to Teamwork IT Solution Land Management System API',
-//     version: '1.0',
-//     endpoints: '/api/v1 => the first version',
-//   });
-// });
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to Teamwork IT Solution Land Management System API',
+    version: '1.0',
+    endpoints: '/api/v1 => the first version',
+  });
+});
+app.use(express.static(path.join(__dirname, 'dist')));
 
 //the endpoints
 app.use('/api/v1/regions', regionRoutes);
@@ -55,11 +56,15 @@ app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/documents', express.static(path.join(__dirname, 'uploads/documents/ሰነድ')));
 
-app.use(express.static(path.join(__dirname,'dist','index.html')))
-    app.get('/',(req,res)=>{
-      res.sendFile(path.join(__dirname,'dist','index.html'))
-    });
-    app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+// app.use(express.static(path.join(__dirname,'dist','index.html')))
+//     app.get('/',(req,res)=>{
+//       res.sendFile(path.join(__dirname,'dist','index.html'))
+//     });
+//     app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
 // Start server
 const startServer = async () => {
