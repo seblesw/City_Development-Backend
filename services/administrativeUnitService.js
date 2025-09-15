@@ -92,7 +92,7 @@ const getAllAdministrativeUnitsService = async () => {
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
-      { model: LandRecord, as: "landRecords" },
+      // { model: LandRecord, as: "landRecords" },
     ],
     order: [["createdAt", "DESC"]],
   });

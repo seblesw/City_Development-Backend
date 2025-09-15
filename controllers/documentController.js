@@ -58,8 +58,16 @@ const importPDFDocuments = async (req, res) => {
   try {
     const uploaderId = req.user?.id;
     const files = req.files || [];
+    
+    // Ensure filenames are properly decoded (as backup)
+    const processedFiles = files.map(file => ({
+      ...file,
+      originalname: Buffer.from(file.originalname, 'binary').toString('utf8')
+    }));
 
-    const result = await importPDFs({ files, uploaderId });
+    console.log("Importing PDFs:", processedFiles);
+
+    const result = await importPDFs({ files: processedFiles, uploaderId });
 
     return res.status(200).json({
       status: "success",

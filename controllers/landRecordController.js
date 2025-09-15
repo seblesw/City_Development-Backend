@@ -724,7 +724,7 @@ const getLandRecordStatsController = async (req, res, next) => {
     const stats = await getLandRecordStats(adminUnitId, options);
 
     res.status(200).json({
-      status: "success",
+      status: "success", 
       message: "የመሬት መዝገብ ስታቲስቲክስ በተሳካ ሁኔታ ተገኝቷል።",
       data: stats,
     });

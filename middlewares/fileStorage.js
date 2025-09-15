@@ -1,6 +1,7 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const iconv = require("iconv-lite");
 
 // Define root directories
 const DOCUMENTS_DIR = path.join(__dirname, "..", "uploads", "documents");
@@ -23,20 +24,26 @@ const storage = multer.diskStorage({
     cb(null, destination);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    const sanitizedName = path.basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9-_.]/g, "")
-      .slice(0, 100);
-    const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
-    
-    // Add server-relative path to the file object
-    file.serverRelativePath = file.fieldname === 'profile_picture'
-      ? `uploads/pictures/${filename}`
-      : `uploads/documents/${filename}`;
-    
-    cb(null, filename);
-  }
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  const ext = path.extname(file.originalname);
+  
+  // Use iconv-lite for better encoding handling
+  const originalName = iconv.decode(Buffer.from(file.originalname, 'binary'), 'utf8');
+  const baseName = path.basename(originalName, ext);
+  
+  const sanitizedName = baseName
+    .replace(/[<>:"/\\|?*]/g, "")
+    .slice(0, 100);
+  
+  const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
+  
+  // Add server-relative path to the file object
+  file.serverRelativePath = file.fieldname === 'profile_picture'
+    ? `uploads/pictures/${filename}`
+    : `uploads/documents/${filename}`;
+  
+  cb(null, filename);
+}
 });
 
 const fileFilter = (req, file, cb) => {

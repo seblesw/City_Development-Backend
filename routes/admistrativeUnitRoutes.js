@@ -10,7 +10,7 @@ const {
 const authMiddleware= require("../middlewares/authMiddleware");
 
 router.post("/", authMiddleware.protect,createAdministrativeUnit);
-router.get("/", getAllAdministrativeUnits);
+router.get("/",authMiddleware.protect, getAllAdministrativeUnits);
 router.get("/:id", getAdministrativeUnitById);
 router.put("/:id", authMiddleware.protect, updateAdministrativeUnit);
 router.delete("/:id", deleteAdministrativeUnit);
