@@ -33,14 +33,13 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Teamwork IT Solution Land Management System API',
-    version: '1.0',
-    endpoints: '/api/v1 => the first version',
-  });
-});
-app.use(express.static(path.join(__dirname, 'dist')));
+// app.get('/', (req, res) => {
+//   res.json({
+//     message: 'Welcome to Teamwork IT Solution Land Management System API',
+//     version: '1.0',
+//     endpoints: '/api/v1 => the first version',
+//   });
+// });
 
 //the endpoints
 app.use('/api/v1/regions', regionRoutes);
@@ -56,15 +55,11 @@ app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/documents', express.static(path.join(__dirname, 'uploads/documents/ሰነድ')));
 
-// app.use(express.static(path.join(__dirname,'dist','index.html')))
-//     app.get('/',(req,res)=>{
-//       res.sendFile(path.join(__dirname,'dist','index.html'))
-//     });
-//     app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+app.use(express.static(path.join(__dirname,'dist','index.html')))
+    app.get('/',(req,res)=>{
+      res.sendFile(path.join(__dirname,'dist','index.html'))
+    });
+    app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 // Start server
 const startServer = async () => {
@@ -74,7 +69,7 @@ const startServer = async () => {
     // Sync models with the database
     // Set force to true only in development to drop tables={force:true}
     // set alter to true for to add new attribuete with out drop existing table {alter:true}
-    // await db.sync({alter:true}); 
+    await db.sync({alter:true}); 
     console.log('Database synchronized successfully');
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);
