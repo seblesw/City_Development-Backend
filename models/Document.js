@@ -113,6 +113,16 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      verifyer_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 100],
+            msg: "የሰነድ አረጋጋጭ ስም ከ0 እስከ 100 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
       approver_name: {
         type: DataTypes.STRING,
         allowNull: true,

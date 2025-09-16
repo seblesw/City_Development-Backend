@@ -39,6 +39,7 @@ const ZONING_TYPES = {
   TRANSITION_ZONE: "የሽግግር ቀጠና",
   EXPANSION_ZONE: "የማስፋፊያ ቀጠና",
 };
+
 const OWNERSHIP_TYPES = {
   NO_PRIOR_DOCUMENT: "በነባር ሰነድ አልባ የተያዘ ይዞታ",
   COURT_ORDER: "በፍ/ቤት ትዛዝ የተያዘ ይዞታ",
@@ -46,6 +47,7 @@ const OWNERSHIP_TYPES = {
   MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
   LEASE: "በሊዝ የተያዘ ይዞታ",
 };
+
 const LEASE_OWNERSHIP_TYPE = {
   LEASE_ALLOCATION: "በማህበር ምሪት በምደባ የተያዘ ይዞታ",
   MENORIYA_DRJIT: "በመኖሪያና ድርጅት በጨረታ የተያዘ ይዞታ",
