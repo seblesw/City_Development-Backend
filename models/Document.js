@@ -84,6 +84,14 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "መግለጫ ከ0 እስከ 500 ቁምፊዎች መሆን አለበት።" },
         },
       },
+      scale: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      coordinates: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
       verified_plan_number:{
         type:DataTypes.STRING,
         allowNull:true,

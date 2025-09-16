@@ -90,6 +90,10 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      building_hight: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       area: {
         type: DataTypes.FLOAT,
         allowNull: false,
@@ -182,11 +186,18 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      plan: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "የፕላን ምደባ መረጃ ከ0 እስከ 100  መሆን አለበት።" },
+        },
+      },
       address: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 200], msg: "የአድራሻ መረጃ ከ0 እስከ 200  መሆን አለበት።" },
+          len: { args: [0, 500], msg: "የአድራሻ መረጃ ከ0 እስከ 500  መሆን አለበት።" },
         },
       },
       ownership_type: {
@@ -236,20 +247,6 @@ module.exports = (db, DataTypes) => {
       zoning_type: {
         type: DataTypes.STRING,
         allowNull: true,
-        // validate: {
-        //   isValidZoningType(value) {
-        //     if (
-        //       value !== null &&
-        //       !Object.values(ZONING_TYPES).includes(value)
-        //     ) {
-        //       throw new Error(
-        //         `የመሬት ዞን ከተፈቀዱት  (${Object.values(ZONING_TYPES).join(
-        //           ", "
-        //         )}) ውስጥ መሆን አለበት።`
-        //       );
-        //     }
-        //   },
-        // },
       },
       status_history: {
         type: DataTypes.JSONB,
