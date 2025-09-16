@@ -164,7 +164,7 @@ module.exports = (db, DataTypes) => {
       },
       land_level: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         validate: {
           min: { args: [1], msg: "የመሬት ደረጃ ከ1 በታች መሆን አይችልም።" },
           max: { args: [5], msg: "የመሬት ደረጃ ከ5 በላይ መሆን አይችልም።" },
@@ -236,20 +236,20 @@ module.exports = (db, DataTypes) => {
       zoning_type: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isValidZoningType(value) {
-            if (
-              value !== null &&
-              !Object.values(ZONING_TYPES).includes(value)
-            ) {
-              throw new Error(
-                `የመሬት ዞን ከተፈቀዱት  (${Object.values(ZONING_TYPES).join(
-                  ", "
-                )}) ውስጥ መሆን አለበት።`
-              );
-            }
-          },
-        },
+        // validate: {
+        //   isValidZoningType(value) {
+        //     if (
+        //       value !== null &&
+        //       !Object.values(ZONING_TYPES).includes(value)
+        //     ) {
+        //       throw new Error(
+        //         `የመሬት ዞን ከተፈቀዱት  (${Object.values(ZONING_TYPES).join(
+        //           ", "
+        //         )}) ውስጥ መሆን አለበት።`
+        //       );
+        //     }
+        //   },
+        // },
       },
       status_history: {
         type: DataTypes.JSONB,

@@ -242,6 +242,7 @@ const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
       where: {
         administrative_unit_id: adminUnitId,
         deletedAt: { [Op.eq]: null },
+        role_id: { [Op.ne]: null },
       },
       include: [
         { model: Role, as: "role", attributes: ["id", "name"] },
@@ -380,6 +381,7 @@ const deleteUser = async (id, deleterId, options = {}) => {
 const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
+  let shouldCommit = false; // Track if we should commit the transaction
 
   // Helper function to validate unique fields
   const validateUniqueFields = async (userId, updateData) => {
@@ -435,7 +437,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
   };
 
   try {
-    t = t || (await sequelize.transaction());
+    // Only create a new transaction if one wasn't provided
+    if (!t) {
+      t = await sequelize.transaction();
+      shouldCommit = true;
+    }
 
     // 1. Get the user to be updated
     const user = await User.findByPk(id, {
@@ -471,11 +477,14 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       await user.update(updateData, { transaction: t });
     }
 
-    if (!transaction) await t.commit();
+    // Commit only if we created the transaction
+    if (shouldCommit) {
+      await t.commit();
+    }
 
     // Return user with updater/creator information
+    // Don't use the transaction for the final query as it may have been committed
     return await User.findByPk(id, {
-      transaction: t,
       include: [
         {
           model: User,
@@ -491,7 +500,10 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       attributes: { exclude: ["password"] },
     });
   } catch (error) {
-    if (!transaction && t) await t.rollback();
+    // Rollback only if we created the transaction
+    if (shouldCommit && t) {
+      await t.rollback();
+    }
     throw new Error(`ተጠቃሚ መቀየር ስህተት: ${error.message}`);
   }
 };
