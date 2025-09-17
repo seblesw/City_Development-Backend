@@ -20,6 +20,7 @@ const {
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
 const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
+const {PaymentNotification,NOTIFICATION_TYPES} = require("./PaymentNotification")(db, DataTypes);
 const { LandPayment, PAYMENT_STATUSES, PAYMENT_TYPES } =
   require("./LandPayment")(db, DataTypes);
 const { Document, DOCUMENT_TYPES } = require("./Document")(db, DataTypes);
@@ -343,6 +344,7 @@ Document.belongsTo(User, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+// PaymentSchedule associations
 PaymentSchedule.belongsTo(LandPayment, {
   foreignKey: "land_payment_id",
   as: "landPayment",
@@ -351,6 +353,15 @@ PaymentSchedule.hasMany(PaymentSchedule, {
   as: "Penalties",
   foreignKey: "related_schedule_id",
   as: "originalSchedule",
+});
+PaymentSchedule.hasMany(PaymentNotification, { 
+  as: 'Notifications', 
+  foreignKey: 'schedule_id' 
+});
+// PaymentNotification associations
+PaymentNotification.belongsTo(PaymentSchedule, { 
+  as: 'Schedule', 
+  foreignKey: 'schedule_id' 
 });
 // Export Sequelize instance, models, and constants
 module.exports = {
@@ -378,4 +389,6 @@ module.exports = {
   ZONING_TYPES,
   PAYMENT_STATUSES,
   PAYMENT_TYPES,
+  NOTIFICATION_TYPES,
+  PaymentNotification,
 };
