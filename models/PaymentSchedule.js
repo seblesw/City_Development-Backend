@@ -14,7 +14,7 @@ module.exports = (db, DataTypes) => {
         references: { model: "land_payments", key: "id" }, 
       },
       expected_amount: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL,
         allowNull: false,
         validate: { min: 0 },
       },
