@@ -1,5 +1,5 @@
 const NOTIFICATION_TYPES = {
-  REMINDER: "ትዝታ",
+  REMINDER: "ማንቂያ",
   OVERDUE: "ያለፈበት ማሳወቂያ",
   CONFIRMATION: "የክፍያ ማረጋገጫ",
   PENALTY: "ቅጣት ማሳወቂያ",

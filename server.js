@@ -14,6 +14,7 @@ const userRoutes =require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
+const paymentSchedulesRoutes = require('./routes/paymentScheduleRoutes');
 const path = require('path');
 // Initialize express app
 
@@ -44,6 +45,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
+app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 
 app.use(express.static(path.join(__dirname,'dist','index.html')))
     app.get('/',(req,res)=>{
