@@ -1,6 +1,5 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
-
 // Load models in dependency order to ensure foreign key references are resolved
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
@@ -20,8 +19,10 @@ const {
   ZONING_TYPES,
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
-const {LandPayment,PAYMENT_STATUSES, PAYMENT_TYPES} = require("./LandPayment")(db, DataTypes);
-const {Document, DOCUMENT_TYPES} = require("./Document")(db, DataTypes);
+const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
+const { LandPayment, PAYMENT_STATUSES, PAYMENT_TYPES } =
+  require("./LandPayment")(db, DataTypes);
+const { Document, DOCUMENT_TYPES } = require("./Document")(db, DataTypes);
 
 // Role associations
 Role.hasMany(User, {
@@ -318,6 +319,10 @@ LandPayment.belongsTo(User, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+LandPayment.hasMany(PaymentSchedule, {
+  foreignKey: "land_payment_id",
+  as: "paymentSchedules",
+});
 
 // Document associations
 Document.belongsTo(LandRecord, {
@@ -326,21 +331,27 @@ Document.belongsTo(LandRecord, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-Document.belongsTo(User,{
+Document.belongsTo(User, {
   foreignKey: "uploaded_by",
   as: "uploader",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
-})
+});
 Document.belongsTo(User, {
   foreignKey: "inactived_by",
   as: "inactivator",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-
-
-
+PaymentSchedule.belongsTo(LandPayment, {
+  foreignKey: "land_payment_id",
+  as: "landPayment",
+});
+PaymentSchedule.hasMany(PaymentSchedule, {
+  as: "Penalties",
+  foreignKey: "related_schedule_id",
+  as: "originalSchedule",
+});
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -354,6 +365,7 @@ module.exports = {
   User,
   LandRecord,
   LandPayment,
+  PaymentSchedule,
   LandOwner,
   Document,
   DOCUMENT_TYPES,
