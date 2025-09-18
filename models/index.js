@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
+const { on } = require("nodemailer/lib/xoauth2");
 // Load models in dependency order to ensure foreign key references are resolved
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
@@ -348,20 +349,28 @@ Document.belongsTo(User, {
 PaymentSchedule.belongsTo(LandPayment, {
   foreignKey: "land_payment_id",
   as: "landPayment",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 PaymentSchedule.hasMany(PaymentSchedule, {
   as: "Penalties",
   foreignKey: "related_schedule_id",
   as: "originalSchedule",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 PaymentSchedule.hasMany(PaymentNotification, { 
   as: 'Notifications', 
-  foreignKey: 'schedule_id' 
+  foreignKey: 'schedule_id' ,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
 });
 // PaymentNotification associations
 PaymentNotification.belongsTo(PaymentSchedule, { 
   as: 'Schedule', 
-  foreignKey: 'schedule_id' 
+  foreignKey: 'schedule_id' ,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
 });
 // Export Sequelize instance, models, and constants
 module.exports = {

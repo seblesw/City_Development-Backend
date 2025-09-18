@@ -42,7 +42,8 @@ const createLeaseSchedulesController = async (req, res) => {
 
 const checkOverdueSchedulesController = async (req, res) => {
   try {
-    const penaltySchedules = await checkOverdueSchedules();
+    const { testDate } = req.body;
+    const penaltySchedules = await checkOverdueSchedules(testDate);
     res.status(200).json({
       success: true,
       message: `${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል`,

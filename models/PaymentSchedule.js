@@ -1,3 +1,5 @@
+const { fields } = require("../middlewares/fileStorage");
+
 module.exports = (db, DataTypes) => {
   const PaymentSchedule = db.define(
     "PaymentSchedule",
@@ -11,7 +13,7 @@ module.exports = (db, DataTypes) => {
       land_payment_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: "land_payments", key: "id" }, 
+        references: { model: "land_payments", key: "id" },
       },
       expected_amount: {
         type: DataTypes.DECIMAL,
@@ -32,7 +34,7 @@ module.exports = (db, DataTypes) => {
       penalty_rate: {
         type: DataTypes.DECIMAL(5, 2),
         allowNull: true,
-        defaultValue: 0.07, 
+        defaultValue: 0.07,
         validate: { min: 0 },
       },
       is_active: {
@@ -43,7 +45,7 @@ module.exports = (db, DataTypes) => {
       related_schedule_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        references: { model: "payment_schedules", key: "id" }, 
+        references: { model: "payment_schedules", key: "id" },
       },
       description: {
         type: DataTypes.TEXT,
@@ -58,6 +60,7 @@ module.exports = (db, DataTypes) => {
       freezeTableName: true,
       indexes: [
         { fields: ["land_payment_id"] },
+        { fields: ["related_schedule_id"] },
         { fields: ["due_date"] },
         { fields: ["is_active"] },
       ],

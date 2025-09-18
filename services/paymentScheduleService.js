@@ -1,5 +1,5 @@
-const { LandPayment, PaymentSchedule, LandRecord, User } = require('../models');
-
+const { LandPayment, PaymentSchedule, LandRecord, User, sequelize,PAYMENT_TYPES, PAYMENT_STATUSES  } = require('../models');
+const {Op} = require('sequelize');
 const createTaxSchedules = async (dueDate, description = '') => {
   const landRecords = await LandRecord.findAll({
     include: [
@@ -9,6 +9,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
         through: { attributes: [] },
       },
     ],
+    limit:5
   });
   if (!landRecords.length) {
     throw new Error('የመሬት መዝገብ አልተገኘም');
@@ -20,15 +21,15 @@ const createTaxSchedules = async (dueDate, description = '') => {
       throw new Error(`የ መዝገብ ቁጥር ${landRecord.id} ለመሬት ባለቤት አልተገኘም`);
     }
     const firstOwner = landRecord.owners[0];
-    const expectedAmount = landRecord.area * 3;
+    const expectedAmount = Number((landRecord.area * 3).toFixed(2));
 
     const landPayment = await LandPayment.create({
       land_record_id: landRecord.id,
-      payment_type: 'የግብር ክፍያ',
+      payment_type: PAYMENT_TYPES.TAX,
       total_amount: 0,
       paid_amount: 0,
       remaining_amount: 0,
-      payment_status: 'በመጠባበቅ ላይ',
+      payment_status: PAYMENT_STATUSES.PENDING,
       currency: 'ETB',
       payer_id: firstOwner.id,
     });
@@ -71,15 +72,15 @@ const createLeaseSchedules = async (dueDate, description = '') => {
     }
     const firstOwner = landRecord.owners[0];
     const leaseRate = 5;
-    const expectedAmount = landRecord.area * leaseRate;
+    const expectedAmount = Number((landRecord.area * leaseRate).toFixed(2));
 
     const landPayment = await LandPayment.create({
       land_record_id: landRecord.id,
-      payment_type: 'የሊዝ ክፍያ',
+      payment_type: PAYMENT_TYPES.LEASE_PAYMENT,
       total_amount: 0,
       paid_amount: 0,
       remaining_amount: 0,
-      payment_status: 'በመጠባበቅ ላይ',
+      payment_status: PAYMENT_STATUSES.PENDING,
       currency: 'ETB',
       payer_id: firstOwner.id,
     });
@@ -100,10 +101,19 @@ const createLeaseSchedules = async (dueDate, description = '') => {
   return schedules;
 };
 
-const checkOverdueSchedules = async () => {
-  const today = new Date();
+const checkOverdueSchedules = async (testDate = null) => {
+  const today = testDate ? new Date(testDate) : new Date();
+  console.log(`Checking overdue schedules as of ${today.toISOString()}`);
+  
+  // Calculate the maximum due_date for overdue schedules
+  const maxDueDate = new Date(today);
+  maxDueDate.setDate(maxDueDate.getDate() - 15); // grace_period_days = 15
+  
   const schedules = await PaymentSchedule.findAll({
-    where: { is_active: true },
+    where: {
+      is_active: true,
+      due_date: { [Op.lt]: maxDueDate },
+    },
     include: [
       {
         model: LandPayment,
@@ -118,35 +128,58 @@ const checkOverdueSchedules = async () => {
       },
     ],
   });
+  console.log(`Found ${schedules.length} overdue schedules`);
 
   const penaltySchedules = [];
-  for (const schedule of schedules) {
-    const graceEnd = new Date(schedule.due_date);
-    graceEnd.setDate(graceEnd.getDate() + schedule.grace_period_days);
-    if (graceEnd < today) {
+  const transaction = await sequelize.transaction();
+  try {
+    for (const schedule of schedules) {
+      const existingPenalty = await PaymentSchedule.findOne({
+        where: { related_schedule_id: schedule.id, is_active: true },
+        transaction,
+      });
+      if (existingPenalty) {
+        console.log(`Penalty already exists for schedule ID ${schedule.id}: penalty ID ${existingPenalty.id}`);
+        continue;
+      }
+
+      const graceEnd = new Date(schedule.due_date);
+      graceEnd.setDate(graceEnd.getDate() + schedule.grace_period_days);
+      console.log(`Schedule ID ${schedule.id}: due_date=${schedule.due_date}, graceEnd=${graceEnd.toISOString()}`);
+
       const landPayment = schedule.landPayment;
       const landRecord = landPayment.landRecord;
       const firstOwner = landRecord.owners[0];
       if (!firstOwner) {
-        throw new Error(`የ መዝገብ ቁጥር ${landRecord.id} ለመሬት ባለቤት አልተገኘም`);
+        console.log(`No owner found for LandRecord ID ${landRecord.id}`);
+        continue;
       }
 
-      const remaining = schedule.expected_amount - landPayment.paid_amount;
+      const remaining = Number(schedule.expected_amount) - Number(landPayment.paid_amount);
+      if (remaining <= 0) {
+        console.log(`Schedule ID ${schedule.id}: No penalty due, remaining=${remaining}`);
+        continue;
+      }
+
       const overdueDays = Math.floor((today - graceEnd) / (1000 * 60 * 60 * 24));
-      const overdueMonths = Math.max(1, Math.floor(overdueDays / 30)); // At least 1 month
+      const overdueMonths = Math.max(1, Math.floor(overdueDays / 30));
       const penalty = Number((remaining * schedule.penalty_rate * overdueMonths).toFixed(2));
+      console.log(`Schedule ID ${schedule.id}: remaining=${remaining}, overdueDays=${overdueDays}, overdueMonths=${overdueMonths}, penalty=${penalty}`);
 
       if (penalty > 0) {
         const penaltyPayment = await LandPayment.create({
           land_record_id: landRecord.id,
-          payment_type: 'ቅጣት',
+          payment_type: PAYMENT_TYPES.PENALTY,
           total_amount: 0,
           paid_amount: 0,
           remaining_amount: 0,
-          payment_status: 'በመጠባበቅ ላይ',
+          penality_amount: penalty,
+          penality_rate: schedule.penalty_rate,
+          penalty_reason: `Overdue schedule ID ${schedule.id} (${landPayment.payment_type})`,
+          payment_status: PAYMENT_STATUSES.PENDING,
           currency: 'ETB',
           payer_id: firstOwner.id,
-        });
+        }, { transaction });
 
         const penaltySchedule = await PaymentSchedule.create({
           land_payment_id: penaltyPayment.id,
@@ -157,14 +190,20 @@ const checkOverdueSchedules = async () => {
           is_active: true,
           related_schedule_id: schedule.id,
           description: `ቅጣት ለመዘግየት ${landPayment.payment_type}`,
-        });
+        }, { transaction });
 
         penaltySchedules.push(penaltySchedule);
       }
     }
-  }
 
-  return penaltySchedules;
+    await transaction.commit();
+    console.log(`Created ${penaltySchedules.length} penalty schedules`);
+    return penaltySchedules;
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error creating penalty schedules:', error.message);
+    throw error;
+  }
 };
 
 module.exports = {
