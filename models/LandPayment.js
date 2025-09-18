@@ -170,16 +170,6 @@ module.exports = (db, DataTypes) => {
       penalty_reason: {
         type: DataTypes.TEXT,
         allowNull: true,
-        validate: {
-          isRequiredForPenalty() {
-            if (
-              this.payment_type === PAYMENT_TYPES.PENALTY &&
-              !this.penalty_reason
-            ) {
-              throw new Error("የቅጣት ክፍያ የቅጣት ምክንያት መግለፅ አለበት።");
-            }
-          },
-        },
       },
       description: {
         type: DataTypes.TEXT,

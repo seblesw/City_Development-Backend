@@ -4,5 +4,6 @@ const paymentScheduleController = require('../controllers/paymentScheduleControl
 
 router.post('/tax', paymentScheduleController.createTaxSchedulesController);
 router.post('/lease', paymentScheduleController.createLeaseSchedulesController);
+router.post('/check-overdue', paymentScheduleController.checkOverdueSchedulesController);
 
 module.exports = router;
