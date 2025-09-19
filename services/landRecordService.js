@@ -100,7 +100,7 @@ const createLandRecordService = async (data, files, user) => {
             status: RECORD_STATUSES.SUBMITTED,
             changed_by: {
               id: user.id,
-              name: [user.first_name, user.last_name, user.middle_name]
+              name: [user.first_name, user.middle_name ,user.last_name]
                 .filter(Boolean)
                 .join(" "),
             },
