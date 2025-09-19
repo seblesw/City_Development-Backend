@@ -24,10 +24,9 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
-const{fs}=require("fs");
+const { fs } = require("fs");
 // const {pLimit} = require("p-limit");
 // import pLimit from "p-limit";
-
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -101,7 +100,7 @@ const createLandRecordService = async (data, files, user) => {
             status: RECORD_STATUSES.SUBMITTED,
             changed_by: {
               id: user.id,
-              name: [user.first_name,user.last_name, user.middle_name ]
+              name: [user.first_name, user.last_name, user.middle_name]
                 .filter(Boolean)
                 .join(" "),
             },
@@ -113,7 +112,7 @@ const createLandRecordService = async (data, files, user) => {
             action: "CREATED",
             changed_by: {
               id: user.id,
-              name: [user.first_name,user.last_name, user.middle_name]
+              name: [user.first_name, user.last_name, user.middle_name]
                 .filter(Boolean)
                 .join(" "),
             },
@@ -296,9 +295,10 @@ const importLandRecordsFromXLSXService = async (
       try {
         // Send progress update
         if (progressCallback) {
-          const groupProgress = 20 + Math.floor((processedGroups / totalGroups) * 75);
+          const groupProgress =
+            20 + Math.floor((processedGroups / totalGroups) * 75);
           progressCallback(
-            groupProgress, 
+            groupProgress,
             `Processing parcel ${primaryRow.parcel_number}, plot ${primaryRow.plot_number}...`
           );
         }
@@ -326,23 +326,23 @@ const importLandRecordsFromXLSXService = async (
       } catch (error) {
         await rowTransaction.rollback();
         handleImportError(error, primaryRow, rowNum, results);
-        
+
         // Send error progress update
         if (progressCallback) {
           progressCallback(
-            -1, 
+            -1,
             `Error processing parcel ${primaryRow.parcel_number}: ${error.message}`
           );
         }
       }
-      
+
       processedGroups++;
     }
 
     // Send completion progress update
     if (progressCallback) {
       progressCallback(
-        100, 
+        100,
         `Import completed. ${results.createdCount} records created, ${results.skippedCount} skipped.`
       );
     }
@@ -354,7 +354,7 @@ const importLandRecordsFromXLSXService = async (
     if (progressCallback) {
       progressCallback(0, `Import failed: ${error.message}`);
     }
-    
+
     if (!transaction) await t.rollback();
     throw new Error(`XLSX import failed: ${error.message}`);
   }
@@ -372,16 +372,14 @@ async function parseAndValidateXLSX(filePath) {
     // Convert to JSON
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
-      defval: null, 
-      // dateNF: "DD/MM/YYYY", 
+      defval: null,
+      // dateNF: "DD/MM/YYYY",
     });
 
     // Validate data
     const validatedData = xlsxData.filter((row, index) => {
       if (!row.parcel_number || !row.plot_number) {
-        throw new Error(
-          `ሮው ${index + 2} የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።`
-        );
+        throw new Error(`ሮው ${index + 2} የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።`);
       }
       return true;
     });
@@ -426,7 +424,7 @@ async function transformXLSXData(rows, adminUnitId) {
         if (!row.first_name || !row.middle_name) {
           throw new Error(`ተጋሪ ${index + 1} ሙሉ ስም ያስፈልጋል።`);
         }
-        
+
         return {
           first_name: row.first_name || "Unknown",
           middle_name: row.middle_name || "unknown",
@@ -443,7 +441,7 @@ async function transformXLSXData(rows, adminUnitId) {
       if (!primaryRow.first_name || !primaryRow.middle_name) {
         throw new Error("ዋና ባለቤት ሙሉ ስም ያስፈልጋል።");
       }
-      
+
       owners.push({
         first_name: primaryRow.first_name || "Unknown",
         middle_name: primaryRow.middle_name || "unknown",
@@ -524,7 +522,7 @@ function calculatePaymentStatus(row) {
     if (paid > 0 && paid < total) return "በመጠባበቅ ላይ";
     return "አልተከፈለም";
   } catch (error) {
-    return "አልተከፈለም"; 
+    return "አልተከፈለም";
   }
 }
 
@@ -1494,7 +1492,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
       ],
       paranoid: !includeDeleted,
       transaction: t,
-      rejectOnEmpty: false, 
+      rejectOnEmpty: false,
     });
 
     if (!landRecord) {
@@ -2347,7 +2345,8 @@ const changeRecordStatusService = async (
         {
           model: User,
           as: "creator",
-          attributes: ["id", "first_name", "middle_name", "last_name", "email"],},
+          attributes: ["id", "first_name", "middle_name", "last_name", "email"],
+        },
         {
           model: User,
           as: "owners",
@@ -2443,7 +2442,14 @@ const changeRecordStatusService = async (
       if (owner.email) {
         // Get the updater's admin unit details
         const updaterWithAdminUnit = await User.findByPk(userId, {
-          attributes: ["id", "first_name", "middle_name", "last_name", "email", "phone_number"],
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+          ],
           include: [
             {
               model: AdministrativeUnit,
@@ -2535,21 +2541,20 @@ const changeRecordStatusService = async (
 
     // 7. Return updated record (lightweight query)
     return await LandRecord.findByPk(recordId, {
-      attributes: ['id', 'parcel_number', 'record_status'],
+      attributes: ["id", "parcel_number", "record_status"],
       include: [
-        { 
-          model: User, 
+        {
+          model: User,
           as: "creator",
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ["id", "first_name", "last_name"],
         },
-        { 
-          model: User, 
+        {
+          model: User,
           as: "updater",
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ["id", "first_name", "last_name"],
         },
       ],
     });
-
   } catch (error) {
     if (t && !t.finished) {
       await t.rollback();
@@ -2560,7 +2565,15 @@ const changeRecordStatusService = async (
 };
 
 // Helper function for email generation
-const generateEmailBody = (owner, record, newStatus, notes, rejection_reason, updater, adminUnitName) => {
+const generateEmailBody = (
+  owner,
+  record,
+  newStatus,
+  notes,
+  rejection_reason,
+  updater,
+  adminUnitName
+) => {
   return `
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
       <p>ውድ ${owner.first_name} ${owner.middle_name},</p>
@@ -2568,21 +2581,31 @@ const generateEmailBody = (owner, record, newStatus, notes, rejection_reason, up
       
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
         <p><strong>አሁናዊ ሁኔታ:</strong> ${newStatus}</p>
-        ${notes ? `
+        ${
+          notes
+            ? `
           <p><strong>ተያያዥ ጽሁፍ:</strong></p>
           <p style="background-color: #fff; padding: 8px; border-left: 3px solid #3498db;">
             ${notes}
           </p>
-        ` : ''}
-        ${rejection_reason ? `
+        `
+            : ""
+        }
+        ${
+          rejection_reason
+            ? `
           <p><strong>ውድቅ የተደረገበት ምክንያት:</strong></p>
           <p style="background-color: #fff; padding: 8px; border-left: 3px solid #e74c3c;">
             ${rejection_reason}
           </p>
-        ` : ''}
+        `
+            : ""
+        }
       </div>
       
-      <p><strong>ያሻሻለው አካል:</strong> ${updater.first_name} ${updater.middle_name}</p>
+      <p><strong>ያሻሻለው አካል:</strong> ${updater.first_name} ${
+    updater.middle_name
+  }</p>
       <p><strong>ከ:</strong> ${adminUnitName}</p>
       
       <div style="margin-top: 20px;">
@@ -2606,23 +2629,31 @@ const generateEmailBody = (owner, record, newStatus, notes, rejection_reason, up
 };
 
 // trash management services
-const moveToTrashService = async (
-  recordId,
-  user,
-  deletion_reason,
-  options = {}
-) => {
+const moveToTrashService = async (recordId, user, deletion_reason, options = {}) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
     // Validate deletion reason
     if (!deletion_reason || deletion_reason.trim().length < 5) {
-      throw new Error("የመሰረዝ ምክንያት በቂ መረጃ ሊሰጥ ይገባል (ቢያንስ 5 ቁምፊዎች)");
+      throw new Error(
+        "የመሰረዝ ምክንያት ቢያንስ 5 ቁምፊ መሆን አለበት።"
+      );
     }
 
+    // Fetch the record with associated data
     const record = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
+      include: [
+        { model: Document, as: "documents" },
+        { model: LandPayment, as: "payments" },
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: [], paranoid: false }, // include ownership even if soft-deleted
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+      ],
       transaction: t,
     });
 
@@ -2646,31 +2677,71 @@ const moveToTrashService = async (
       },
     ];
     record.deleted_by = user.id;
-
+    record.deletion_reason = deletion_reason;
     await record.save({ transaction: t });
 
-    // Soft delete the record (Sequelize will cascade to Documents & LandPayments)
+    // Soft delete LandRecord
     await record.destroy({ transaction: t });
+
+    // Soft delete related Documents
+    if (record.documents?.length) {
+      for (const doc of record.documents) {
+        await doc.destroy({ transaction: t });
+      }
+    }
+
+    // Soft delete related Payments
+    if (record.payments?.length) {
+      for (const payment of record.payments) {
+        await payment.destroy({ transaction: t });
+      }
+    }
+
+    // Soft delete ownership links (LandOwner join table)
+    await LandOwner.destroy({
+      where: { land_record_id: record.id },
+      transaction: t,
+    });
 
     if (!transaction) await t.commit();
 
+    // Re-fetch the trashed record including owners, documents, and payments
+    const trashedRecord = await LandRecord.findOne({
+      where: { id: record.id },
+      paranoid: false,
+      include: [
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: [], paranoid: false }, // include trashed join rows
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        { model: Document, as: "documents", paranoid: false },
+        { model: LandPayment, as: "payments", paranoid: false },
+      ],
+    });
+
     return {
-      id: record.id,
-      parcel_number: record.parcel_number,
-      deletedAt: new Date(),
+      id: trashedRecord.id,
+      parcel_number: trashedRecord.parcel_number,
+      deletedAt: trashedRecord.deletedAt,
       deleted_by: {
         id: user.id,
         first_name: user.first_name,
         middle_name: user.middle_name,
         last_name: user.last_name,
       },
-      message: "መዝገብ ወደ ትራሽ ተዛውሯል",
+      owners: trashedRecord.owners,
+      documents: trashedRecord.documents,
+      payments: trashedRecord.payments,
+      message: "መዝገብና ተያያዥ መረጃዎች በትራሽ ተዘርዝረዋል።",
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();
     throw error;
   }
 };
+
 
 const restoreFromTrashService = async (recordId, user, options = {}) => {
   const { transaction } = options;
@@ -2810,11 +2881,11 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
     return true;
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    throw new Error(error.message.includes("መዝገብ"))
+    throw new Error(error.message.includes("መዝገብ"));
   }
 };
 const getTrashItemsService = async (user, options = {}) => {
-  const { page = 1, limit = 10, } = options;
+  const { page = 1, limit = 10 } = options;
   const offset = (page - 1) * limit;
 
   try {
@@ -2832,13 +2903,19 @@ const getTrashItemsService = async (user, options = {}) => {
           as: "deleter",
           attributes: ["id", "first_name", "middle_name", "last_name", "email"],
         },
- {
+        {
           model: User,
           as: "owners",
-          through: { attributes: [] },
-          attributes: ["id", "first_name", "middle_name", "last_name", "email", "phone_number", "national_id"],
-
-  
+          through: { paranoid: false, attributes: [] }, // ← include soft-deleted ownerships
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "national_id",
+          ],
         },
         {
           model: Document,
@@ -2854,7 +2931,7 @@ const getTrashItemsService = async (user, options = {}) => {
           paranoid: false,
           where: { deletedAt: { [Op.ne]: null } },
           required: false,
-        }
+        },
       ],
     };
 
@@ -2883,86 +2960,105 @@ const getTrashItemsService = async (user, options = {}) => {
 
 //stats
 const getLandRecordStats = async (adminUnitId, options = {}) => {
-  try{const pLimit = (await import('p-limit')).default;
-  
- const limit= pLimit(6);
- 
-  const baseWhere = { deletedAt: null };
-  if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
+  try {
+    const pLimit = (await import("p-limit")).default;
 
-  // Helpers
-  const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
-  const last7 = new Date(Date.now() - 7*24*60*60*1000);
-  const last30 = new Date(Date.now() - 30*24*60*60*1000);
+    const limit = pLimit(6);
 
-  // System totals (no heavy includes)
-  const sysTasks = [
-    limit(() => LandRecord.count({ where: baseWhere })),
-    limit(() => Document.count({ where: { deletedAt: null } })), // no include
-    limit(() => User.count()),
-    limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
-  ];
-  const [all_records, all_documents, all_system_users, all_land_owners] = await Promise.all(sysTasks);
+    const baseWhere = { deletedAt: null };
+    if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
 
-  const result = { system: { all_records, all_documents, all_system_users, all_land_owners } };
+    // Helpers
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const last7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  if (!adminUnitId) return result;
+    // System totals (no heavy includes)
+    const sysTasks = [
+      limit(() => LandRecord.count({ where: baseWhere })),
+      limit(() => Document.count({ where: { deletedAt: null } })), // no include
+      limit(() => User.count()),
+      limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
+    ];
+    const [all_records, all_documents, all_system_users, all_land_owners] =
+      await Promise.all(sysTasks);
 
-  // Use raw SQL to avoid count+include; bind adminUnitId once
-  const bind = { adminUnitId };
+    const result = {
+      system: { all_records, all_documents, all_system_users, all_land_owners },
+    };
 
-  // by_status, by_zoning, by_ownership, by_land_use (each in ONE query)
-  const [by_status, by_zoning, by_ownership, by_land_use] = await Promise.all([
-    limit(() => sequelize.query(
-      `
+    if (!adminUnitId) return result;
+
+    // Use raw SQL to avoid count+include; bind adminUnitId once
+    const bind = { adminUnitId };
+
+    // by_status, by_zoning, by_ownership, by_land_use (each in ONE query)
+    const [by_status, by_zoning, by_ownership, by_land_use] = await Promise.all(
+      [
+        limit(() =>
+          sequelize.query(
+            `
       SELECT record_status AS status, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY record_status
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        limit(() =>
+          sequelize.query(
+            `
       SELECT zoning_type, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY zoning_type
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        limit(() =>
+          sequelize.query(
+            `
       SELECT ownership_type, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY ownership_type
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        limit(() =>
+          sequelize.query(
+            `
       SELECT land_use, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY land_use
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-  ]);
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+      ]
+    );
 
-  // Area stats (sum + grouped top 10)
-  const [area_total_row, area_by_zoning, area_by_land_use] = await Promise.all([
-    limit(() => sequelize.query(
-      `
+    // Area stats (sum + grouped top 10)
+    const [area_total_row, area_by_zoning, area_by_land_use] =
+      await Promise.all([
+        limit(() =>
+          sequelize.query(
+            `
       SELECT COALESCE(SUM(area),0) AS total_area
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        limit(() =>
+          sequelize.query(
+            `
       SELECT zoning_type, SUM(area) AS total_area
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
@@ -2970,10 +3066,12 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ORDER BY total_area DESC
       LIMIT 10
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        limit(() =>
+          sequelize.query(
+            `
       SELECT land_use, SUM(area) AS total_area
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
@@ -2981,14 +3079,16 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ORDER BY total_area DESC
       LIMIT 10
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-  ]);
-  const total_area = Number(area_total_row?.[0]?.total_area || 0);
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+      ]);
+    const total_area = Number(area_total_row?.[0]?.total_area || 0);
 
-  // Owners count (avoid include by using EXISTS)
-  const [{ owners_count }] = await limit(() => sequelize.query(
-    `
+    // Owners count (avoid include by using EXISTS)
+    const [{ owners_count }] = await limit(() =>
+      sequelize.query(
+        `
     SELECT COUNT(*)::int AS owners_count
     FROM "users" u
     WHERE EXISTS (
@@ -2998,26 +3098,28 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       WHERE lr."deletedAt" IS NULL AND lr.administrative_unit_id = $adminUnitId
     )
     `,
-    { type: sequelize.QueryTypes.SELECT, bind }
-  ));
+        { type: sequelize.QueryTypes.SELECT, bind }
+      )
+    );
 
-  // Temporal (three counts in one query via conditional aggregation)
-  // const [temporal_row] = await limit(() => sequelize.query(
-  //   `
-  //   SELECT
-  //     COUNT(*) FILTER (WHERE "createdAt" >= :last30)::int AS last_30_days,
-  //     COUNT(*) FILTER (WHERE "createdAt" >= :last7)::int  AS last_7_days,
-  //     COUNT(*) FILTER (WHERE "createdAt" >= :startOfToday)::int AS today
-  //   FROM "land_records"
-  //   WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
-  //   `,
-  //   { type: sequelize.QueryTypes.SELECT,
-  //     bind: { ...bind, last30, last7, startOfToday } }
-  // ));
+    // Temporal (three counts in one query via conditional aggregation)
+    // const [temporal_row] = await limit(() => sequelize.query(
+    //   `
+    //   SELECT
+    //     COUNT(*) FILTER (WHERE "createdAt" >= :last30)::int AS last_30_days,
+    //     COUNT(*) FILTER (WHERE "createdAt" >= :last7)::int  AS last_7_days,
+    //     COUNT(*) FILTER (WHERE "createdAt" >= :startOfToday)::int AS today
+    //   FROM "land_records"
+    //   WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
+    //   `,
+    //   { type: sequelize.QueryTypes.SELECT,
+    //     bind: { ...bind, last30, last7, startOfToday } }
+    // ));
 
-  // Documents tied to unit (raw join instead of count+include)
-  const [{ documents_count }] = await limit(() => sequelize.query(
-    `
+    // Documents tied to unit (raw join instead of count+include)
+    const [{ documents_count }] = await limit(() =>
+      sequelize.query(
+        `
     SELECT COUNT(*)::int AS documents_count
     FROM "documents" d
     JOIN "land_records" lr ON lr.id = d.land_record_id
@@ -3025,23 +3127,27 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       AND lr."deletedAt" IS NULL
       AND lr.administrative_unit_id = $adminUnitId
     `,
-    { type: sequelize.QueryTypes.SELECT, bind }
-  ));
+        { type: sequelize.QueryTypes.SELECT, bind }
+      )
+    );
 
-  // ownership_category, land_level (grouped)
-  const [by_ownership_category, by_land_level] = await Promise.all([
-    limit(() => sequelize.query(
-      `
+    // ownership_category, land_level (grouped)
+    const [by_ownership_category, by_land_level] = await Promise.all([
+      limit(() =>
+        sequelize.query(
+          `
       SELECT ownership_category, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY ownership_category
       LIMIT 10
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-    limit(() => sequelize.query(
-      `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      limit(() =>
+        sequelize.query(
+          `
       SELECT land_level, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
@@ -3049,35 +3155,38 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ORDER BY land_level ASC
       LIMIT 10
       `,
-      { type: sequelize.QueryTypes.SELECT, bind }
-    )),
-  ]);
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+    ]);
 
-  return {
-    ...result,
-    administrative_unit: {
-      by_status,
-      by_zoning,
-      by_ownership,
-      by_land_use,
-      area_stats: { total_area, by_zoning: area_by_zoning, by_land_use: area_by_land_use },
-      owners_count,
-      // temporal: {
-      //   last_30_days: temporal_row.last_30_days,
-      //   last_7_days: temporal_row.last_7_days, 
-      //   today: temporal_row.today,
-      // },
-      documents: documents_count,
-      by_ownership_category,
-      by_land_level,
-    }
-  };
-  }
-  catch(e){
-    console.log(e)
+    return {
+      ...result,
+      administrative_unit: {
+        by_status,
+        by_zoning,
+        by_ownership,
+        by_land_use,
+        area_stats: {
+          total_area,
+          by_zoning: area_by_zoning,
+          by_land_use: area_by_land_use,
+        },
+        owners_count,
+        // temporal: {
+        //   last_30_days: temporal_row.last_30_days,
+        //   last_7_days: temporal_row.last_7_days,
+        //   today: temporal_row.today,
+        // },
+        documents: documents_count,
+        by_ownership_category,
+        by_land_level,
+      },
+    };
+  } catch (e) {
+    console.log(e);
   }
 };
-
 
 module.exports = {
   moveToTrashService,

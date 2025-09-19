@@ -262,7 +262,7 @@ LandRecord.belongsToMany(User, {
   through: LandOwner,
   foreignKey: "land_record_id",
   as: "owners",
-  onDelete: "RESTRICT",
+  onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 LandRecord.belongsTo(User, {
