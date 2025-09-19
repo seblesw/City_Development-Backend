@@ -103,34 +103,42 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     if (!landRecord) {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
-     let creator = await User.findByPk(creatorId, {
-      include: [{ model: Role, as: "role" }],
-      transaction: t,
-      lock: t.LOCK.UPDATE,
-    });
+
     const currentLog = Array.isArray(landRecord.action_log)
       ? landRecord.action_log
       : [];
       
+    // Fetch creator user info for action log
+    let creator = null;
+    try {
+      creator = await User.findByPk(creatorId, {
+      attributes: ["id", "first_name", "middle_name", "last_name"],
+      transaction: t,
+      });
+    } catch (e) {
+      creator = null;
+    }
+
     const newLog = [
       ...currentLog,
       {
-        action: `DOCUMENT_CREATE_${
-          data.document_type || DOCUMENT_TYPES.TITLE_DEED
-        }`,
-        document_id: document.id,
-        changed_by: {
+      action: `DOCUMENT_CREATE_${
+        data.document_type || DOCUMENT_TYPES.TITLE_DEED
+      }`,
+      document_id: document.id,
+      changed_by: creator
+        ? {
           id: creator.id,
           first_name: creator.first_name,
           middle_name: creator.middle_name,
           last_name: creator.last_name,
-
-        },
-        changed_at: new Date(),
-        details: {
-          plot_number: data.plot_number,
-          files_added: fileMetadata.length,
-        },
+        }
+        : { id: creatorId },
+      changed_at: new Date(),
+      details: {
+        plot_number: data.plot_number,
+        files_added: fileMetadata.length,
+      },
       },
     ];
 

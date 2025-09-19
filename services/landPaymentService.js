@@ -59,7 +59,6 @@ const addNewPaymentService = async (landRecordId, user, data) => {
         first_name: user.first_name,
         middle_name: user.middle_name,
         last_name: user.last_name,
-        name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" "),
       },
       changed_at: new Date(),
     },
@@ -176,9 +175,6 @@ const createLandPaymentService = async (data, options = {}) => {
               first_name: creator.first_name,
               middle_name: creator.middle_name,
               last_name: creator.last_name,
-              name: [creator.first_name, creator.middle_name, creator.last_name]
-                .filter(Boolean)
-                .join(" "),
             }
           : null,
         changed_at: new Date(),
