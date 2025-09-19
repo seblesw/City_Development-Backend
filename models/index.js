@@ -324,7 +324,16 @@ LandPayment.belongsTo(User, {
 LandPayment.hasMany(PaymentSchedule, {
   foreignKey: "land_payment_id",
   as: "paymentSchedules",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
+LandPayment.hasMany(PaymentNotification, { 
+  as: 'Notifications', 
+  foreignKey: 'land_payment_id' ,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+
 
 // Document associations
 Document.belongsTo(LandRecord, {
@@ -369,6 +378,12 @@ PaymentSchedule.hasMany(PaymentNotification, {
 PaymentNotification.belongsTo(PaymentSchedule, { 
   as: 'Schedule', 
   foreignKey: 'schedule_id' ,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+PaymentNotification.belongsTo(LandPayment, { 
+  as: 'landPayment', 
+  foreignKey: 'land_payment_id' ,
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });

@@ -15,6 +15,11 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
+      land_payment_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "land_payments", key: "id" },
+      },
       schedule_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -32,17 +37,15 @@ module.exports = (db, DataTypes) => {
       },
       sent_date: {
         type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-        validate: { isDate: true },
+        allowNull: true,
       },
       message: {
         type: DataTypes.TEXT,
         allowNull: false,
-        validate: { len: [1, 1000] }, 
+        validate: { len: [1, 1000] },
       },
       recipients: {
-        type: DataTypes.JSON, 
+        type: DataTypes.JSON,
         allowNull: false,
         validate: {
           isValidRecipient(value) {
@@ -60,19 +63,14 @@ module.exports = (db, DataTypes) => {
       },
       delivery_status: {
         type: DataTypes.STRING,
-        allowNull: true,
-        defaultValue: "SENT",
+        allowNull: false,
+        defaultValue: "PENDING",
         validate: {
           isIn: {
-            args: [["SENT", "FAILED", "DELIVERED"]],
+            args: [["PENDING", "SENT", "DELIVERED", "FAILED"]],
             msg: "Invalid delivery status.",
           },
         },
-      },
-      description: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        validate: { len: [0, 500] },
       },
     },
     {
@@ -81,9 +79,11 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
+        { fields: ["land_payment_id"] },
         { fields: ["schedule_id"] },
         { fields: ["notification_type"] },
         { fields: ["sent_date"] },
+        { fields: ["delivery_status"] },
       ],
     }
   );

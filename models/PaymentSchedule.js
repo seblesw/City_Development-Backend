@@ -1,4 +1,3 @@
-const { fields } = require("../middlewares/fileStorage");
 
 module.exports = (db, DataTypes) => {
   const PaymentSchedule = db.define(
