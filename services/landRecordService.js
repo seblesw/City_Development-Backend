@@ -1427,7 +1427,12 @@ const getLandRecordByIdService = async (id, options = {}) => {
           as: "approver",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        // Include documents directly
+        {
+          model: User,
+          as:"updater",
+          attributes: ["id", "first_name", "middle_name", "last_name"],
+
+        },
         {
           model: Document,
           as: "documents",
