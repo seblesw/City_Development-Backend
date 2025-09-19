@@ -2758,13 +2758,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       where: { id: recordId },
       paranoid: false,
       transaction: t,
-      attributes: [
-        "id",
-        "parcel_number",
-        "action_log",
-        "deletedAt",
-        "deletion_reason",
-      ],
     });
 
     if (!record) throw new Error("መዝገብ አልተገኘም።");
@@ -2825,21 +2818,11 @@ const getTrashItemsService = async (user, options = {}) => {
   const offset = (page - 1) * limit;
 
   try {
-    // Base query configuration
     const queryOptions = {
       where: {
-        deletedAt: { [Op.ne]: null }, // Only soft-deleted records
-        // Optional: Filter by user's permissions (e.g., only records they deleted)
-        // deleted_by: user.isAdmin ? { [Op.ne]: null } : user.id
+        deletedAt: { [Op.ne]: null },
       },
       paranoid: false,
-      attributes: [
-        "id",
-        "parcel_number",
-        "deletedAt",
-        "deleted_by",
-        "deletion_reason",
-      ],
       order: [["deletedAt", "DESC"]],
       limit,
       offset,
@@ -2852,14 +2835,12 @@ const getTrashItemsService = async (user, options = {}) => {
       ],
     };
 
-    // Conditionally include associated deleted records
     if (includeAssociations) {
       queryOptions.include.push(
         {
           model: Document,
           as: "documents",
           paranoid: false,
-          attributes: ["id", "name", "deletedAt"],
           where: { deletedAt: { [Op.ne]: null } },
           required: false,
         },
@@ -2867,7 +2848,6 @@ const getTrashItemsService = async (user, options = {}) => {
           model: LandPayment,
           as: "payments",
           paranoid: false,
-          attributes: ["id", "amount", "deletedAt"],
           where: { deletedAt: { [Op.ne]: null } },
           required: false,
         }
@@ -2876,26 +2856,9 @@ const getTrashItemsService = async (user, options = {}) => {
 
     const { count, rows } = await LandRecord.findAndCountAll(queryOptions);
 
-    // Transform response
     return {
       total: count,
-      items: rows.map((record) => ({
-        id: record.id,
-        parcel_number: record.parcel_number,
-        deletedAt: record.deletedAt,
-        deleted_by: {
-          id: record.deleter.id,
-          name: `${record.deleter.first_name} ${record.deleter.last_name}`,
-        },
-        deletion_reason: record.deletion_reason,
-        ...(includeAssociations && {
-          associated_items: {
-            documents: record.documents?.length || 0,
-            payments: record.payments?.length || 0,
-          },
-        }),
-        status: "IN_TRASH",
-      })),
+      items: rows, 
       pagination: {
         page,
         limit,
@@ -2904,14 +2867,13 @@ const getTrashItemsService = async (user, options = {}) => {
       },
     };
   } catch (error) {
-    // Log error for debugging
     console.error(`Failed to fetch trash items: ${error.message}`);
     throw new Error(
       error.message.includes("timeout")
         ? "የመረጃ ምንጭ በጣም ተጭኗል። እባክዎ ቆይታ ካደረጉ እንደገና ይሞክሩ።"
         : "የመጥፎ ቅርጫት ዝርዝር ማግኘት አልተቻለም።"
     );
-  } 
+  }
 };
 
 //stats
