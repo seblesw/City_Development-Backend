@@ -109,7 +109,7 @@ const createLandRecordService = async (data, files, user) => {
         ],
         action_log: [
           {
-            action: "CREATED",
+            action: "የመሬት መዝገብ ተፈጥሯል",
             changed_by: {
               id: user.id,
               first_name: user.first_name,
