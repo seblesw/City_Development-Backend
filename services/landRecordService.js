@@ -2069,7 +2069,7 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
         {
           model: User,
           as: "owners",
-          through: { attributes: ["ownership_percentage", "verified"] },
+          through: { attributes: ["ownership_percentage", "verified"], paranoid: false },
           attributes: [
             "id",
             "first_name",
@@ -2906,7 +2906,7 @@ const getTrashItemsService = async (user, options = {}) => {
         {
           model: User,
           as: "owners",
-          through: { paranoid: false, attributes: [] }, // ← include soft-deleted ownerships
+          through: { paranoid: false, attributes: [] },
           attributes: [
             "id",
             "first_name",
