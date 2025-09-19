@@ -9,7 +9,7 @@ const {
   getOversightOfficeStats,
 } = require("../controllers/oversightOfficeController");
 const authMiddleware = require("../middlewares/authMiddleware");
-
+//routes
 router.post("/",authMiddleware.protect, createOversightOffice);
 router.get("/stats",authMiddleware.protect, getOversightOfficeStats);
 router.get("/", getAllOversightOffices);

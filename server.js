@@ -66,7 +66,7 @@ const startServer = async () => {
     // Cron job for overdue schedules (penalties)
     console.log('Starting cron job for overdue schedules at', new Date().toISOString());
     cron.schedule('* * * * *', async () => { // Testing: every minute
-    // cron.schedule('0 0 * * *', async () => { // Production: daily at midnight
+    // cron.schedule('0 0 * * *', async () => { // Production: daily at
       try {
         console.log('Running overdue schedule check at', new Date().toISOString());
         const penaltySchedules = await checkOverdueSchedules();

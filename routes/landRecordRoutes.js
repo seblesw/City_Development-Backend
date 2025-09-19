@@ -80,7 +80,7 @@ router.post(
   postLimiter,
   landRecordController.changeRecordStatus
 );
-//get the land records the primary owner has on the system
+//get the land records the primary owner
 router.get(
   "/my-land-records",
   authMiddleware.protect,

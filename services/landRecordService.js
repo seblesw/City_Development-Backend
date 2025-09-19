@@ -1429,9 +1429,8 @@ const getLandRecordByIdService = async (id, options = {}) => {
         },
         {
           model: User,
-          as:"updater",
+          as: "updater",
           attributes: ["id", "first_name", "middle_name", "last_name"],
-
         },
         {
           model: Document,
@@ -1468,33 +1467,6 @@ const getLandRecordByIdService = async (id, options = {}) => {
           required: false,
           paranoid: !includeDeleted,
         },
-      ],
-      attributes: [
-        "id",
-        "parcel_number",
-        "land_level",
-        "area",
-        "land_use",
-        "ownership_type",
-        "lease_ownership_type",
-        "ownership_category",
-        "zoning_type",
-        "record_status",
-        "priority",
-        "notification_status",
-        "status_history",
-        "action_log",
-        "north_neighbor",
-        "east_neighbor",
-        "south_neighbor",
-        "west_neighbor",
-        "block_number",
-        "block_special_name",
-        "rejection_reason",
-        "remark",
-        "createdAt",
-        "updatedAt",
-        "deletedAt",
       ],
       paranoid: !includeDeleted,
       transaction: t,
@@ -2401,19 +2373,37 @@ const changeRecordStatusService = async (
     const currentHistory = Array.isArray(record.status_history)
       ? record.status_history
       : [];
+    // Fetch user info for status changer
+    const statusChanger = await User.findByPk(userId, {
+      attributes: ["id", "first_name", "middle_name", "last_name", "email"],
+      transaction: t,
+    });
+
     const newHistory = [
       ...currentHistory,
       {
         status: newStatus,
         changed_at: new Date(),
-        changed_by: userId,
+        changed_by: {
+          id: statusChanger.id,
+          first_name: statusChanger.first_name,
+          middle_name: statusChanger.middle_name,
+          last_name: statusChanger.last_name,
+          email: statusChanger.email,
+        },
         notes,
       },
     ];
 
     const updateData = {
       record_status: newStatus,
-      updated_by: userId,
+      updated_by: {
+        id: statusChanger.id,
+        first_name: statusChanger.first_name,
+        middle_name: statusChanger.middle_name,
+        last_name: statusChanger.last_name,
+        email: statusChanger.email,
+      },
       status_history: newHistory,
     };
 
