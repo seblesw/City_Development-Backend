@@ -2838,6 +2838,12 @@ const getTrashItemsService = async (user, options = {}) => {
     if (includeAssociations) {
       queryOptions.include.push(
         {
+          model: User,
+          as: "owners",
+          through: { attributes: [] },
+  
+        },
+        {
           model: Document,
           as: "documents",
           paranoid: false,
@@ -2858,7 +2864,10 @@ const getTrashItemsService = async (user, options = {}) => {
 
     return {
       total: count,
-      items: rows, 
+      items: rows.map((record) => ({
+        ...record.get({ plain: true }), // ✅ includes ALL attributes + associations
+        status: "IN_TRASH",
+      })),
       pagination: {
         page,
         limit,
@@ -2875,6 +2884,7 @@ const getTrashItemsService = async (user, options = {}) => {
     );
   }
 };
+
 
 //stats
 const getLandRecordStats = async (adminUnitId, options = {}) => {
