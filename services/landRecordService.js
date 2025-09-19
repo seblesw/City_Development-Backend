@@ -2814,7 +2814,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
   }
 };
 const getTrashItemsService = async (user, options = {}) => {
-  const { page = 1, limit = 10, includeAssociations = false } = options;
+  const { page = 1, limit = 10, } = options;
   const offset = (page - 1) * limit;
 
   try {
@@ -2832,15 +2832,12 @@ const getTrashItemsService = async (user, options = {}) => {
           as: "deleter",
           attributes: ["id", "first_name", "middle_name", "last_name", "email"],
         },
-      ],
-    };
-
-    if (includeAssociations) {
-      queryOptions.include.push(
-        {
+ {
           model: User,
           as: "owners",
           through: { attributes: [] },
+          attributes: ["id", "first_name", "middle_name", "last_name", "email", "phone_number", "national_id"],
+
   
         },
         {
@@ -2848,6 +2845,7 @@ const getTrashItemsService = async (user, options = {}) => {
           as: "documents",
           paranoid: false,
           where: { deletedAt: { [Op.ne]: null } },
+          attributes: ["id", "document_type", "files", "plot_number", "createdAt"],
           required: false,
         },
         {
@@ -2857,17 +2855,14 @@ const getTrashItemsService = async (user, options = {}) => {
           where: { deletedAt: { [Op.ne]: null } },
           required: false,
         }
-      );
-    }
+      ],
+    };
 
     const { count, rows } = await LandRecord.findAndCountAll(queryOptions);
 
     return {
       total: count,
-      items: rows.map((record) => ({
-        ...record.get({ plain: true }), // ✅ includes ALL attributes + associations
-        status: "IN_TRASH",
-      })),
+      items: rows,
       pagination: {
         page,
         limit,
