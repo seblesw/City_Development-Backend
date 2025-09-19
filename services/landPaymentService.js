@@ -27,7 +27,6 @@ const addNewPaymentService = async (landRecordId, user, data) => {
   if (!landRecord) {
     throw new Error("የመሬት መዝገብ አልተገኘም።");
   }
-  
 
   // 2. Create new payment record
   const payment = await LandPayment.create({
@@ -44,6 +43,31 @@ const addNewPaymentService = async (landRecordId, user, data) => {
     payer_id,
     created_by: user.id,
   });
+
+  // 3. Update land record action log
+  const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+  const newLog = [
+    ...currentLog,
+    {
+      action: "አዲስ ክፍያ ተጨምሯል",
+      payment_id: payment.id,
+      amount: payment.paid_amount,
+      currency: payment.currency,
+      payment_type: payment.payment_type,
+      changed_by: {
+        id: user.id,
+        first_name: user.first_name,
+        middle_name: user.middle_name,
+        last_name: user.last_name,
+        name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" "),
+      },
+      changed_at: new Date(),
+    },
+  ];
+  await LandRecord.update(
+    { action_log: newLog },
+    { where: { id: landRecordId } }
+  );
 
   return payment;
 };
@@ -123,7 +147,7 @@ const createLandPaymentService = async (data, options = {}) => {
     // --- 5. Lock and update land record action log ---
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
-      lock: transaction ? undefined : t.LOCK.UPDATE, 
+      lock: transaction ? undefined : t.LOCK.UPDATE,
     });
 
     if (!landRecord) {
@@ -133,6 +157,11 @@ const createLandPaymentService = async (data, options = {}) => {
     const currentLog = Array.isArray(landRecord.action_log)
       ? landRecord.action_log
       : [];
+    // Fetch creator's user info
+    let creator = null;
+    if (data.created_by) {
+      creator = await User.findByPk(data.created_by, { transaction: t });
+    }
     const newLog = [
       ...currentLog,
       {
@@ -141,7 +170,17 @@ const createLandPaymentService = async (data, options = {}) => {
         amount: payment.paid_amount,
         currency: payment.currency,
         payment_type: payment.payment_type,
-        changed_by: data.created_by,
+        changed_by: creator
+          ? {
+              id: creator.id,
+              first_name: creator.first_name,
+              middle_name: creator.middle_name,
+              last_name: creator.last_name,
+              name: [creator.first_name, creator.middle_name, creator.last_name]
+                .filter(Boolean)
+                .join(" "),
+            }
+          : null,
         changed_at: new Date(),
       },
     ];
@@ -169,7 +208,7 @@ const getLandPaymentByIdService = async (id, options = {}) => {
           model: LandRecord,
           as: "landRecord",
           //commented to get all attribuetes of land record
-          // attributes: ["id", "parcel_number"], 
+          // attributes: ["id", "parcel_number"],
         },
       ],
       transaction,
@@ -198,7 +237,13 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
               model: User,
               through: { attributes: [] },
               as: "owners",
-              attributes: ["id", "first_name", "middle_name","last_name", "email"],
+              attributes: [
+                "id",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "email",
+              ],
               include: [
                 {
                   model: Role,
@@ -305,7 +350,11 @@ const updateLandPaymentsService = async (
               payment_type:
                 paymentData.payment_type || paymentToUpdate.payment_type,
               changes: changes, // Detailed changes object
-              changed_by: updater.id,
+              changed_by: {
+                id: updater.id,
+                first_name: updater.first_name,
+                middle_name: updater.middle_name,
+              },
               changed_at: new Date(),
             },
           ];

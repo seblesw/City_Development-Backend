@@ -103,11 +103,15 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     if (!landRecord) {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
-
+     let creator = await User.findByPk(creatorId, {
+      include: [{ model: Role, as: "role" }],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
     const currentLog = Array.isArray(landRecord.action_log)
       ? landRecord.action_log
       : [];
-
+      
     const newLog = [
       ...currentLog,
       {
@@ -115,7 +119,13 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
           data.document_type || DOCUMENT_TYPES.TITLE_DEED
         }`,
         document_id: document.id,
-        changed_by: creatorId,
+        changed_by: {
+          id: creator.id,
+          first_name: creator.first_name,
+          middle_name: creator.middle_name,
+          last_name: creator.last_name,
+
+        },
         changed_at: new Date(),
         details: {
           plot_number: data.plot_number,
@@ -256,11 +266,24 @@ const addFilesToDocumentService = async (
       transaction: t,
     });
     if (landRecord) {
+      // Fetch updater user info
+      const updater = await User.findByPk(updaterId, {
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t,
+      });
+
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
           action: "DOCUMENT_FILES_ADDED",
-          changed_by: updaterId,
+          changed_by: updater
+        ? {
+            id: updater.id,
+            first_name: updater.first_name,
+            middle_name: updater.middle_name,
+            last_name: updater.last_name,
+          }
+        : { id: updaterId },
           changed_at: new Date(),
           document_id: document.id,
           details: { files_added: newFiles.length },
@@ -385,10 +408,27 @@ const importPDFs = async ({ files, uploaderId }) => {
           ? landRecord.action_log
           : [];
 
+        // Fetch uploader user info
+        let uploader = null;
+        try {
+          uploader = await User.findByPk(uploaderId, {
+            attributes: ["id", "first_name", "middle_name", "last_name"],
+          });
+        } catch (e) {
+          uploader = null;
+        }
+
         actionLog.push({
           action: `DOCUMENT_UPLOAD_${document.document_type}`,
           document_id: document.id,
-          changed_by: uploaderId,
+          changed_by: uploader
+            ? {
+          id: uploader.id,
+          first_name: uploader.first_name,
+          middle_name: uploader.middle_name,
+          last_name: uploader.last_name,
+              }
+            : { id: uploaderId },
           changed_at: new Date().toISOString(),
           details: {
             file_name: file.originalname,
@@ -585,7 +625,7 @@ const updateDocumentsService = async (
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
             : [];
-          const newLog = [
+            const newLog = [
             ...currentLog,
             {
               action: "DOCUMENT_UPDATED",
@@ -593,10 +633,15 @@ const updateDocumentsService = async (
               document_type: docData.document_type || document.document_type,
               changes: Object.keys(changes).length > 0 ? changes : undefined,
               file_changes: fileChanges.length > 0 ? fileChanges : undefined,
-              changed_by: updater.id,
+              changed_by: {
+              id: updater.id,
+              first_name: updater.first_name,
+              middle_name: updater.middle_name,
+              last_name: updater.last_name,
+              },
               changed_at: new Date(),
             },
-          ];
+            ];
 
           await LandRecord.update(
             { action_log: newLog },

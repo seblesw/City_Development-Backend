@@ -112,9 +112,10 @@ const createLandRecordService = async (data, files, user) => {
             action: "CREATED",
             changed_by: {
               id: user.id,
-              name: [user.first_name, user.last_name, user.middle_name]
-                .filter(Boolean)
-                .join(" "),
+              first_name: user.first_name,
+              middle_name: user.middle_name,
+              last_name: user.last_name,
+              email: user.email,
             },
             changed_at: new Date(),
           },
@@ -2069,7 +2070,10 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
         {
           model: User,
           as: "owners",
-          through: { attributes: ["ownership_percentage", "verified"], paranoid: false },
+          through: {
+            attributes: ["ownership_percentage", "verified"],
+            paranoid: false,
+          },
           attributes: [
             "id",
             "first_name",
@@ -2268,7 +2272,12 @@ const updateLandRecordService = async (
                   to: newStatus,
                 }
               : undefined,
-          changed_by: updater.id,
+          changed_by: {
+            id: updater.id,
+            first_name: updater.first_name,
+            middle_name: updater.middle_name,
+            last_name: updater.last_name,
+          },
           changed_at: new Date(),
         },
       ];
@@ -2541,17 +2550,16 @@ const changeRecordStatusService = async (
 
     // 7. Return updated record (lightweight query)
     return await LandRecord.findByPk(recordId, {
-      attributes: ["id", "parcel_number", "record_status"],
       include: [
         {
           model: User,
           as: "creator",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name"],
         },
         {
           model: User,
           as: "updater",
-          attributes: ["id", "first_name", "last_name"],
+          attributes: ["id", "first_name", "middle_name", "last_name"],
         },
       ],
     });
@@ -2629,16 +2637,19 @@ const generateEmailBody = (
 };
 
 // trash management services
-const moveToTrashService = async (recordId, user, deletion_reason, options = {}) => {
+const moveToTrashService = async (
+  recordId,
+  user,
+  deletion_reason,
+  options = {}
+) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
     // Validate deletion reason
     if (!deletion_reason || deletion_reason.trim().length < 5) {
-      throw new Error(
-        "የመሰረዝ ምክንያት ቢያንስ 5 ቁምፊ መሆን አለበት።"
-      );
+      throw new Error("የመሰረዝ ምክንያት ቢያንስ 5 ቁምፊ መሆን አለበት።");
     }
 
     // Fetch the record with associated data
@@ -2650,7 +2661,7 @@ const moveToTrashService = async (recordId, user, deletion_reason, options = {})
         {
           model: User,
           as: "owners",
-          through: { attributes: [], paranoid: false }, // include ownership even if soft-deleted
+          through: { attributes: [], paranoid: false },
           attributes: ["id", "first_name", "last_name", "email"],
         },
       ],
@@ -2741,7 +2752,6 @@ const moveToTrashService = async (recordId, user, deletion_reason, options = {})
     throw error;
   }
 };
-
 
 const restoreFromTrashService = async (recordId, user, options = {}) => {
   const { transaction } = options;
@@ -2840,8 +2850,9 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       changed_at: new Date(),
       changed_by: {
         user_id: user.id,
-        name: `${user.first_name} ${user.last_name}`,
-        role: user.role,
+        first_name: user.first_name,
+        middle_name: user.middle_name,
+        last_name: user.last_name,
       },
     };
 
@@ -2922,7 +2933,13 @@ const getTrashItemsService = async (user, options = {}) => {
           as: "documents",
           paranoid: false,
           where: { deletedAt: { [Op.ne]: null } },
-          attributes: ["id", "document_type", "files", "plot_number", "createdAt"],
+          attributes: [
+            "id",
+            "document_type",
+            "files",
+            "plot_number",
+            "createdAt",
+          ],
           required: false,
         },
         {
@@ -2956,7 +2973,6 @@ const getTrashItemsService = async (user, options = {}) => {
     );
   }
 };
-
 
 //stats
 const getLandRecordStats = async (adminUnitId, options = {}) => {
