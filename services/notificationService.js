@@ -1,6 +1,5 @@
-const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, User, sequelize,NOTIFICATION_TYPES,PAYMENT_TYPES } = require('../models');
-const { Op } = require('sequelize');
-
+const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord,PAYMENT_TYPES,NOTIFICATION_TYPES, User, sequelize } = require('../models');
+const {Op} = require('sequelize');
 const createReminderNotifications = async () => {
   const today = new Date();
   const reminderDate = new Date(today);
