@@ -107,13 +107,13 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     const currentLog = Array.isArray(landRecord.action_log)
       ? landRecord.action_log
       : [];
-      
+
     // Fetch creator user info for action log
     let creator = null;
     try {
       creator = await User.findByPk(creatorId, {
-      attributes: ["id", "first_name", "middle_name", "last_name"],
-      transaction: t,
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t,
       });
     } catch (e) {
       creator = null;
@@ -122,23 +122,19 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     const newLog = [
       ...currentLog,
       {
-      action: `DOCUMENT_CREATE_${
-        data.document_type || DOCUMENT_TYPES.TITLE_DEED
-      }`,
-      document_id: document.id,
-      changed_by: creator
-        ? {
+        action: `ሰነድ ተፈጥሯል_${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
+        document_id: document.id,
+        changed_by: {
           id: creator.id,
           first_name: creator.first_name,
           middle_name: creator.middle_name,
           last_name: creator.last_name,
-        }
-        : { id: creatorId },
-      changed_at: new Date(),
-      details: {
-        plot_number: data.plot_number,
-        files_added: fileMetadata.length,
-      },
+        },
+        changed_at: new Date(),
+        details: {
+          plot_number: data.plot_number,
+          files_added: fileMetadata.length,
+        },
       },
     ];
 
@@ -283,15 +279,13 @@ const addFilesToDocumentService = async (
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
-          action: "DOCUMENT_FILES_ADDED",
-          changed_by: updater
-        ? {
+          action: "ተጨማሪ ሰነድ ፋይሎች ተጨመሩ",
+          changed_by: {
             id: updater.id,
             first_name: updater.first_name,
             middle_name: updater.middle_name,
             last_name: updater.last_name,
-          }
-        : { id: updaterId },
+          },
           changed_at: new Date(),
           document_id: document.id,
           details: { files_added: newFiles.length },
@@ -358,7 +352,7 @@ const importPDFs = async ({ files, uploaderId }) => {
 
       if (fileNameExists) {
         try {
-          fs.unlinkSync(file.path); 
+          fs.unlinkSync(file.path);
         } catch (err) {
           unmatchedLogs.push(
             `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`
@@ -382,9 +376,7 @@ const importPDFs = async ({ files, uploaderId }) => {
             `ፋይሉን ማጥፋት አልተቻለም: ${file.path} => ${err.message}`
           );
         }
-        unmatchedLogs.push(
-          `ይህ file_path አስቀድሞ አለ: '${serverRelativePath}'።`
-        );
+        unmatchedLogs.push(`ይህ file_path አስቀድሞ አለ: '${serverRelativePath}'።`);
         continue;
       }
 
@@ -427,16 +419,14 @@ const importPDFs = async ({ files, uploaderId }) => {
         }
 
         actionLog.push({
-          action: `DOCUMENT_UPLOAD_${document.document_type}`,
+          action: `ሰነዶቹ ተጭነዋል_${document.document_type}`,
           document_id: document.id,
-          changed_by: uploader
-            ? {
-          id: uploader.id,
-          first_name: uploader.first_name,
-          middle_name: uploader.middle_name,
-          last_name: uploader.last_name,
-              }
-            : { id: uploaderId },
+          changed_by: {
+            id: uploader.id,
+            first_name: uploader.first_name,
+            middle_name: uploader.middle_name,
+            last_name: uploader.last_name,
+          },
           changed_at: new Date().toISOString(),
           details: {
             file_name: file.originalname,
@@ -633,23 +623,23 @@ const updateDocumentsService = async (
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
             : [];
-            const newLog = [
+          const newLog = [
             ...currentLog,
             {
-              action: "DOCUMENT_UPDATED",
+              action: "ሰነድ ተሻሽሏል",
               document_id: document.id,
               document_type: docData.document_type || document.document_type,
               changes: Object.keys(changes).length > 0 ? changes : undefined,
               file_changes: fileChanges.length > 0 ? fileChanges : undefined,
               changed_by: {
-              id: updater.id,
-              first_name: updater.first_name,
-              middle_name: updater.middle_name,
-              last_name: updater.last_name,
+                id: updater.id,
+                first_name: updater.first_name,
+                middle_name: updater.middle_name,
+                last_name: updater.last_name,
               },
               changed_at: new Date(),
             },
-            ];
+          ];
 
           await LandRecord.update(
             { action_log: newLog },
@@ -696,7 +686,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       await landRecord.save({ transaction: t });
     }
     // Soft delete document
-    await document.destroy({ transaction: t, });
+    await document.destroy({ transaction: t });
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
   } catch (error) {

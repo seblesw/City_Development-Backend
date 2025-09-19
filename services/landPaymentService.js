@@ -169,14 +169,13 @@ const createLandPaymentService = async (data, options = {}) => {
         amount: payment.paid_amount,
         currency: payment.currency,
         payment_type: payment.payment_type,
-        changed_by: creator
-          ? {
+        changed_by: 
+           {
               id: creator.id,
               first_name: creator.first_name,
               middle_name: creator.middle_name,
               last_name: creator.last_name,
-            }
-          : null,
+            },
         changed_at: new Date(),
       },
     ];
@@ -336,7 +335,7 @@ const updateLandPaymentsService = async (
           const newLog = [
             ...currentLog,
             {
-              action: "PAYMENT_UPDATED",
+              action: "ክፍያ ተሻሽሏል",
               payment_id: paymentToUpdate.id,
               amount:
                 paymentData.paid_amount !== undefined
@@ -345,7 +344,7 @@ const updateLandPaymentsService = async (
               currency: paymentData.currency || paymentToUpdate.currency,
               payment_type:
                 paymentData.payment_type || paymentToUpdate.payment_type,
-              changes: changes, // Detailed changes object
+              changes: changes, 
               changed_by: {
                 id: updater.id,
                 first_name: updater.first_name,
