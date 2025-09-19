@@ -105,10 +105,10 @@ const createLandPaymentService = async (data, options = {}) => {
         )}`
       );
     }
-    if (typeof data.total_amount !== "number" || data.total_amount <= 0) {
+    if (data.total_amount <= 0) {
       throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
     }
-    if (typeof data.paid_amount !== "number" || data.paid_amount < 0) {
+    if ( data.paid_amount < 0) {
       throw new Error("የተከፈለው መጠን ከ 0 በላይ ወይም እኩል ትክክለኛ ቁጥር መሆን አለበት።");
     }
     if (data.paid_amount > data.total_amount) {
