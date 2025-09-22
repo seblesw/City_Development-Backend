@@ -25,8 +25,6 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const { fs } = require("fs");
-// const {pLimit} = require("p-limit");
-// import pLimit from "p-limit";
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -34,28 +32,7 @@ const createLandRecordService = async (data, files, user) => {
   try {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
-
-    // 1. Enhanced Input Validation
-    const validateInputs = () => {
-      if (!land_record?.parcel_number || !land_record?.ownership_category) {
-        throw new Error(
-          "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
-        );
-      }
-
-      // if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
-      //   throw new Error("የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።");
-      // } else if (
-      //   land_record.ownership_category === "የግል" &&
-      //   owners.length !== 1
-      // ) {
-      //   throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
-      // }
-    };
-
-    validateInputs();
-
-    // 2. Check for Duplicate Parcel
+    // Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -69,7 +46,7 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    // 3. Process Profile Pictures (NEW IMPLEMENTATION)
+    //  Process Profile Pictures 
     const processOwnerPhotos = () => {
       // Handle both array and single file upload
       const profilePictures = Array.isArray(files?.profile_picture)
@@ -189,7 +166,7 @@ const createLandRecordService = async (data, files, user) => {
       // Only validate if payment data exists
       if (!land_payment.payment_type) {
         throw new Error(
-          "Payment type is required when providing payment information"
+          "የክፍያ አይነት መግለጽ አለበት።"
         );
       }
 
