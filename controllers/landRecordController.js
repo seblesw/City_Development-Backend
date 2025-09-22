@@ -20,8 +20,6 @@ const {
   restoreFromTrashService,
   permanentlyDeleteService,
   getTrashItemsService,
-  // importLandRecordsFromCSVService,
-  // rejectedLandRecords,
   getRejectedLandRecordsService,
   getLandRecordStats,
   importLandRecordsFromXLSXService,
