@@ -2374,36 +2374,24 @@ const changeRecordStatusService = async (
       ? record.status_history
       : [];
     // Fetch user info for status changer
-    const statusChanger = await User.findByPk(userId, {
-      attributes: ["id", "first_name", "middle_name", "last_name", "email"],
-      transaction: t,
-    });
+    // const statusChanger = await User.findByPk(userId, {
+    //   attributes: ["id", "first_name", "middle_name", "last_name", "email"],
+    //   transaction: t,
+    // });
 
     const newHistory = [
       ...currentHistory,
       {
         status: newStatus,
         changed_at: new Date(),
-        changed_by: {
-          id: statusChanger.id,
-          first_name: statusChanger.first_name,
-          middle_name: statusChanger.middle_name,
-          last_name: statusChanger.last_name,
-          email: statusChanger.email,
-        },
+        changed_by: userId,
         notes,
       },
     ];
 
     const updateData = {
       record_status: newStatus,
-      updated_by: {
-        id: statusChanger.id,
-        first_name: statusChanger.first_name,
-        middle_name: statusChanger.middle_name,
-        last_name: statusChanger.last_name,
-        email: statusChanger.email,
-      },
+      updated_by:userId,
       status_history: newHistory,
     };
 
