@@ -2,21 +2,16 @@ const {
   sequelize,
   LandRecord,
   User,
-  Role,
   AdministrativeUnit,
   RECORD_STATUSES,
   NOTIFICATION_STATUSES,
   PRIORITIES,
-  LAND_USE_TYPES,
-  ZONING_TYPES,
-  OWNERSHIP_TYPES,
   DOCUMENT_TYPES,
 
   Document,
   LandOwner,
   LandPayment,
   PAYMENT_TYPES,
-  PAYMENT_STATUSES,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -101,7 +96,7 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // 5. Create and Link Owners
+    // Create and Link Owners to land record
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -132,7 +127,7 @@ const createLandRecordService = async (data, files, user) => {
       )
     );
 
-    // 6. Handle Documents
+    // Handle Documents
     const processDocuments = async () => {
       if (!documents.length) return [];
 
@@ -157,7 +152,7 @@ const createLandRecordService = async (data, files, user) => {
 
     const documentResults = await processDocuments();
 
-    // 7. Handle Payment
+    // Handle Payment
     let landPayment = null;
     if (
       land_payment &&
@@ -181,9 +176,6 @@ const createLandRecordService = async (data, files, user) => {
         { transaction: t }
       );
     }
-
-    // const landPayment = await processPayment();
-
     await t.commit();
 
     return {
