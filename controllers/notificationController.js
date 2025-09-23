@@ -1,3 +1,4 @@
+const { GlobalNoticeSchedule } = require('../models');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications } = require('../services/notificationService');
 
 const createReminders = async (req, res) => {
@@ -46,9 +47,37 @@ const sendNotifications = async (req, res) => {
     });
   }
 };
+const createGlobalNoticeSchedule = async (req, res) => {
+  const { message, scheduled_date } = req.body;
+  if (!message || !scheduled_date) {
+    return res.status(400).json({
+      success: false,
+      message: 'Message and scheduled_date are required',
+    });
+  }
+
+  try {
+    const noticeSchedule = await GlobalNoticeSchedule.create({
+      message,
+      scheduled_date: new Date(scheduled_date),
+      is_active: true,
+    });
+    res.status(201).json({
+      success: true,
+      message: 'አጠቃላይ ማሳወቂያ notice መርሃ ግብር ተፈጥሯል',
+      noticeSchedule,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `አጠቃላይ ማሳወቂያ መርሃ ግብር መፍጠር አልተሳካም: ${error.message}`,
+    });
+  }
+};
 
 module.exports = {
   createReminders,
   createOverdue,
   sendNotifications,
+  createGlobalNoticeSchedule,
 };

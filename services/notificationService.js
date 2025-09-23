@@ -1,5 +1,7 @@
-const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord,PAYMENT_TYPES,NOTIFICATION_TYPES, User, sequelize } = require('../models');
-const {Op} = require('sequelize');
+const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize } = require('../models');
+const { Op } = require('sequelize');
+const { sendEmail } = require('../utils/statusEmail');
+
 const createReminderNotifications = async () => {
   const today = new Date();
   const reminderDate = new Date(today);
@@ -69,13 +71,10 @@ const createReminderNotifications = async () => {
         continue;
       }
 
-      const message = `የ${landPayment.payment_type} የክፍያ መርሃ ግብር ቁጥር ${
-        schedule.id
-      } እስከ ${
-        schedule.due_date.toISOString().split('T')[0]
-      } መከፈል አለበት። የገንዘብ መጠን: ${
-        schedule.expected_amount
-      } ETB ነው፣ ከዚህ በኋላ ጊዜው ካለፈ ቅጣት ይጨመራል።`;
+      const message = `የ${landPayment.payment_type} የክፍያ መርሃ ግብር ቁጥር ${schedule.id
+        } እስከ ${schedule.due_date.toISOString().split('T')[0]
+        } መከፈል አለበት። የገንዘብ መጠን: ${schedule.expected_amount
+        } ETB ነው፣ ከዚህ በኋላ ጊዜው ካለፈ ቅጣት ይጨመራል።`;
       const notification = await PaymentNotification.create(
         {
           land_payment_id: landPayment.id,
@@ -250,11 +249,9 @@ const createPenaltyNotification = async (penaltySchedule) => {
     throw new Error(`መለያ ቁጥር ${firstOwner.id} ያለው ባለቤት ኢሜይል ወይም ስልክ የለውም`);
   }
 
-  const message = `የ${landPayment.payment_type} መርሃ ግብር ቁጥር ${
-    schedule.id
-  } መዘግየት ምክንያት ቅጣት ተጥሏል። የቅጣት መጠን: ${
-    penaltySchedule.expected_amount
-  } ETB፣ መከፈል ያለበት ቀን: ${penaltySchedule.due_date.toISOString().split('T')[0]}`;
+  const message = `የ${landPayment.payment_type} መርሃ ግብር ቁጥር ${schedule.id
+    } መዘግየት ምክንያት ቅጣት ተጥሏል። የቅጣት መጠን: ${penaltySchedule.expected_amount
+    } ETB፣ መከፈል ያለበት ቀን: ${penaltySchedule.due_date.toISOString().split('T')[0]}`;
   const notification = await PaymentNotification.create({
     land_payment_id: penaltySchedule.land_payment_id,
     schedule_id: penaltySchedule.id,
@@ -311,11 +308,9 @@ const createConfirmationNotification = async (landPayment) => {
     throw new Error(`መለያ ቁጥር ${firstOwner.id} ያለው ባለቤት ኢሜይል ወይም ስልክ የለውም`);
   }
 
-  const message = `የ${landPayment.payment_type} ክፋይ ቁጥር ${
-    landPayment.id
-  } ተከፍሏል። የተከፈለ መጠን: ${landPayment.paid_amount} ETB፣ ቀን: ${
-    new Date().toISOString().split('T')[0]
-  }`;
+  const message = `የ${landPayment.payment_type} ክፋይ ቁጥር ${landPayment.id
+    } ተከፍሏል። የተከፈለ መጠን: ${landPayment.paid_amount} ETB፣ ቀን: ${new Date().toISOString().split('T')[0]
+    }`;
   const notification = await PaymentNotification.create({
     land_payment_id: landPayment.id,
     schedule_id: schedule.id,
@@ -328,21 +323,133 @@ const createConfirmationNotification = async (landPayment) => {
 
   return notification;
 };
+const createGlobalNoticeNotifications = async () => {
+  const today = new Date();
+  const notices = await GlobalNoticeSchedule.findAll({
+    where: {
+      is_active: true,
+      scheduled_date: {
+        [Op.gte]: new Date(today.setHours(0, 0, 0, 0)),
+        [Op.lt]: new Date(today.setHours(23, 59, 59, 999)),
+      },
+    },
+  });
+
+  const notifications = [];
+  const transaction = await sequelize.transaction();
+  try {
+    for (const notice of notices) {
+      const landowners = await User.findAll({
+        include: [
+          {
+            model: LandRecord,
+            as: 'landRecords',
+            through: { attributes: [] },
+          },
+        ],
+      });
+
+      for (const user of landowners) {
+        if (!user.landRecords || user.landRecords.length === 0) {
+          continue;
+        }
+        if (!user.email) {
+          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት ኢሜይል የለውም`);
+          continue;
+        }
+
+        const existingNotification = await PaymentNotification.findOne({
+          where: {
+            global_notice_schedule_id: notice.id,
+            notification_type: NOTIFICATION_TYPES.GLOBAL_NOTICE,
+            recipients: { [Op.contains]: { user_id: user.id } },
+            delivery_status: { [Op.in]: ['SENT', 'DELIVERED'] },
+          },
+          transaction,
+        });
+        if (existingNotification) {
+          continue;
+        }
+
+        const recipient = {
+          user_id: user.id,
+          email: user.email,
+          phone: null, // Email only for global notices
+        };
+
+        const notification = await PaymentNotification.create({
+          global_notice_schedule_id: notice.id,
+          notification_type: NOTIFICATION_TYPES.GLOBAL_NOTICE,
+          message: notice.message,
+          recipients: recipient,
+          delivery_status: 'PENDING',
+          description: `አጠቃላይ ማሳወቂያ ለባለቤት ቁጥር ${user.id}`,
+        }, { transaction });
+
+        notifications.push(notification);
+      }
+
+      await notice.update({ is_active: false }, { transaction });
+    }
+
+    await transaction.commit();
+    if (notifications.length > 0) {
+      console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል`);
+    }
+    return notifications;
+  } catch (error) {
+    await transaction.rollback();
+    console.error('አጠቃላይ ማሳወቂያ መፍጠር ስህተት:', error.message);
+    throw error;
+  }
+};
 
 const sendPendingNotifications = async () => {
   const notifications = await PaymentNotification.findAll({
-    where: { delivery_status: 'SENT' },
+    where: { delivery_status: 'PENDING' },
   });
 
+  let sentCount = 0;
   for (const notification of notifications) {
     try {
-      console.log(
-        `Sending notification ID ${notification.id}: ${notification.message}`
-      );
+      if (notification.recipients.email) {
+        await sendEmail({
+          to: notification.recipients.email,
+          subject: notification.notification_type === NOTIFICATION_TYPES.GLOBAL_NOTICE
+            ? 'ማስታዎቂያ'
+            : `Land Payment Notification: ${notification.notification_type}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; background: #f9f9f9; padding: 24px;">
+              <div style="max-width: 500px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px;">
+          <h2 style="color: #2e7d32; margin-bottom: 16px;">
+            ${notification.notification_type === NOTIFICATION_TYPES.GLOBAL_NOTICE ? 'ማስታዎቂያ' : 'Land Payment Notification'}
+          </h2>
+          <p style="font-size: 16px; color: #333; line-height: 1.6;">
+            ${notification.message}
+          </p>
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+          <p style="font-size: 13px; color: #888;">
+            ይህ መልእክት ከከተማ ልማት አገልግሎት ተልኳል<br>
+            This message was sent by City Development Service.
+          </p>
+              </div>
+            </div>
+          `,
+        });
+        console.log(
+          `Email sent for notification ID ${notification.id} to ${notification.recipients.email}: ${notification.message}`
+        );
+      } else {
+        console.log(
+          `No email for notification ID ${notification.id}, logging only: ${notification.message} to ${JSON.stringify(notification.recipients)}`
+        );
+      }
+
       await notification.update({
         delivery_status: 'DELIVERED',
         sent_date: new Date(),
       });
+      sentCount++;
     } catch (error) {
       console.error(
         `Failed to send notification ID ${notification.id}:`,
@@ -352,7 +459,7 @@ const sendPendingNotifications = async () => {
     }
   }
 
-  return notifications.length;
+  return sentCount;
 };
 
 module.exports = {
@@ -360,5 +467,6 @@ module.exports = {
   createOverdueNotifications,
   createPenaltyNotification,
   createConfirmationNotification,
+  createGlobalNoticeNotifications,
   sendPendingNotifications,
 };

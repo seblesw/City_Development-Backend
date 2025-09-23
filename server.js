@@ -19,7 +19,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const path = require('path');
 const cron = require('node-cron');
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
-const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications } = require('./services/notificationService');
+const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');
 
 // Initialize express app
 const app = express();
@@ -60,13 +60,13 @@ const startServer = async () => {
   try {
     await db.authenticate();
     console.log('Database connected successfully at', new Date().toISOString());
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
     console.log('Starting cron job for overdue schedules at', new Date().toISOString());
     cron.schedule('* * * * *', async () => { // Testing: every minute
-    // cron.schedule('0 0 * * *', async () => { // Production: daily at
+      // cron.schedule('0 0 * * *', async () => { // Production: daily at
       try {
         console.log('Running overdue schedule check at', new Date().toISOString());
         const penaltySchedules = await checkOverdueSchedules();
@@ -100,10 +100,22 @@ const startServer = async () => {
       }
     });
 
-    // Cron job for sending notifications ፎር ር ማሳወቂያዎች
+    // Cron job for global notice notifications
+    console.log('Starting cron job for global notice notifications at', new Date().toISOString());
+    cron.schedule('* * * * *', async () => { // Daily at 10 AM
+      try {
+        console.log('Running global notice notification creation at', new Date().toISOString());
+        const notifications = await createGlobalNoticeNotifications();
+        console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+      } catch (error) {
+        console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+      }
+    });
+
+    // Cron job for sending notifications 
     console.log('Starting cron job for sending notifications at', new Date().toISOString());
     cron.schedule('* * * * *', async () => { // Testing: every minute
-    // cron.schedule('*/5 * * * *', async () => { // Production: every 5 minutes
+      // cron.schedule('*/5 * * * *', async () => { // Production: every 5 minutes
       try {
         console.log('Running notification sending at', new Date().toISOString());
         const sentCount = await sendPendingNotifications();

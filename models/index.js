@@ -413,6 +413,7 @@ module.exports = {
   PaymentSchedule,
   LandOwner,
   Document,
+  GlobalNoticeSchedule,
   DOCUMENT_TYPES,
   RECORD_STATUSES,
   NOTIFICATION_STATUSES,
