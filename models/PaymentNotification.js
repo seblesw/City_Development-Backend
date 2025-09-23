@@ -3,6 +3,7 @@ const NOTIFICATION_TYPES = {
   OVERDUE: "ያለፈበት ማሳወቂያ",
   CONFIRMATION: "የክፍያ ማረጋገጫ",
   PENALTY: "ቅጣት ማሳወቂያ",
+  GLOBAL_NOTICE: "አጠቃላይ ማሳወቂያ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -17,13 +18,18 @@ module.exports = (db, DataTypes) => {
       },
       land_payment_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "land_payments", key: "id" },
       },
       schedule_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "payment_schedules", key: "id" },
+      },
+      global_notice_schedule_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "global_notice_schedules", key: "id" },
       },
       notification_type: {
         type: DataTypes.STRING,
@@ -72,6 +78,10 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: "payment_notifications",
@@ -81,6 +91,7 @@ module.exports = (db, DataTypes) => {
       indexes: [
         { fields: ["land_payment_id"] },
         { fields: ["schedule_id"] },
+        { fields: ["global_notice_schedule_id"] },
         { fields: ["notification_type"] },
         { fields: ["sent_date"] },
         { fields: ["delivery_status"] },

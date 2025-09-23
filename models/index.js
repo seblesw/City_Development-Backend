@@ -21,7 +21,8 @@ const {
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
 const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
-const {PaymentNotification,NOTIFICATION_TYPES} = require("./PaymentNotification")(db, DataTypes);
+const { PaymentNotification, NOTIFICATION_TYPES } = require("./PaymentNotification")(db, DataTypes);
+const GlobalNoticeSchedule = require("./GlobalNoticeSchedule")(db, DataTypes);
 const { LandPayment, PAYMENT_STATUSES, PAYMENT_TYPES } =
   require("./LandPayment")(db, DataTypes);
 const { Document, DOCUMENT_TYPES } = require("./Document")(db, DataTypes);
@@ -327,9 +328,9 @@ LandPayment.hasMany(PaymentSchedule, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-LandPayment.hasMany(PaymentNotification, { 
-  as: 'Notifications', 
-  foreignKey: 'land_payment_id' ,
+LandPayment.hasMany(PaymentNotification, {
+  as: 'Notifications',
+  foreignKey: 'land_payment_id',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
@@ -368,24 +369,33 @@ PaymentSchedule.hasMany(PaymentSchedule, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-PaymentSchedule.hasMany(PaymentNotification, { 
-  as: 'Notifications', 
-  foreignKey: 'schedule_id' ,
+PaymentSchedule.hasMany(PaymentNotification, {
+  as: 'Notifications',
+  foreignKey: 'schedule_id',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
+GlobalNoticeSchedule.hasMany(PaymentNotification,{
+  as:"NoticeNotifications",
+  foreignKey:"global_notice_schedule_id",
+
+})
 // PaymentNotification associations
-PaymentNotification.belongsTo(PaymentSchedule, { 
-  as: 'Schedule', 
-  foreignKey: 'schedule_id' ,
+PaymentNotification.belongsTo(PaymentSchedule, {
+  as: 'Schedule',
+  foreignKey: 'schedule_id',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
-PaymentNotification.belongsTo(LandPayment, { 
-  as: 'landPayment', 
-  foreignKey: 'land_payment_id' ,
+PaymentNotification.belongsTo(LandPayment, {
+  as: 'landPayment',
+  foreignKey: 'land_payment_id',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
+});
+PaymentNotification.belongsTo(GlobalNoticeSchedule, {
+  as: 'globalNoticeSchedule',
+  foreignKey: 'global_notice_schedule_id'
 });
 // Export Sequelize instance, models, and constants
 module.exports = {
