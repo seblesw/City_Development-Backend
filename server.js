@@ -100,7 +100,7 @@ const startServer = async () => {
       }
     });
 
-    // Cron job for sending notifications
+    // Cron job for sending notifications ፎር ር ማሳወቂያዎች
     console.log('Starting cron job for sending notifications at', new Date().toISOString());
     cron.schedule('* * * * *', async () => { // Testing: every minute
     // cron.schedule('*/5 * * * *', async () => { // Production: every 5 minutes
