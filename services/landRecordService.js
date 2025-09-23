@@ -2,21 +2,16 @@ const {
   sequelize,
   LandRecord,
   User,
-  Role,
   AdministrativeUnit,
   RECORD_STATUSES,
   NOTIFICATION_STATUSES,
   PRIORITIES,
-  LAND_USE_TYPES,
-  ZONING_TYPES,
-  OWNERSHIP_TYPES,
   DOCUMENT_TYPES,
 
   Document,
   LandOwner,
   LandPayment,
   PAYMENT_TYPES,
-  PAYMENT_STATUSES,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -25,8 +20,6 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const { fs } = require("fs");
-// const {pLimit} = require("p-limit");
-// import pLimit from "p-limit";
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -34,28 +27,7 @@ const createLandRecordService = async (data, files, user) => {
   try {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
-
-    // 1. Enhanced Input Validation
-    const validateInputs = () => {
-      if (!land_record?.parcel_number || !land_record?.ownership_category) {
-        throw new Error(
-          "የመሬት መሰረታዊ መረጃዎች (parcel_number, ownership_category) አስፈላጊ ናቸው።"
-        );
-      }
-
-      // if (land_record.ownership_category === "የጋራ" && owners.length < 2) {
-      //   throw new Error("የጋራ ባለቤትነት ለመመዝገብ ቢያንስ 2 ባለቤቶች ያስፈልጋሉ።");
-      // } else if (
-      //   land_record.ownership_category === "የግል" &&
-      //   owners.length !== 1
-      // ) {
-      //   throw new Error("የግል ባለቤትነት ለመመዝገብ በትክክል 1 ባለቤት ያስፈልጋል።");
-      // }
-    };
-
-    validateInputs();
-
-    // 2. Check for Duplicate Parcel
+    // Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -69,7 +41,7 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    // 3. Process Profile Pictures (NEW IMPLEMENTATION)
+    //  Process Profile Pictures 
     const processOwnerPhotos = () => {
       // Handle both array and single file upload
       const profilePictures = Array.isArray(files?.profile_picture)
@@ -124,7 +96,7 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // 5. Create and Link Owners
+    // Create and Link Owners to land record
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -155,7 +127,7 @@ const createLandRecordService = async (data, files, user) => {
       )
     );
 
-    // 6. Handle Documents
+    // Handle Documents
     const processDocuments = async () => {
       if (!documents.length) return [];
 
@@ -180,7 +152,7 @@ const createLandRecordService = async (data, files, user) => {
 
     const documentResults = await processDocuments();
 
-    // 7. Handle Payment
+    // Handle Payment
     let landPayment = null;
     if (
       land_payment &&
@@ -189,7 +161,7 @@ const createLandRecordService = async (data, files, user) => {
       // Only validate if payment data exists
       if (!land_payment.payment_type) {
         throw new Error(
-          "Payment type is required when providing payment information"
+          "የክፍያ አይነት መግለጽ አለበት።"
         );
       }
 
@@ -204,9 +176,6 @@ const createLandRecordService = async (data, files, user) => {
         { transaction: t }
       );
     }
-
-    // const landPayment = await processPayment();
-
     await t.commit();
 
     return {
@@ -2374,36 +2343,24 @@ const changeRecordStatusService = async (
       ? record.status_history
       : [];
     // Fetch user info for status changer
-    const statusChanger = await User.findByPk(userId, {
-      attributes: ["id", "first_name", "middle_name", "last_name", "email"],
-      transaction: t,
-    });
+    // const statusChanger = await User.findByPk(userId, {
+    //   attributes: ["id", "first_name", "middle_name", "last_name", "email"],
+    //   transaction: t,
+    // });
 
     const newHistory = [
       ...currentHistory,
       {
         status: newStatus,
         changed_at: new Date(),
-        changed_by: {
-          id: statusChanger.id,
-          first_name: statusChanger.first_name,
-          middle_name: statusChanger.middle_name,
-          last_name: statusChanger.last_name,
-          email: statusChanger.email,
-        },
+        changed_by: userId,
         notes,
       },
     ];
 
     const updateData = {
       record_status: newStatus,
-      updated_by: {
-        id: statusChanger.id,
-        first_name: statusChanger.first_name,
-        middle_name: statusChanger.middle_name,
-        last_name: statusChanger.last_name,
-        email: statusChanger.email,
-      },
+      updated_by:userId,
       status_history: newHistory,
     };
 
