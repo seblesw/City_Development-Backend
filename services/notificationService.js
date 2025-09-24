@@ -1,7 +1,7 @@
 const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize, Sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/statusEmail');
-
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const createReminderNotifications = async () => {
   const today = new Date();
   const reminderDate = new Date(today);
@@ -325,12 +325,8 @@ const createConfirmationNotification = async (landPayment) => {
 };
 const createGlobalNoticeNotifications = async () => {
   const today = new Date();
-  const eatOffset = 3 * 60 * 60 * 1000; // EAT is UTC+3
-  const currentEAT = new Date(today.getTime() + eatOffset); // Convert to EAT
-  const startOfDayEAT = new Date(currentEAT.setHours(0, 0, 0, 0)); // Start of day in EAT
-  const endOfDayEAT = new Date(currentEAT.setHours(23, 59, 59, 999)); // End of day in EAT
-  const startOfDayUTC = new Date(startOfDayEAT.getTime() - eatOffset); // Convert back to UTC
-  const endOfDayUTC = new Date(endOfDayEAT.getTime() - eatOffset); // Convert back to UTC
+  const startOfDayUTC = new Date(today.setHours(0, 0, 0, 0));
+  const endOfDayUTC = new Date(today.setHours(23, 59, 59, 999));
 
   const notices = await GlobalNoticeSchedule.findAll({
     where: {
@@ -353,18 +349,19 @@ const createGlobalNoticeNotifications = async () => {
             model: LandRecord,
             as: 'ownedLandRecords',
             through: { attributes: [] },
+            required: true,
           },
         ],
+        where: {
+          email: { [Op.ne]: null },
+        },
       });
       console.log('Found landowners:', landowners.map(u => ({ id: u.id, email: u.email, ownedLandRecords: u.ownedLandRecords?.length })));
 
+      const notificationData = [];
       for (const user of landowners) {
-        if (!user.ownedLandRecords || user.ownedLandRecords.length === 0) {
-          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት መሬት የለውም`);
-          continue;
-        }
-        if (!user.email) {
-          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት ኢሜይል የለውም`);
+        if (!isValidEmail(user.email)) {
+          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት ልክ ያልሆነ ኢሜይል አለው: ${user.email}`);
           continue;
         }
 
@@ -382,37 +379,42 @@ const createGlobalNoticeNotifications = async () => {
           continue;
         }
 
-        const recipient = {
-          user_id: user.id,
-          email: user.email,
-          phone: null, // Email only for global notices
-        };
-
-        const notification = await PaymentNotification.create({
+        notificationData.push({
           global_notice_schedule_id: notice.id,
           notification_type: NOTIFICATION_TYPES.GLOBAL_NOTICE,
           message: notice.message,
-          recipients: recipient,
+          recipients: {
+            user_id: user.id,
+            email: user.email,
+            phone: null,
+          },
           delivery_status: 'PENDING',
-          land_payment_id: 0,
           description: `አጠቃላይ ማሳወቂያ ለባለቤት ቁጥር ${user.id}`,
-        }, { transaction });
+        });
+      }
 
-        notifications.push(notification);
+      if (notificationData.length > 0) {
+        const createdNotifications = await PaymentNotification.bulkCreate(notificationData, { transaction });
+        notifications.push(...createdNotifications);
+        console.log(`${createdNotifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል`, {
+          noticeId: notice.id,
+          userIds: createdNotifications.map(n => n.recipients.user_id),
+        });
       }
 
       await notice.update({ is_active: false }, { transaction });
     }
 
     await transaction.commit();
-    if (notifications.length > 0) {
-      console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል`);
-    }
     return notifications;
   } catch (error) {
     await transaction.rollback();
-    console.error('አጠቃላይ ማሳወቂያ መፍጠር ስህተት:', error.message);
-    throw error;
+    console.error('አጠቃላይ ማሳወቂያ መፍጠር ስህተት:', {
+      message: error.message,
+      stack: error.stack,
+
+    });
+    return notifications; 
   }
 };
 

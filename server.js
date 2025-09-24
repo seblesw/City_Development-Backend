@@ -49,11 +49,11 @@ app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 
-app.use(express.static(path.join(__dirname, 'dist')));
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+// app.use(express.static(path.join(__dirname, 'dist')));
+// app.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// });
+// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 // Start server and cron jobs
 const startServer = async () => {
