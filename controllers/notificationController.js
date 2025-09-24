@@ -1,5 +1,5 @@
 const { GlobalNoticeSchedule } = require('../models');
-const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications } = require('../services/notificationService');
+const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('../services/notificationService');
 
 const createReminders = async (req, res) => {
   try {

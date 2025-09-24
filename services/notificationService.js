@@ -1,4 +1,4 @@
-const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize } = require('../models');
+const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize, Sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/statusEmail');
 
@@ -325,15 +325,23 @@ const createConfirmationNotification = async (landPayment) => {
 };
 const createGlobalNoticeNotifications = async () => {
   const today = new Date();
+  const eatOffset = 3 * 60 * 60 * 1000; // EAT is UTC+3
+  const currentEAT = new Date(today.getTime() + eatOffset); // Convert to EAT
+  const startOfDayEAT = new Date(currentEAT.setHours(0, 0, 0, 0)); // Start of day in EAT
+  const endOfDayEAT = new Date(currentEAT.setHours(23, 59, 59, 999)); // End of day in EAT
+  const startOfDayUTC = new Date(startOfDayEAT.getTime() - eatOffset); // Convert back to UTC
+  const endOfDayUTC = new Date(endOfDayEAT.getTime() - eatOffset); // Convert back to UTC
+
   const notices = await GlobalNoticeSchedule.findAll({
     where: {
       is_active: true,
       scheduled_date: {
-        [Op.gte]: new Date(today.setHours(0, 0, 0, 0)),
-        [Op.lt]: new Date(today.setHours(23, 59, 59, 999)),
+        [Op.gte]: startOfDayUTC,
+        [Op.lte]: endOfDayUTC,
       },
     },
   });
+  console.log('Found notices:', notices.map(n => ({ id: n.id, scheduled_date: n.scheduled_date, is_active: n.is_active })));
 
   const notifications = [];
   const transaction = await sequelize.transaction();
@@ -343,14 +351,16 @@ const createGlobalNoticeNotifications = async () => {
         include: [
           {
             model: LandRecord,
-            as: 'landRecords',
+            as: 'ownedLandRecords',
             through: { attributes: [] },
           },
         ],
       });
+      console.log('Found landowners:', landowners.map(u => ({ id: u.id, email: u.email, ownedLandRecords: u.ownedLandRecords?.length })));
 
       for (const user of landowners) {
-        if (!user.landRecords || user.landRecords.length === 0) {
+        if (!user.ownedLandRecords || user.ownedLandRecords.length === 0) {
+          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት መሬት የለውም`);
           continue;
         }
         if (!user.email) {
@@ -362,12 +372,13 @@ const createGlobalNoticeNotifications = async () => {
           where: {
             global_notice_schedule_id: notice.id,
             notification_type: NOTIFICATION_TYPES.GLOBAL_NOTICE,
-            recipients: { [Op.contains]: { user_id: user.id } },
+            [Op.and]: Sequelize.literal(`recipients->>'user_id' = '${user.id}'`),
             delivery_status: { [Op.in]: ['SENT', 'DELIVERED'] },
           },
           transaction,
         });
         if (existingNotification) {
+          console.log(`Notification already exists for user ${user.id} and schedule ${notice.id}`);
           continue;
         }
 
@@ -383,6 +394,7 @@ const createGlobalNoticeNotifications = async () => {
           message: notice.message,
           recipients: recipient,
           delivery_status: 'PENDING',
+          land_payment_id: 0,
           description: `አጠቃላይ ማሳወቂያ ለባለቤት ቁጥር ${user.id}`,
         }, { transaction });
 

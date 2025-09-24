@@ -11,7 +11,7 @@ module.exports = (db, DataTypes) => {
       },
       land_payment_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "land_payments", key: "id" },
       },
       expected_amount: {
