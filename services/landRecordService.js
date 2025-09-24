@@ -47,8 +47,8 @@ const createLandRecordService = async (data, files, user) => {
       const profilePictures = Array.isArray(files?.profile_picture)
         ? files.profile_picture
         : files?.profile_picture
-        ? [files.profile_picture]
-        : [];
+          ? [files.profile_picture]
+          : [];
 
       return owners.map((owner, index) => ({
         ...owner,
@@ -72,7 +72,7 @@ const createLandRecordService = async (data, files, user) => {
             status: RECORD_STATUSES.SUBMITTED,
             changed_by: {
               id: user.id,
-              name: [user.first_name, user.middle_name ,user.last_name]
+              name: [user.first_name, user.middle_name, user.last_name]
                 .filter(Boolean)
                 .join(" "),
             },
@@ -1981,17 +1981,17 @@ const getLandRecordsByUserAdminUnitService = async (
       ownership_category: record.ownership_category,
       administrative_unit: record.administrativeUnit
         ? {
-            id: record.administrativeUnit.id,
-            name: record.administrativeUnit.name,
-            max_land_levels: record.administrativeUnit.max_land_levels,
-          }
+          id: record.administrativeUnit.id,
+          name: record.administrativeUnit.name,
+          max_land_levels: record.administrativeUnit.max_land_levels,
+        }
         : null,
       owners: record.owners
         ? record.owners.map((owner) => ({
-            ...owner.get({ plain: true }),
-            ownership_percentage: owner.LandOwner.ownership_percentage,
-            verified: owner.LandOwner.verified,
-          }))
+          ...owner.get({ plain: true }),
+          ownership_percentage: owner.LandOwner.ownership_percentage,
+          verified: owner.LandOwner.verified,
+        }))
         : [],
       documents: record.documents || [],
       payments: record.payments || [],
@@ -2090,17 +2090,17 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
       ownership_category: record.ownership_category,
       administrative_unit: record.administrativeUnit
         ? {
-            id: record.administrativeUnit.id,
-            name: record.administrativeUnit.name,
-            max_land_levels: record.administrativeUnit.max_land_levels,
-          }
+          id: record.administrativeUnit.id,
+          name: record.administrativeUnit.name,
+          max_land_levels: record.administrativeUnit.max_land_levels,
+        }
         : null,
       owners: record.owners
         ? record.owners.map((owner) => ({
-            ...owner.get({ plain: true }),
-            ownership_percentage: owner.LandOwner.ownership_percentage,
-            verified: owner.LandOwner.verified,
-          }))
+          ...owner.get({ plain: true }),
+          ownership_percentage: owner.LandOwner.ownership_percentage,
+          verified: owner.LandOwner.verified,
+        }))
         : [],
       documents: record.documents || [],
       payments: record.payments || [],
@@ -2214,9 +2214,9 @@ const updateLandRecordService = async (
           status_change:
             newStatus !== previousStatus
               ? {
-                  from: previousStatus,
-                  to: newStatus,
-                }
+                from: previousStatus,
+                to: newStatus,
+              }
               : undefined,
           changed_by: {
             id: updater.id,
@@ -2343,24 +2343,29 @@ const changeRecordStatusService = async (
       ? record.status_history
       : [];
     // Fetch user info for status changer
-    // const statusChanger = await User.findByPk(userId, {
-    //   attributes: ["id", "first_name", "middle_name", "last_name", "email"],
-    //   transaction: t,
-    // });
+    const statusChanger = await User.findByPk(userId, {
+      attributes: ["id", "first_name", "middle_name", "last_name", "email"],
+      transaction: t,
+    });
 
     const newHistory = [
       ...currentHistory,
       {
         status: newStatus,
         changed_at: new Date(),
-        changed_by: userId,
+        changed_by: {
+          id: statusChanger.id,
+          name: [statusChanger.first_name, statusChanger.middle_name, statusChanger.last_name]
+            .filter(Boolean)
+            .join(" ")
+        },
         notes,
       },
     ];
 
     const updateData = {
       record_status: newStatus,
-      updated_by:userId,
+      updated_by: userId,
       status_history: newHistory,
     };
 
@@ -2523,71 +2528,6 @@ const changeRecordStatusService = async (
     throw error;
   }
 };
-
-// Helper function for email generation
-const generateEmailBody = (
-  owner,
-  record,
-  newStatus,
-  notes,
-  rejection_reason,
-  updater,
-  adminUnitName
-) => {
-  return `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-      <p>ውድ ${owner.first_name} ${owner.middle_name},</p>
-      <p>(መዝገብ #${record.parcel_number}) መዝገብ ቁጥር ያለው የመሬትዎ ሁኔታ ተሻሻሏል:</p>
-      
-      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">
-        <p><strong>አሁናዊ ሁኔታ:</strong> ${newStatus}</p>
-        ${
-          notes
-            ? `
-          <p><strong>ተያያዥ ጽሁፍ:</strong></p>
-          <p style="background-color: #fff; padding: 8px; border-left: 3px solid #3498db;">
-            ${notes}
-          </p>
-        `
-            : ""
-        }
-        ${
-          rejection_reason
-            ? `
-          <p><strong>ውድቅ የተደረገበት ምክንያት:</strong></p>
-          <p style="background-color: #fff; padding: 8px; border-left: 3px solid #e74c3c;">
-            ${rejection_reason}
-          </p>
-        `
-            : ""
-        }
-      </div>
-      
-      <p><strong>ያሻሻለው አካል:</strong> ${updater.first_name} ${
-    updater.middle_name
-  }</p>
-      <p><strong>ከ:</strong> ${adminUnitName}</p>
-      
-      <div style="margin-top: 20px;">
-        <p>እናመሰግናለን</p>
-        <p>የ ${adminUnitName} ከተማ መሬት አስተዳደር</p>
-      </div>
-      
-      <div style="margin-top: 30px; text-align: center;">
-        <a href="${process.env.FRONTEND_URL}/land-records/${record.id}" 
-           style="background-color: #2ecc71; color: white; padding: 10px 20px; 
-                  text-decoration: none; border-radius: 5px; display: inline-block;">
-          መሬት መዝገብ ለማየት ይህን ይጫኑ
-        </a>
-      </div>
-      
-      <div style="margin-top: 30px; font-size: 0.9em; color: #7f8c8d;">
-        <p>ይህ ኢሜይል በስርአቱ በአውቶማቲክ መንገድ ተልኳል። እባክዎ በቀጥታ ምላሽ አይስጡ።</p>
-      </div>
-    </div>
-  `;
-};
-
 // trash management services
 const moveToTrashService = async (
   recordId,
