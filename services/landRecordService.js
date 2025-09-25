@@ -12,6 +12,7 @@ const {
   LandOwner,
   LandPayment,
   PAYMENT_TYPES,
+  PROPERTY_OWNER_TYPE,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -25,8 +26,42 @@ const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
 
   try {
-    const { owners = [], land_record, documents = [], land_payment } = data;
+    const { owners = [], land_record, documents = [], land_payment, property_owner_type } = data;
     const adminunit = user.administrative_unit_id;
+
+    // Validate property_owner_type
+    if (!Object.values(PROPERTY_OWNER_TYPE).includes(property_owner_type)) {
+      throw new Error(`የንብረት ባለቤት አይነት ከተፈቀዱት (${Object.values(PROPERTY_OWNER_TYPE).join(", ")}) ውስጥ መሆን አለበት።`);
+    }
+
+    // Validate owner data based on property_owner_type
+    if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && owners.length > 0) {
+      throw new Error("መሬት ባንክ የተያዘ ይዞታ ባለቤት መረጃ መግለጽ አያስፈልግም።");
+    }
+    if (property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && owners.length > 0) {
+      throw new Error("በተቋም የተያዘ ይዞታ የግል ባለቤት መረጃ መግለጽ አያስፈልግም። የተቋም ስም ያስፈልጋል።");
+    }
+    if (property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && !land_record.institution_name) {
+      throw new Error("የተቋም ስም ለተቋም መግለጽ አለበት።");
+    }
+    if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK) {
+      if (!land_record.land_bank_code) {
+        throw new Error("የመሬት ባንክ ኮድ ለመሬት ባንክ መግለጽ አለበት።");
+      }
+      if (!land_record.land_history) {
+        throw new Error("የመሬት ታሪክ ለመሬት ባንክ መግለጽ አለበት።");
+      }
+      if (!land_record.landbank_registrer_name) {
+        throw new Error("የመሬት ባንክ መዝጋቢ ስም መግለጽ አለበት።");
+      }
+      if (!land_record.infrastructure_status) {
+        throw new Error("የመሠረተ ልማት ሁኔታ ለመሬት ባንክ መግለጽ አለበት።");
+      }
+    }
+    if (property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS && owners.length === 0) {
+      throw new Error("የግለሰቦች የተያዘ ይዞታ ቢያንስ አንድ ባለቤት መረጃ መግለጽ አለበት።");
+    }
+
     // Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
@@ -41,9 +76,10 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    //  Process Profile Pictures 
+    // Process Profile Pictures (only for INDIVIDUALS)
     const processOwnerPhotos = () => {
-      // Handle both array and single file upload
+      if (property_owner_type !== PROPERTY_OWNER_TYPE.INDIVIDUALS) return [];
+
       const profilePictures = Array.isArray(files?.profile_picture)
         ? files.profile_picture
         : files?.profile_picture
@@ -58,11 +94,12 @@ const createLandRecordService = async (data, files, user) => {
 
     const ownersWithPhotos = processOwnerPhotos();
 
-    // 4. Create Land Record
+    // Create Land Record
     const landRecord = await LandRecord.create(
       {
         ...land_record,
         administrative_unit_id: adminunit,
+        property_owner_type,
         created_by: user.id,
         record_status: RECORD_STATUSES.SUBMITTED,
         notification_status: NOTIFICATION_STATUSES.NOT_SENT,
@@ -96,36 +133,39 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // Create and Link Owners to land record
-    const createdOwners = await userService.createLandOwner(
-      ownersWithPhotos.map((owner) => ({
-        ...owner,
-        email: owner.email?.trim() || null,
-        address: owner.address?.trim() || null,
-        administrative_unit_id: adminunit,
-      })),
-      adminunit,
-      user.id,
-      { transaction: t }
-    );
+    // Create and Link Owners (only for INDIVIDUALS)
+    let createdOwners = [];
+    if (property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS) {
+      createdOwners = await userService.createLandOwner(
+        ownersWithPhotos.map((owner) => ({
+          ...owner,
+          email: owner.email?.trim() || null,
+          address: owner.address?.trim() || null,
+          administrative_unit_id: adminunit,
+        })),
+        adminunit,
+        user.id,
+        { transaction: t }
+      );
 
-    await Promise.all(
-      createdOwners.map((owner) =>
-        LandOwner.create(
-          {
-            user_id: owner.id,
-            land_record_id: landRecord.id,
-            ownership_percentage:
-              land_record.ownership_category === "የጋራ"
-                ? 100 / createdOwners.length
-                : 100,
-            verified: true,
-            created_at: new Date(),
-          },
-          { transaction: t }
+      await Promise.all(
+        createdOwners.map((owner) =>
+          LandOwner.create(
+            {
+              user_id: owner.id,
+              land_record_id: landRecord.id,
+              ownership_percentage:
+                land_record.ownership_category === "የጋራ"
+                  ? 100 / createdOwners.length
+                  : 100,
+              verified: true,
+              created_at: new Date(),
+            },
+            { transaction: t }
+          )
         )
-      )
-    );
+      );
+    }
 
     // Handle Documents
     const processDocuments = async () => {
@@ -158,24 +198,30 @@ const createLandRecordService = async (data, files, user) => {
       land_payment &&
       (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
     ) {
-      // Only validate if payment data exists
       if (!land_payment.payment_type) {
-        throw new Error(
-          "የክፍያ አይነት መግለጽ አለበት።"
-        );
+        throw new Error("የክፍያ አይነት መግለጽ አለበት።");
       }
+
+      // Use institution_name or landbank_registrer_name as payer_id for non-INDIVIDUALS
+      const payer_id =
+        property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS
+          ? createdOwners[0]?.id
+          : property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION
+            ? land_record.institution_name
+            : land_record.landbank_registrer_name;
 
       landPayment = await landPaymentService.createLandPaymentService(
         {
           ...land_payment,
           land_record_id: landRecord.id,
-          payer_id: createdOwners[0].id,
+          payer_id,
           created_by: user.id,
           payment_status: calculatePaymentStatus(land_payment),
         },
         { transaction: t }
       );
     }
+
     await t.commit();
 
     return {
@@ -187,7 +233,7 @@ const createLandRecordService = async (data, files, user) => {
   } catch (error) {
     await t.rollback();
 
-    // Cleanup uploaded files if transaction fails remove file
+    // Cleanup uploaded files if transaction fails
     if (files) {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach((file) => {
