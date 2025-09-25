@@ -13,6 +13,9 @@ const {
   LandRecord,
   RECORD_STATUSES,
   NOTIFICATION_STATUSES,
+  PROPERTY_OWNER_TYPE,
+  LAND_HISTORY,
+  INFRASTRUCTURE_STATUS,
   PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
@@ -375,9 +378,9 @@ PaymentSchedule.hasMany(PaymentNotification, {
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
-GlobalNoticeSchedule.hasMany(PaymentNotification,{
-  as:"NoticeNotifications",
-  foreignKey:"global_notice_schedule_id",
+GlobalNoticeSchedule.hasMany(PaymentNotification, {
+  as: "NoticeNotifications",
+  foreignKey: "global_notice_schedule_id",
 
 })
 // PaymentNotification associations
@@ -416,6 +419,9 @@ module.exports = {
   GlobalNoticeSchedule,
   DOCUMENT_TYPES,
   RECORD_STATUSES,
+  PROPERTY_OWNER_TYPE,
+  LAND_HISTORY,
+  INFRASTRUCTURE_STATUS,
   NOTIFICATION_STATUSES,
   PRIORITIES,
   LAND_USE_TYPES,
@@ -426,4 +432,5 @@ module.exports = {
   PAYMENT_TYPES,
   NOTIFICATION_TYPES,
   PaymentNotification,
+
 };

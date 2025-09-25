@@ -1,9 +1,3 @@
-const PROPERTY_OWNER_TYPE = {
-  INSTITUTION: "ተቋም",
-  LAND_BANK: "መሬት ባንክ",
-  INDIVIDUALS: "የግለሰቦች",
-};
-
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ተልኳል",
@@ -62,6 +56,26 @@ const LEASE_OWNERSHIP_TYPE = {
   INVESTMENT_ALLOCATION: "በኢንቨስትመንት በምደባ የተያዘ ይዞታ",
 };
 
+const PROPERTY_OWNER_TYPE = {
+  INSTITUTION: "ተቋም",
+  LAND_BANK: "መሬት ባንክ",
+  INDIVIDUALS: "የግለሰቦች",
+};
+
+const INFRASTRUCTURE_STATUS = {
+  NOT_FULLFILLED: "የተሟላለት",
+  NOT_FULLFILLED: "ያልተሟላለት",
+};
+
+const LAND_HISTORY = {
+  CONFISCATED: "ለልማት ባለመዋሉ ተነጥቆ ተመላሽ የተደረገ",
+  COMPENSATED: "ከአርሶ አደር ይዞታ በካሳ ክፍያ የተገኘ",
+  REDEVELOPMENT: "በመልሶ ልማት የተገኘ",
+  VACANT: "በክፍትነት የቆየ",
+  ILLEGAL: "ከህገወጥ ይዞታ ተመላሽ የሆነ",
+  TEMPORARY: "በጊዜአዊነት ተሰጥቶ ዉል የተቋረጠ",
+};
+
 module.exports = (db, DataTypes) => {
   const LandRecord = db.define(
     "LandRecord",
@@ -78,7 +92,7 @@ module.exports = (db, DataTypes) => {
         unique: true,
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50  መሆን አለበት።" },
+          len: { args: [1, 50], msg: "የመሬት ቁጥር ብዛት ከ1 እስከ 50 መሆን አለበት።" },
         },
       },
       administrative_unit_id: {
@@ -92,7 +106,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [["የግል", "የጋራ"]],
-            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ ) ውስጥ አንዱ መሆን አለበት።",
+            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -107,13 +121,6 @@ module.exports = (db, DataTypes) => {
           min: { args: [0.1], msg: "ስፋት ከ1 ካሬ ሜትር በታች መሆን አይችልም።" },
         },
       },
-      land_use_code: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 50], msg: "የመሬት ኮድ ከ0 እስከ 50  መሆን አለበት።" },
-        },
-      },
       has_debt: {
         type: DataTypes.BOOLEAN,
         allowNull: true,
@@ -123,28 +130,28 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የሰሜን አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የሰሜን አዋሳኝ ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       east_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የምስራቅ አዋሳኝ ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       south_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የደቡብ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የደቡብ አዋሳኝ ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       west_neighbor: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የምዕራብ አዋሳኝ ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የምዕራብ አዋሳኝ ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       notes: {
@@ -155,21 +162,21 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 200], msg: "የማጥፊያ ምክንያት ከ0 እስከ 200  መሆን አለበት።" },
+          len: { args: [0, 200], msg: "የማጥፊያ ምክንያት ከ0 እስከ 200 መሆን አለበት።" },
         },
       },
       block_number: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 50], msg: "የብሎክ ቁጥር ከ0 እስከ 50  መሆን አለበት።" },
+          len: { args: [0, 50], msg: "የብሎክ ቁጥር ከ0 እስከ 50 መሆን አለበት።" },
         },
       },
       block_special_name: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የብሎክ ልዩ ስም ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የብሎክ ልዩ ስም ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       land_level: {
@@ -177,7 +184,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           min: { args: [1], msg: "የመሬት ደረጃ ከ1 በታች መሆን አይችልም።" },
-          max: { args: [5], msg: "የመሬት ደረጃ ከ5 በላይ መሆን አይችልም።" },
+          max: { args: [5], msg: "የመሬት ደረጃ ከ5 በላይ መሆን አዯችልም።" },
         },
       },
       land_use: {
@@ -196,14 +203,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 100], msg: "የፕላን ምደባ መረጃ ከ0 እስከ 100  መሆን አለበት።" },
+          len: { args: [0, 100], msg: "የፕላን ምደባ መረጃ ከ0 እስከ 100 መሆን አለበት።" },
         },
       },
       address: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 500], msg: "የአድራሻ መረጃ ከ0 እስከ 500  መሆን አለበት።" },
+          len: { args: [0, 500], msg: "የአድራሻ መረጃ ከ0 እስከ 500 መሆን አለበት።" },
         },
       },
       ownership_type: {
@@ -218,9 +225,21 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      lease_ownership_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(LEASE_OWNERSHIP_TYPE)],
+            msg: `የሊዝ ይዞታ አግባብ አይነት ከተፈቀዱቷ (${Object.values(
+              LEASE_OWNERSHIP_TYPE
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          },
+        },
+      },
       property_owner_type: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [Object.values(PROPERTY_OWNER_TYPE)],
@@ -230,15 +249,85 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      lease_ownership_type: {
+      //landbank specific attributes
+      infrastructure_status: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          isIn: {
-            args: [Object.values(LEASE_OWNERSHIP_TYPE)],
-            msg: `የ ሊዝ ይዞታ አግባብ አይነት ከተፈቀዱት  (${Object.values(
-              LEASE_OWNERSHIP_TYPE
-            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          isApplicable(value) {
+            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
+              throw new Error("የመሠረተ ልማት ሁኔታ ለመሬት ባንክ መግለጽ አለበት።");
+            }
+            if (value && !Object.values(INFRASTRUCTURE_STATUS).includes(value)) {
+              throw new Error(
+                `የመሠረተ ልማት ሁኔታ ከተፈቀዱቷ (${Object.values(
+                  INFRASTRUCTURE_STATUS
+                ).join(", ")}) ውስጥ መሆን አለበት።`
+              );
+            }
+          },
+        },
+      },
+      land_bank_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isApplicable(value) {
+            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
+              throw new Error("የመሬት ባንክ ኮድ ለመሬት ባንክ መግለጽ አለበት።");
+            }
+            if (value && value.length > 50) {
+              throw new Error("የመሬት ባንክ ኮድ ከ50 ፊደላት መብለጥ አይችልም።");
+            }
+          },
+        },
+      },
+      land_history: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isApplicable(value) {
+            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
+              throw new Error("የመሬት ታሪክ ለመሬት ባንክ መግለጽ አለበት።");
+            }
+            if (value && !Object.values(LAND_HISTORY).includes(value)) {
+              throw new Error(
+                `የመሬት ታሪክ ከተፈቀዱቷ (${Object.values(LAND_HISTORY).join(
+                  ", "
+                )}) ውስጥ መሆን አለበት።`
+              );
+            }
+          },
+        },
+      },
+      landbank_registrer_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isApplicable(value) {
+            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
+              throw new Error("የመሬት ባንክ መዝጋቢ ስም መግለጽ አለበት።");
+            }
+            if (value && value.length > 100) {
+              throw new Error(
+                "የመሬት ባንክ መዝጋቢ ስም ከ100 ፊደላት መብለጥ አይችልም።"
+              );
+            }
+          },
+        },
+      },
+      //instituetion specific attributes
+      institution_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isApplicable(value) {
+            if (this.property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && !value) {
+              throw new Error("የተቋም ስም ለተቋም መግለጽ አለበት።");
+            }
+            if (value && value.length > 100) {
+              throw new Error("የተቋም ስም ከ100 ፊደላት መብለጥ አይችልም።");
+            }
           },
         },
       },
@@ -256,7 +345,7 @@ module.exports = (db, DataTypes) => {
         validate: {
           isIn: {
             args: [Object.values(RECORD_STATUSES)],
-            msg: `የመዝገብ ሁኔታ ከተፈቀዱት እሴቶች (${Object.values(RECORD_STATUSES).join(
+            msg: `የመዝገብ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(RECORD_STATUSES).join(
               ", "
             )}) ውስጥ መሆን አለበት።`,
           },
@@ -285,7 +374,9 @@ module.exports = (db, DataTypes) => {
                 throw new Error("የተግባር መዝገብ ተግባር ትክክለኛ መሆን አለበት።");
               }
               if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
-                throw new Error("የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
+                throw new Error(
+                  "የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።"
+                );
               }
               if (!entry.changed_by) {
                 throw new Error("የተግባር መዝገብ ተቀያሪ መግለጥ አለበት።");
@@ -366,6 +457,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["notification_status"] },
         { fields: ["created_by"] },
         { fields: ["approved_by"] },
+        { fields: ["property_owner_type"] },
       ],
     }
   );
@@ -378,5 +470,8 @@ module.exports = (db, DataTypes) => {
     LAND_USE_TYPES,
     ZONING_TYPES,
     OWNERSHIP_TYPES,
+    PROPERTY_OWNER_TYPE,
+    INFRASTRUCTURE_STATUS,
+    LAND_HISTORY,
   };
 };
