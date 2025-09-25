@@ -598,7 +598,7 @@ const updateDocumentsService = async (
 
           // Record file being added
           fileChanges.push({
-            action: "FILE_ADDED",
+            action: "ለማሻሻል ሰነድ ተጨምሯል",
             file_name: files[index].originalname,
             mime_type: files[index].mimetype,
           });
@@ -677,10 +677,10 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
-          action: `DOCUMENT_DELETED_${document.document_type}`,
+          action: `ሰነድ ተሰርዟል_${document.document_type}`,
           changed_by: deleterId,
           changed_at: new Date(),
-          document_id: document.id,
+          document_id: documenተሰርዟል
         },
       ];
       await landRecord.save({ transaction: t });

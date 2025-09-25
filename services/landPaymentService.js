@@ -393,7 +393,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
       landRecord.action_log = [
         ...(landRecord.action_log || []),
         {
-          action: `PAYMENT_DELETED_${payment.payment_type || "UNKNOWN"}`,
+          action: `ክፍያ ተሰርዟል_${payment.payment_type || "UNKNOWN"}`,
           changed_by: deleterId,
           changed_at: new Date(),
           payment_id: payment.id,

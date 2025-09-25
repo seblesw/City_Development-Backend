@@ -59,7 +59,7 @@ const createLandRecordService = async (data, files, user) => {
       }
     }
     if (property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS && owners.length === 0) {
-      throw new Error("የግለሰቦች የተያዘ ይዞታ ቢያንስ አንድ ባለቤት መረጃ መግለጽ አለበት።");
+      throw new Error("በግለሰቦች የተያዘ ይዞታ ቢያንስ አንድ ባለቤት መረጃ መግለጽ አለበት።");
     }
 
     // Check for Duplicate Parcel
@@ -207,8 +207,8 @@ const createLandRecordService = async (data, files, user) => {
         property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS
           ? createdOwners[0]?.id
           : property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION
-            ? land_record.institution_name
-            : land_record.landbank_registrer_name;
+            ? land_record.id
+            : land_record.id;
 
       landPayment = await landPaymentService.createLandPaymentService(
         {
