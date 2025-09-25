@@ -1,3 +1,9 @@
+const PROPERTY_OWNER_TYPE = {
+  INSTITUTION: "ተቋም",
+  LAND_BANK: "መሬት ባንክ",
+  INDIVIDUALS: "የግለሰቦች",
+};
+
 const RECORD_STATUSES = {
   DRAFT: "ረቂቅ",
   SUBMITTED: "ተልኳል",
@@ -208,6 +214,18 @@ module.exports = (db, DataTypes) => {
             args: [Object.values(OWNERSHIP_TYPES)],
             msg: `የይዞታ አግባብ አይነት ከተፈቀዱት እሴቶች (${Object.values(
               OWNERSHIP_TYPES
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          },
+        },
+      },
+      property_owner_type: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isIn: {
+            args: [Object.values(PROPERTY_OWNER_TYPE)],
+            msg: `የንብረት ባለቤት አይነት ከተፈቀዱቷ (${Object.values(
+              PROPERTY_OWNER_TYPE
             ).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },

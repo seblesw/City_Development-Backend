@@ -32,7 +32,7 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));-
 
 // Endpoints
 app.use('/api/v1/regions', regionRoutes);
