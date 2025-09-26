@@ -310,7 +310,6 @@ const getAllLandRecords = async (req, res) => {
     });
   }
 };
-
 // Retrieving a single land record by ID
 const getLandRecordById = async (req, res) => {
   try {
@@ -583,7 +582,6 @@ const safeJsonParse = (str, fieldName) => {
     throw new Error(`Invalid JSON format for ${fieldName}: ${e.message}`);
   }
 };
-
 const getStatusCodeForError = (error) => {
   if (error.message.includes("not found")) return 404;
   if (
@@ -599,8 +597,6 @@ const getStatusCodeForError = (error) => {
     return 403;
   return 500;
 };
-
-
 const getRecentActions = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
@@ -650,8 +646,6 @@ const getRecentActions = async (req, res) => {
     });
   }
 };
-
-
 // Changing the status of a land record
 const changeRecordStatus = async (req, res) => {
   try {
@@ -715,7 +709,6 @@ const moveToTrash = async (req, res) => {
     });
   }
 };
-
 const restoreFromTrash = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -740,7 +733,6 @@ const restoreFromTrash = async (req, res) => {
     });
   }
 };
-
 const permanentlyDelete = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -766,7 +758,6 @@ const permanentlyDelete = async (req, res) => {
     });
   }
 };
-
 const getTrash = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
