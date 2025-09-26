@@ -33,6 +33,7 @@ router.get(
   authMiddleware.protect,
   landRecordController.getLandRecordStatsController
 ),
+router.get("/land-banks", authMiddleware.protect, landRecordController.getLandBankRecords)
   // Draft Management Routes
   router.post(
     "/drafts",

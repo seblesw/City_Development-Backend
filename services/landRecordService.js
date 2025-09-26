@@ -3141,11 +3141,43 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
     console.log(e);
   }
 };
+const getLandBankRecordsService = async (user) => {
+  try {
+    // Fetch land records where property_owner_type is LAND_BANK
+    const landRecords = await LandRecord.findAll({
+      where: {
+      property_owner_type: PROPERTY_OWNER_TYPE.LAND_BANK,
+      administrative_unit_id: user.administrative_unit_id,
+      deletedAt: null,
+      },
+      include: [
+      {
+        model: Document,
+        as: 'documents',
+      },
+      {
+        model: LandPayment,
+        as: 'payments',
+      },
+      ],
+    });
 
+
+    // Transform the result to JSON format
+    return landRecords.map(record => ({
+      landRecord: record.toJSON(),
+      documents: record.documents || [],
+      landPayments: record.landPayments || [],
+    }));
+  } catch (error) {
+    throw new Error(`የመሬት ባንክ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
 module.exports = {
   moveToTrashService,
   restoreFromTrashService,
   permanentlyDeleteService,
+  getLandBankRecordsService,
   getRejectedLandRecordsService,
   getTrashItemsService,
   createLandRecordService,

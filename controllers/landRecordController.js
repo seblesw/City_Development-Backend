@@ -23,6 +23,7 @@ const {
   getRejectedLandRecordsService,
   getLandRecordStats,
   importLandRecordsFromXLSXService,
+  getLandBankRecordsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -552,7 +553,24 @@ const updateLandRecord = async (req, res) => {
     });
   }
 };
-
+const getLandBankRecords = async (req, res) => {
+  try {
+    const user = req.user;
+    const result = await getLandBankRecordsService(user);
+  const count = result.length
+    return res.status(200).json({
+      status: 'success',
+      count:count,
+      message: 'የመሬት ባንክ መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።',
+      data: result,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      status: 'error',
+      message: `የመዝገብ ማግኘት ስህተት: ${error.message}`,
+    });
+  }
+};
 // Helper function for safe JSON parsing// Helper Functions
 const safeJsonParse = (str, fieldName) => {
   try {
@@ -795,6 +813,7 @@ module.exports = {
   moveToTrash,
   getLandRecordStatsController,
   restoreFromTrash,
+  getLandBankRecords,
   permanentlyDelete,
   getTrash,
   createLandRecord,
