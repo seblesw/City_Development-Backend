@@ -74,7 +74,9 @@ const LAND_HISTORY = {
   VACANT: "በክፍትነት የቆየ",
   ILLEGAL: "ከህገወጥ ይዞታ ተመላሽ የሆነ",
   TEMPORARY: "በጊዜአዊነት ተሰጥቶ ዉል የተቋረጠ",
+  OTHER:"ሌላ"
 };
+
 
 module.exports = (db, DataTypes) => {
   const LandRecord = db.define(
@@ -315,6 +317,10 @@ module.exports = (db, DataTypes) => {
             }
           },
         },
+      },
+      other_land_history:{
+        type:DataTypes.STRING,
+        allowNull:true,
       },
       //instituetion specific attributes
       institution_name: {
