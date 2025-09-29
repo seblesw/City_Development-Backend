@@ -85,6 +85,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: { len: [1, 50] },
       },
+      contacts:{
+        type:DataTypes.STRING,
+        allowNull:true
+      }
     },
     {
       tableName: "administrative_units",
