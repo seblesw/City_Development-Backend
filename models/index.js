@@ -129,6 +129,15 @@ User.hasMany(LeaseAgreement,{
   foreignKey:"lessee_id",
   as:"leaselands"
 })
+User.hasMany(LeaseAgreement,{
+  foreignKey:"leaser_testimonial",
+  as:"testimonidLeaser"
+})
+User.hasMany(LeaseAgreement,{
+  foreignKey:"lessee_testimonial",
+  as:"testimonidLessee"
+})
+
 
 // Region associations
 Region.hasMany(Zone, {
@@ -430,6 +439,18 @@ LeaseAgreement.belongsTo(User,
     as: 'lessee',
     constraints: false
   });
+  LeaseAgreement.belongsTo(User,
+    {
+      foreignKey:'leaser_testimonial',
+      as:'leaserTestimonials'
+    }
+  )
+  LeaseAgreement.belongsTo(User,
+    {
+      foreignKey:'lessee_testimonial',
+      as:'lesseeTestimonials'
+    }
+  )
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,

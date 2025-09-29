@@ -31,10 +31,6 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
-      lessee_institution_name: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       leased_area: {
         type: DataTypes.FLOAT,
         allowNull: true,
@@ -76,10 +72,10 @@ module.exports = (db, DataTypes) => {
         type:DataTypes.FLOAT,
         allowNull:true
       },
-      status: {
+     status: {
         type: DataTypes.STRING,
-        allowNull: false,
-        defaultValue: LEASE_STATUSES.DRAFT,
+        allowNull: true,
+        defaultValue: LEASE_STATUSES.ACTIVE,
         validate: {
           isIn: {
             args: [Object.values(LEASE_STATUSES)],
@@ -89,7 +85,7 @@ module.exports = (db, DataTypes) => {
       },
       created_by: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "users", key: "id" },
       },
       updated_by: {
@@ -97,29 +93,20 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
-      lease_action_log: {
-        type: DataTypes.JSONB,
-        allowNull: true,
-        defaultValue: [],
-        validate: {
-          isValidLog(value) {
-            if (!Array.isArray(value)) {
-              throw new Error("የተግባር መዝገብ ዝርዝር መሆን አለበት።");
-            }
-            for (const entry of value) {
-              if (!entry.action || typeof entry.action !== "string") {
-                throw new Error("የተግባር መዝገብ ተግባር ትክክለኛ መሆን አለበት።");
-              }
-              if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
-                throw new Error("የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
-              }
-              if (!entry.changed_by) {
-                throw new Error("የተግባር መዝገብ ተቀያሪ መግለጥ አለበት።");
-              }
-            }
-          },
+      leaser_testimonial:{
+        type:DataTypes.INTEGER,
+        references:{
+          model:"users",key:"id"
         },
+        allowNull:true
       },
+      lessee_testimonial:{
+        type:DataTypes.INTEGER,
+          references:{
+          model:"users",key:"id"
+        },
+        allowNull:true
+      }
     },
     {
       tableName: "lease_agreements",
