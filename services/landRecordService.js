@@ -35,9 +35,9 @@ const createLandRecordService = async (data, files, user) => {
     }
 
     // Validate owner data based on property_owner_type
-    if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && owners.length > 0) {
-      throw new Error("መሬት ባንክ የተያዘ ይዞታ ባለቤት መረጃ መግለጽ አያስፈልግም።");
-    }
+    // if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && owners.length > 0) {
+    //   throw new Error("መሬት ባንክ የተያዘ ይዞታ ባለቤት መረጃ መግለጽ አያስፈልግም።");
+    // }
     if (property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && owners.length > 0) {
       throw new Error("በተቋም የተያዘ ይዞታ የግል ባለቤት መረጃ መግለጽ አያስፈልግም። የተቋም ስም ያስፈልጋል።");
     }
