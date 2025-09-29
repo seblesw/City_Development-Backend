@@ -8,6 +8,7 @@ const Zone = require("./Zone")(db, DataTypes);
 const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
+const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(db, DataTypes)
 const User = require("./User")(db, DataTypes);
 const {
   LandRecord,
@@ -124,6 +125,10 @@ User.hasMany(LandPayment, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+User.hasMany(LeaseAgreement,{
+  foreignKey:"lessee_id",
+  as:"leaselands"
+})
 
 // Region associations
 Region.hasMany(Zone, {
@@ -260,6 +265,10 @@ AdministrativeUnit.hasMany(LandRecord, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+AdministrativeUnit.hasMany(LeaseAgreement, {
+  foreignKey:"administrative_unit_id",
+  as:"leseagreements"
+})
 
 // LandRecord associations
 LandRecord.belongsToMany(User, {
@@ -311,6 +320,10 @@ LandRecord.hasMany(LandPayment, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+LandRecord.hasMany(LeaseAgreement,{
+  foreignKey:"land_record_id",
+  as:"leasedlands"
+})
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -400,6 +413,23 @@ PaymentNotification.belongsTo(GlobalNoticeSchedule, {
   as: 'globalNoticeSchedule',
   foreignKey: 'global_notice_schedule_id'
 });
+//lease associations
+LeaseAgreement.belongsTo(LandRecord,
+  {
+    foreignKey: 'land_record_id',
+    as: 'landRecord'
+  });
+LeaseAgreement.belongsTo(AdministrativeUnit,
+  {
+    foreignKey: 'administrative_unit_id',
+    as: 'leaser'
+  });
+LeaseAgreement.belongsTo(User,
+  {
+    foreignKey: 'lessee_id',
+    as: 'lessee',
+    constraints: false
+  });
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -432,5 +462,7 @@ module.exports = {
   PAYMENT_TYPES,
   NOTIFICATION_TYPES,
   PaymentNotification,
+  LeaseAgreement,
+  LEASE_STATUSES
 
 };
