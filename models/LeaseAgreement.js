@@ -68,11 +68,11 @@ module.exports = (db, DataTypes) => {
           min: { args: [0], msg: "ዓመታዊ የኪራይ መጠን ከ0 በታች መሆን አይችልም።" },
         },
       },
-      initial_lease_amount:{
-        type:DataTypes.FLOAT,
-        allowNull:true
+      initial_lease_amount: {
+        type: DataTypes.FLOAT,
+        allowNull: true
       },
-     status: {
+      status: {
         type: DataTypes.STRING,
         allowNull: true,
         defaultValue: LEASE_STATUSES.ACTIVE,
@@ -93,19 +93,21 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
-      leaser_testimonial:{
-        type:DataTypes.INTEGER,
-        references:{
-          model:"users",key:"id"
+      leaser_testimonial: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "users",
+          key: "id"
         },
-        allowNull:true
+        allowNull: true
       },
-      lessee_testimonial:{
-        type:DataTypes.INTEGER,
-          references:{
-          model:"users",key:"id"
+      lessee_testimonial: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "users",
+          key: "id"
         },
-        allowNull:true
+        allowNull: true
       }
     },
     {
@@ -117,6 +119,8 @@ module.exports = (db, DataTypes) => {
         { fields: ["land_record_id"] },
         { fields: ["administrative_unit_id"] },
         { fields: ["lessee_id"] },
+        { fields: ["leaser_testimonial"] },
+        { fields: ["lessee_testimonial"] },
         { fields: ["status"] },
       ],
     }

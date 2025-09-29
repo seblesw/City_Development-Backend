@@ -125,20 +125,27 @@ User.hasMany(LandPayment, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+User.hasMany(LeaseAgreement, {
+  foreignKey: "lessee_id",
+  as: "leaselands"
+})
+User.hasMany(LeaseAgreement,
+  {
+    foreignKey: 'leaser_testimonial',
+    as: 'leaserTestimonialAgreements'
+  });
+User.hasMany(LeaseAgreement, {
+  foreignKey: 'lessee_testimonial',
+  as: 'lesseeTestimonialAgreements'
+});
 User.hasMany(LeaseAgreement,{
-  foreignKey:"lessee_id",
-  as:"leaselands"
+  foreignKey:'updated_by',
+  as:'updatedleases'
 })
 User.hasMany(LeaseAgreement,{
-  foreignKey:"leaser_testimonial",
-  as:"testimonidLeaser"
+  foreignKey:'created_by',
+  as:'createdLeases'
 })
-User.hasMany(LeaseAgreement,{
-  foreignKey:"lessee_testimonial",
-  as:"testimonidLessee"
-})
-
-
 // Region associations
 Region.hasMany(Zone, {
   foreignKey: "region_id",
@@ -275,8 +282,8 @@ AdministrativeUnit.hasMany(LandRecord, {
   onUpdate: "CASCADE",
 });
 AdministrativeUnit.hasMany(LeaseAgreement, {
-  foreignKey:"administrative_unit_id",
-  as:"leseagreements"
+  foreignKey: "administrative_unit_id",
+  as: "leseagreements"
 })
 
 // LandRecord associations
@@ -329,9 +336,9 @@ LandRecord.hasMany(LandPayment, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-LandRecord.hasMany(LeaseAgreement,{
-  foreignKey:"land_record_id",
-  as:"leasedlands"
+LandRecord.hasMany(LeaseAgreement, {
+  foreignKey: "land_record_id",
+  as: "leasedlands"
 })
 
 // LandPayment associations
@@ -439,18 +446,29 @@ LeaseAgreement.belongsTo(User,
     as: 'lessee',
     constraints: false
   });
-  LeaseAgreement.belongsTo(User,
-    {
-      foreignKey:'leaser_testimonial',
-      as:'leaserTestimonials'
-    }
-  )
-  LeaseAgreement.belongsTo(User,
-    {
-      foreignKey:'lessee_testimonial',
-      as:'lesseeTestimonials'
-    }
-  )
+LeaseAgreement.belongsTo(User,
+  {
+    foreignKey: 'leaser_testimonial',
+    as: 'leaserTestimonials'
+  }
+)
+LeaseAgreement.belongsTo(User,
+  {
+    foreignKey: 'lessee_testimonial',
+    as: 'lesseeTestimonials'
+  }
+)
+LeaseAgreement.belongsTo(User,
+  {
+    foreignKey: 'created_by',
+    as: 'creator'
+  });
+LeaseAgreement.belongsTo(User,
+  {
+    foreignKey: 'updated_by',
+    as: 'updater'
+  });
+
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
