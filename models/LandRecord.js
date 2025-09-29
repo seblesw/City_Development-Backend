@@ -242,14 +242,6 @@ module.exports = (db, DataTypes) => {
       property_owner_type: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isIn: {
-            args: [Object.values(PROPERTY_OWNER_TYPE)],
-            msg: `የንብረት ባለቤት አይነት ከተፈቀዱቷ (${Object.values(
-              PROPERTY_OWNER_TYPE
-            ).join(", ")}) ውስጥ መሆን አለበት።`,
-          },
-        },
       },
       //landbank specific attributes
       infrastructure_status: {
