@@ -28,12 +28,6 @@ const createLandRecordService = async (data, files, user) => {
   try {
     const { owners = [], land_record, documents = [], land_payment, property_owner_type } = data;
     const adminunit = user.administrative_unit_id;
-
-    // Validate property_owner_type
-    if (!Object.values(PROPERTY_OWNER_TYPE).includes(property_owner_type)) {
-      throw new Error(`የንብረት ባለቤት አይነት ከተፈቀዱት (${Object.values(PROPERTY_OWNER_TYPE).join(", ")}) ውስጥ መሆን አለበት።`);
-    }
-
     // Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
