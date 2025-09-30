@@ -34,34 +34,6 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error(`የንብረት ባለቤት አይነት ከተፈቀዱት (${Object.values(PROPERTY_OWNER_TYPE).join(", ")}) ውስጥ መሆን አለበት።`);
     }
 
-    // Validate owner data based on property_owner_type
-    // if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && owners.length > 0) {
-    //   throw new Error("መሬት ባንክ የተያዘ ይዞታ ባለቤት መረጃ መግለጽ አያስፈልግም።");
-    // }
-    if (property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && owners.length > 0) {
-      throw new Error("በተቋም የተያዘ ይዞታ የግል ባለቤት መረጃ መግለጽ አያስፈልግም። የተቋም ስም ያስፈልጋል።");
-    }
-    if (property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && !land_record.institution_name) {
-      throw new Error("የተቋም ስም ለተቋም መግለጽ አለበት።");
-    }
-    if (property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK) {
-      if (!land_record.land_bank_code) {
-        throw new Error("የመሬት ባንክ ኮድ ለመሬት ባንክ መግለጽ አለበት።");
-      }
-      if (!land_record.land_history) {
-        throw new Error("የመሬት ታሪክ ለመሬት ባንክ መግለጽ አለበት።");
-      }
-      if (!land_record.landbank_registrer_name) {
-        throw new Error("የመሬት ባንክ መዝጋቢ ስም መግለጽ አለበት።");
-      }
-      if (!land_record.infrastructure_status) {
-        throw new Error("የመሠረተ ልማት ሁኔታ ለመሬት ባንክ መግለጽ አለበት።");
-      }
-    }
-    if (property_owner_type === PROPERTY_OWNER_TYPE.INDIVIDUALS && owners.length === 0) {
-      throw new Error("በግለሰቦች የተያዘ ይዞታ ቢያንስ አንድ ባለቤት መረጃ መግለጽ አለበት።");
-    }
-
     // Check for Duplicate Parcel
     const existingRecord = await LandRecord.findOne({
       where: {
