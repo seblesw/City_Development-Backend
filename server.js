@@ -16,6 +16,7 @@ const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
 const paymentSchedulesRoutes = require('./routes/paymentScheduleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes')
 const path = require('path');
 const cron = require('node-cron');
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
@@ -48,6 +49,7 @@ app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/lease-agreements', leaseAgreementRoutes)
 
 // app.use(express.static(path.join(__dirname, 'dist')));
 // app.get('/', (req, res) => {
