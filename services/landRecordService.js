@@ -39,7 +39,7 @@ const createLandRecordService = async (data, files, user) => {
     });
 
     if (existingRecord) {
-      throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
+      throw new Error("ይህ የመሬት ሽንሻኖ ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
     // Process Profile Pictures (only for INDIVIDUALS)
