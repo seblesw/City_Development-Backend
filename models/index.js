@@ -8,7 +8,10 @@ const Zone = require("./Zone")(db, DataTypes);
 const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
-const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(db, DataTypes)
+const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
+  db,
+  DataTypes
+);
 const User = require("./User")(db, DataTypes);
 const {
   LandRecord,
@@ -25,11 +28,13 @@ const {
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
 const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
-const { PaymentNotification, NOTIFICATION_TYPES } = require("./PaymentNotification")(db, DataTypes);
+const { PaymentNotification, NOTIFICATION_TYPES } =
+  require("./PaymentNotification")(db, DataTypes);
 const GlobalNoticeSchedule = require("./GlobalNoticeSchedule")(db, DataTypes);
 const { LandPayment, PAYMENT_STATUSES, PAYMENT_TYPES } =
   require("./LandPayment")(db, DataTypes);
 const { Document, DOCUMENT_TYPES } = require("./Document")(db, DataTypes);
+const { LeaseUser, LEASE_USER_TYPES } = require("./LeaseUser")(db, DataTypes);
 
 // Role associations
 Role.hasMany(User, {
@@ -125,27 +130,15 @@ User.hasMany(LandPayment, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+
 User.hasMany(LeaseAgreement, {
-  foreignKey: "lessee_id",
-  as: "leaselands"
-})
-User.hasMany(LeaseAgreement,
-  {
-    foreignKey: 'leaser_testimonial',
-    as: 'leaserTestimonialAgreements'
-  });
-User.hasMany(LeaseAgreement, {
-  foreignKey: 'lessee_testimonial',
-  as: 'lesseeTestimonialAgreements'
+  foreignKey: "created_by",
+  as: "createdLeases",
 });
-User.hasMany(LeaseAgreement,{
-  foreignKey:'updated_by',
-  as:'updatedleases'
-})
-User.hasMany(LeaseAgreement,{
-  foreignKey:'created_by',
-  as:'createdLeases'
-})
+User.hasMany(LeaseAgreement, {
+  foreignKey: "updated_by",
+  as: "updatedLeases",
+});
 // Region associations
 Region.hasMany(Zone, {
   foreignKey: "region_id",
@@ -283,8 +276,8 @@ AdministrativeUnit.hasMany(LandRecord, {
 });
 AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
-  as: "leseagreements"
-})
+  as: "leseagreements",
+});
 
 // LandRecord associations
 LandRecord.belongsToMany(User, {
@@ -338,8 +331,8 @@ LandRecord.hasMany(LandPayment, {
 });
 LandRecord.hasMany(LeaseAgreement, {
   foreignKey: "land_record_id",
-  as: "leasedlands"
-})
+  as: "leasedlands",
+});
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -361,12 +354,17 @@ LandPayment.hasMany(PaymentSchedule, {
   onUpdate: "CASCADE",
 });
 LandPayment.hasMany(PaymentNotification, {
-  as: 'Notifications',
-  foreignKey: 'land_payment_id',
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE',
+  as: "Notifications",
+  foreignKey: "land_payment_id",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
+LandPayment.belongsTo(LeaseAgreement, {
+  foreignKey: "lease_agreement_id",
+  as: "leaseAgreement",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 // Document associations
 Document.belongsTo(LandRecord, {
@@ -402,73 +400,68 @@ PaymentSchedule.hasMany(PaymentSchedule, {
   onUpdate: "CASCADE",
 });
 PaymentSchedule.hasMany(PaymentNotification, {
-  as: 'Notifications',
-  foreignKey: 'schedule_id',
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE',
+  as: "Notifications",
+  foreignKey: "schedule_id",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 GlobalNoticeSchedule.hasMany(PaymentNotification, {
   as: "NoticeNotifications",
   foreignKey: "global_notice_schedule_id",
-
-})
+});
 // PaymentNotification associations
 PaymentNotification.belongsTo(PaymentSchedule, {
-  as: 'Schedule',
-  foreignKey: 'schedule_id',
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE',
+  as: "Schedule",
+  foreignKey: "schedule_id",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 PaymentNotification.belongsTo(LandPayment, {
-  as: 'landPayment',
-  foreignKey: 'land_payment_id',
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE',
+  as: "landPayment",
+  foreignKey: "land_payment_id",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 PaymentNotification.belongsTo(GlobalNoticeSchedule, {
-  as: 'globalNoticeSchedule',
-  foreignKey: 'global_notice_schedule_id'
+  as: "globalNoticeSchedule",
+  foreignKey: "global_notice_schedule_id",
 });
-//lease associations
-LeaseAgreement.belongsTo(LandRecord,
-  {
-    foreignKey: 'land_record_id',
-    as: 'landRecord'
-  });
-LeaseAgreement.belongsTo(AdministrativeUnit,
-  {
-    foreignKey: 'administrative_unit_id',
-    as: 'leaser'
-  });
-LeaseAgreement.belongsTo(User,
-  {
-    foreignKey: 'lessee_id',
-    as: 'lessee',
-    constraints: false
-  });
-LeaseAgreement.belongsTo(User,
-  {
-    foreignKey: 'leaser_testimonial',
-    as: 'leaserTestimonials'
-  }
-)
-LeaseAgreement.belongsTo(User,
-  {
-    foreignKey: 'lessee_testimonial',
-    as: 'lesseeTestimonials'
-  }
-)
-LeaseAgreement.belongsTo(User,
-  {
-    foreignKey: 'created_by',
-    as: 'creator'
-  });
-LeaseAgreement.belongsTo(User,
-  {
-    foreignKey: 'updated_by',
-    as: 'updater'
-  });
-
+// LeaseAgreement associations
+LeaseAgreement.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
+LeaseAgreement.belongsTo(AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "leaser",
+});
+LeaseAgreement.belongsTo(LeaseUser, {
+  foreignKey: "lessee_id",
+  as: "lessee",
+});
+LeaseAgreement.belongsTo(LandPayment, {
+  foreignKey: "payment_id",
+  as: "payment",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+LeaseAgreement.belongsTo(User, {
+  foreignKey: "created_by",
+  as: "creator",
+});
+LeaseAgreement.belongsTo(User, {
+  foreignKey: "updated_by",
+  as: "updater",
+});
+LeaseAgreement.hasMany(LeaseUser, {
+  foreignKey: "lease_agreement_id",
+  as: "testimonials",
+});
+// LeaseUser associations
+LeaseUser.belongsTo(LeaseAgreement, {
+  foreignKey: "lease_agreement_id",
+  as: "leaseAgreement",
+});
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -502,6 +495,7 @@ module.exports = {
   NOTIFICATION_TYPES,
   PaymentNotification,
   LeaseAgreement,
-  LEASE_STATUSES
-
+  LEASE_STATUSES,
+  LeaseUser,
+  LEASE_USER_TYPES,
 };

@@ -51,24 +51,23 @@ app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/lease-agreements', leaseAgreementRoutes)
 
-// app.use(express.static(path.join(__dirname, 'dist')));
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-// });
-// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 // Start server and cron jobs
 const startServer = async () => {
   try {
     await db.authenticate();
     console.log('Database connected successfully at', new Date().toISOString());
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
     console.log('Starting cron job for overdue schedules at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { // Testing: every minute
-      // cron.schedule('0 0 * * *', async () => { // Production: daily at
+    cron.schedule('* * * * *', async () => { 
       try {
         console.log('Running overdue schedule check at', new Date().toISOString());
         const penaltySchedules = await checkOverdueSchedules();
@@ -80,7 +79,7 @@ const startServer = async () => {
 
     // Cron job for reminder notifications
     console.log('Starting cron job for reminder notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { // Daily at 8 AM
+    cron.schedule('* * * * *', async () => { 
       try {
         console.log('Running reminder notification creation at', new Date().toISOString());
         const notifications = await createReminderNotifications();
@@ -92,7 +91,7 @@ const startServer = async () => {
 
     // Cron job for overdue notifications
     console.log('Starting cron job for overdue notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { // Daily at 9 AM
+    cron.schedule('* * * * *', async () => { 
       try {
         console.log('Running overdue notification creation at', new Date().toISOString());
         const notifications = await createOverdueNotifications();
@@ -104,7 +103,7 @@ const startServer = async () => {
 
     // Cron job for global notice notifications
     console.log('Starting cron job for global notice notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { // Daily at 10 AM
+    cron.schedule('* * * * *', async () => { 
       try {
         console.log('Running global notice notification creation at', new Date().toISOString());
         const notifications = await createGlobalNoticeNotifications();
@@ -116,8 +115,7 @@ const startServer = async () => {
 
     // Cron job for sending notifications 
     console.log('Starting cron job for sending notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { // Testing: every minute
-      // cron.schedule('*/5 * * * *', async () => { // Production: every 5 minutes
+    cron.schedule('* * * * *', async () => { 
       try {
         console.log('Running notification sending at', new Date().toISOString());
         const sentCount = await sendPendingNotifications();

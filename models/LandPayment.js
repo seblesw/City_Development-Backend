@@ -66,7 +66,7 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      anual_payment: {
+      annual_payment: {
         type: DataTypes.DECIMAL,
         allowNull: true,
         validate: {

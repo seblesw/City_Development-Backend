@@ -1,5 +1,3 @@
-const { DataTypes } = require('sequelize');
-
 const LEASE_STATUSES = {
   ACTIVE: "ዝግጁ",
   TERMINATED: "ተቋርጧል",
@@ -23,19 +21,35 @@ module.exports = (db, DataTypes) => {
       },
       administrative_unit_id: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
         references: { model: "administrative_units", key: "id" },
       },
       lessee_id: {
         type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: "users", key: "id" },
+        allowNull: false,
+        references: { model: "lease_users", key: "id" },
+        validate: {
+          notNull: { msg: "የተከራይ መለያ መግለጽ አለበት።" },
+        },
       },
       leased_area: {
         type: DataTypes.FLOAT,
-        allowNull: true,
+        allowNull: false,
         validate: {
           min: { args: [0.1], msg: "የተከራየ ስፋት ከ0.1 ካሬ ሜትር በታች መሆን አይችልም።" },
+        },
+      },
+      lease_end_date: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        validate: {
+          isDate: { msg: "የኪራይ መጨረሻ ቀን ትክክለኛ ቀን መሆን አለበት።" },
+          notNull: { msg: "የኪራይ መጨረሻ ቀን መግለጽ አለበት።" },
+          isAfterStartDate(value) {
+            if (new Date(value) <= new Date(this.lease_start_date)) {
+              throw new Error("የኪራይ መጨረሻ ቀን ከመጀመሪያ ቀን በኋላ መሆን አለበት።");
+            }
+          },
         },
       },
       lease_start_date: {
@@ -45,71 +59,43 @@ module.exports = (db, DataTypes) => {
           isDate: { msg: "የኪራይ መጀመሪያ ቀን ትክክለኛ ቀን መሆን አለበት።" },
         },
       },
-      lease_end_date: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        validate: {
-          isDate: { msg: "የኪራይ መጨረሻ ቀን ትክክለኛ ቀን መሆን አለበት።" },
-          isAfterStartDate(value) {
-            if (new Date(value) <= new Date(this.lease_start_date)) {
-              throw new Error("የኪራይ መጨረሻ ቀን ከመጀመሪያ ቀን በኋላ መሆን አለበት።");
-            }
-          },
-        },
-      },
       lease_terms: {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      annual_lease_amount: {
-        type: DataTypes.FLOAT,
-        allowNull: true,
-        validate: {
-          min: { args: [0], msg: "ዓመታዊ የኪራይ መጠን ከ0 በታች መሆን አይችልም።" },
-        },
-      },
-      initial_lease_amount: {
-        type: DataTypes.FLOAT,
-        allowNull: true
-      },
       status: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
         defaultValue: LEASE_STATUSES.ACTIVE,
         validate: {
           isIn: {
             args: [Object.values(LEASE_STATUSES)],
-            msg: `የኪራይ ሁኔታ ከተፈቀዱቷ (${Object.values(LEASE_STATUSES).join(", ")}) ውስጥ መሆን አለበት።`,
+            msg: `የኪራይ ሁኔታ ከተፈቀዱቷ (${Object.values(LEASE_STATUSES).join(
+              ", "
+            )}) ውስጥ መሆን አለበት።`,
           },
         },
       },
-      created_by: {
+      payment_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        references: { model: "land_payments", key: "id" },
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
         references: { model: "users", key: "id" },
+        validate: {
+          notNull: { msg: "ፈጣሪ መለያ መግለጽ አለበት።" },
+        },
       },
       updated_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: "users", key: "id" },
       },
-      leaser_testimonial: {
-        type: DataTypes.INTEGER,
-        references: {
-          model: "users",
-          key: "id"
-        },
-        allowNull: true
-      },
-      lessee_testimonial: {
-        type: DataTypes.INTEGER,
-        references: {
-          model: "users",
-          key: "id"
-        },
-        allowNull: true
-      }
     },
+
     {
       tableName: "lease_agreements",
       timestamps: true,
@@ -119,8 +105,7 @@ module.exports = (db, DataTypes) => {
         { fields: ["land_record_id"] },
         { fields: ["administrative_unit_id"] },
         { fields: ["lessee_id"] },
-        { fields: ["leaser_testimonial"] },
-        { fields: ["lessee_testimonial"] },
+        { fields: ["payment_id"] },
         { fields: ["status"] },
       ],
     }
