@@ -1,5 +1,27 @@
-const { LeaseAgreement, LandRecord, LeaseUser, LandPayment, sequelize,LEASE_STATUSES, LEASE_USER_TYPES,PAYMENT_TYPES} = require('../models');
-const { Op } = require('sequelize');
+const {
+  LeaseAgreement,
+  LandRecord,
+  AdministrativeUnit,
+  LeaseUser,
+  LandPayment,
+  User,
+  LEASE_STATUSES,
+  LEASE_USER_TYPES,
+  PAYMENT_TYPES,
+  PAYMENT_STATUSES,
+  PROPERTY_OWNER_TYPE,
+  sequelize,
+} = require("../models");
+const { Op } = require("sequelize");
+
+const calculatePaymentStatus = (payment) => {
+  const { total_amount, paid_amount } = payment;
+  if (paid_amount === 0) return PAYMENT_STATUSES.PENDING;
+  if (paid_amount >= total_amount) return PAYMENT_STATUSES.COMPLETED;
+  if (paid_amount > 0 && paid_amount < total_amount)
+    return PAYMENT_STATUSES.PARTIAL;
+  return PAYMENT_STATUSES.PENDING;
+};
 
 const createLeaseAgreementService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -7,43 +29,46 @@ const createLeaseAgreementService = async (data, files, user) => {
   try {
     const {
       land_record_id,
-      lessee, 
+      lessee,
       leased_area,
       lease_start_date,
       lease_end_date,
       lease_terms,
-      testimonials = [], 
-      payment, 
+      testimonials = [],
+      payment,
     } = data;
 
-    // Validate required fields
-    if (!land_record_id) throw new Error('የመሬት መዝገብ መለያ መግለጽ አለበት።');
-    if (!lessee || !lessee.name) throw new Error('የተከራይ ስም መግለጽ አለበት።');
-    if (!leased_area) throw new Error('የተከራየ ስፋት መግለጽ አለበት።');
-    if (!lease_start_date || !lease_end_date) throw new Error('የኪራይ መጀመሪያ እና መጨረሻ ቀን መግለጽ አለበት።');
-    if (!user || !user.id) throw new Error('ፈጣሪ መለያ መግለጽ አለበት።');
+    if (!land_record_id) throw new Error("የመሬት መዝገብ መለያ መግለጽ አለበት።");
+    if (!lessee || !lessee.name) throw new Error("የተከራይ ስም መግለጽ አለበት።");
+    if (!leased_area) throw new Error("የተከራየ ስፋት መግለጽ አለበት።");
+    if (!lease_start_date || !lease_end_date)
+      throw new Error("የኪራይ መጀመሪያ እና መጨረሻ ቀን መግለጽ አለበት።");
+    if (!user || !user.id) throw new Error("ፈጣሪ መለያ መግለጽ አለበት።");
+    if (!user.administrative_unit_id)
+      throw new Error("የአስተዳደር ክፍል መለያ መግለጽ አለበት።");
 
-    // Validate LandRecord
     const landRecord = await LandRecord.findOne({
       where: {
         id: land_record_id,
-        property_owner_type: 'LAND_BANK',
+        property_owner_type: PROPERTY_OWNER_TYPE.LAND_BANK,
         deletedAt: null,
       },
       transaction: t,
     });
-    if (!landRecord) throw new Error('የመሬት ባንክ መዝገብ አልተገኘም።');
+    if (!landRecord) throw new Error("የመሬት ባንክ መዝገብ አልተገኘም።");
 
-    // Validate leased_area
     const existingLeases = await LeaseAgreement.findAll({
       where: { land_record_id, deletedAt: null },
       transaction: t,
     });
-    const totalLeasedArea = existingLeases.reduce((sum, lease) => sum + (lease.leased_area || 0), 0);
+    const totalLeasedArea = existingLeases.reduce(
+      (sum, lease) => sum + (lease.leased_area || 0),
+      0
+    );
     if (totalLeasedArea + leased_area > landRecord.area) {
-      throw new Error('የተከራየ ስፋት ከቀሪው ስፋት መብለጥ አዯችልም።');
+      throw new Error("የተከራየ ስፋት ከቀሪው ስፋት መብለጥ አይችልም።");
     }
-    // Create LeaseUser for lessee (type: LESSEE)
+
     const lesseeUser = await LeaseUser.create(
       {
         type: LEASE_USER_TYPES.LESSEE,
@@ -56,7 +81,6 @@ const createLeaseAgreementService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // Create LeaseAgreement
     const leaseAgreement = await LeaseAgreement.create(
       {
         land_record_id,
@@ -73,10 +97,12 @@ const createLeaseAgreementService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // Create LeaseUser for testimonials
     for (const testimonial of testimonials) {
-      if (!testimonial.type || !Object.values(LEASE_USER_TYPES).includes(testimonial.type)) {
-        throw new Error('የምስክር አይነት ትክክለኛ መሆን አለበት።');
+      if (
+        !testimonial.type ||
+        !Object.values(LEASE_USER_TYPES).includes(testimonial.type)
+      ) {
+        throw new Error("የምስክር አይነት ትክክለኛ መሆን አለበት።");
       }
 
       await LeaseUser.create(
@@ -93,39 +119,44 @@ const createLeaseAgreementService = async (data, files, user) => {
       );
     }
 
-    // Handle payment if provided
     let leasePayment = null;
     if (payment && (payment.total_amount > 0 || payment.paid_amount > 0)) {
+      if (!payment.total_amount || payment.total_amount < 0) {
+        throw new Error("የክፍያ ገንዘብ ትክክለኛ መሆን አለበት።");
+      }
+      if (!payment.paid_amount || payment.paid_amount < 0) {
+        throw new Error("የተከፈለ ገንዘብ ትክክለኛ መሆን አለበት።");
+      }
       leasePayment = await LandPayment.create(
         {
           lease_agreement_id: leaseAgreement.id,
           land_record_id: land_record_id,
           payer_id: lesseeUser.id,
-          payment_type:PAYMENT_TYPES.LEASE_PAYMENT,
+          payment_type: PAYMENT_TYPES.LEASE_PAYMENT,
           total_amount: payment.total_amount,
           paid_amount: payment.paid_amount,
           annual_payment: payment.annual_payment,
           initial_payment: payment.initial_payment,
-          penality_amount: payment.penality_amount,
-          penality_rate: payment.penality_rate,
           remaining_amount: payment.total_amount - payment.paid_amount,
           payment_date: payment.payment_date,
           created_by: user.id,
           updated_by: user.id,
+          payment_status: calculatePaymentStatus(payment),
         },
         { transaction: t }
       );
 
-      // Update LeaseAgreement with payment_id
       await leaseAgreement.update(
         { payment_id: leasePayment.id },
         { transaction: t }
       );
     }
 
-    // Update LandRecord available area (assume LandRecord has available_area field, default to area)
     await landRecord.update(
-      { available_area: landRecord.available_area - leased_area },
+      {
+        available_area:
+          (landRecord.available_area || landRecord.area) - leased_area,
+      },
       { transaction: t }
     );
 
@@ -141,4 +172,132 @@ const createLeaseAgreementService = async (data, files, user) => {
   }
 };
 
-module.exports = { createLeaseAgreementService };
+const getAllLeaseAgreementsService = async (user, queryParams = {}) => {
+  if (!user || !user.administrative_unit_id) {
+    throw new Error("የአስተዳደር ክፍል መለያ መግለጽ አለበት።");
+  }
+
+  const { page = 1, limit = 10, status, startDate, endDate } = queryParams;
+  const offset = (page - 1) * limit;
+
+  const where = {
+    administrative_unit_id: user.administrative_unit_id,
+    deletedAt: null,
+  };
+
+  if (status && Object.values(LEASE_STATUSES).includes(status)) {
+    where.status = status;
+  }
+  if (startDate) {
+    where.lease_start_date = { [Op.gte]: new Date(startDate) };
+  }
+  if (endDate) {
+    where.lease_end_date = { [Op.lte]: new Date(endDate) };
+  }
+
+  const leaseAgreements = await LeaseAgreement.findAndCountAll({
+    where,
+    include: [
+      { model: LandRecord, as: "landRecord" },
+      { model: AdministrativeUnit, as: "leaser" },
+      { model: LeaseUser, as: "lessee" },
+      {
+        model: LeaseUser,
+        as: "testimonials",
+        where: {
+          type: [
+            LEASE_USER_TYPES.LEASER_TESTIMONIAL,
+            LEASE_USER_TYPES.LESSEE_TESTIMONIAL,
+          ],
+        },
+        required: false,
+      },
+      { model: User, as: "creator" },
+      { model: User, as: "updater" },
+      { model: LandPayment, as: "payment" },
+    ],
+    limit: parseInt(limit),
+    offset: parseInt(offset),
+    order: [["createdAt", "DESC"]],
+  });
+
+  return {
+    data: leaseAgreements.rows.map((agreement) => agreement.toJSON()),
+    total: leaseAgreements.count,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalPages: Math.ceil(leaseAgreements.count / limit),
+  };
+};
+
+const getLeaseAgreementsByLandRecordIdService = async (
+  landRecordId,
+  user,
+  queryParams = {}
+) => {
+  if (!user || !user.administrative_unit_id) {
+    throw new Error("የአስተዳደር ክፍል መለያ መግለጽ አለበት።");
+  }
+  if (!landRecordId || isNaN(landRecordId)) {
+    throw new Error("የመሬት መዝገብ መለያ ትክክለኛ መሆን አለበት።");
+  }
+
+  const { page = 1, limit = 10, status, startDate, endDate } = queryParams;
+  const offset = (page - 1) * limit;
+
+  const where = {
+    land_record_id: landRecordId,
+    administrative_unit_id: user.administrative_unit_id,
+    deletedAt: null,
+  };
+
+  if (status && Object.values(LEASE_STATUSES).includes(status)) {
+    where.status = status;
+  }
+  if (startDate) {
+    where.lease_start_date = { [Op.gte]: new Date(startDate) };
+  }
+  if (endDate) {
+    where.lease_end_date = { [Op.lte]: new Date(endDate) };
+  }
+
+  const leaseAgreements = await LeaseAgreement.findAndCountAll({
+    where,
+    include: [
+      { model: LandRecord, as: "landRecord" },
+      { model: AdministrativeUnit, as: "leaser" },
+      { model: LeaseUser, as: "lessee" },
+      {
+        model: LeaseUser,
+        as: "testimonials",
+        where: {
+          type: [
+            LEASE_USER_TYPES.LEASER_TESTIMONIAL,
+            LEASE_USER_TYPES.LESSEE_TESTIMONIAL,
+          ],
+        },
+        required: false,
+      },
+      { model: User, as: "creator" },
+      { model: User, as: "updater" },
+      { model: LandPayment, as: "payment" },
+    ],
+    limit: parseInt(limit),
+    offset: parseInt(offset),
+    order: [["createdAt", "DESC"]],
+  });
+
+  return {
+    data: leaseAgreements.rows.map((agreement) => agreement.toJSON()),
+    total: leaseAgreements.count,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalPages: Math.ceil(leaseAgreements.count / limit),
+  };
+};
+
+module.exports = {
+  createLeaseAgreementService,
+  getAllLeaseAgreementsService,
+  getLeaseAgreementsByLandRecordIdService,
+};
