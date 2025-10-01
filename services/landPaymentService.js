@@ -82,7 +82,6 @@ const createLandPaymentService = async (data, options = {}) => {
       "total_amount",
       "paid_amount",
       "land_record_id",
-      "payer_id",
     ];
     const missingFields = requiredFields.filter(
       (field) => data[field] === undefined || data[field] === null
@@ -95,9 +94,9 @@ const createLandPaymentService = async (data, options = {}) => {
     if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    if (typeof data.payer_id !== "number" || data.payer_id <= 0) {
-      throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
-    }
+    // if (typeof data.payer_id !== "number" || data.payer_id <= 0) {
+    //   throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
+    // }
     if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
       throw new Error(
         `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(
@@ -136,7 +135,7 @@ const createLandPaymentService = async (data, options = {}) => {
         payment_status,
         penalty_reason: data.penalty_reason || null,
         description: data.description || null,
-        payer_id: data.payer_id,
+        payer_id: data.payer_id || null,
         created_by: data.created_by,
         is_draft: false,
       },
