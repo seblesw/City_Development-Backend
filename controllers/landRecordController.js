@@ -36,11 +36,9 @@ const createLandRecord = async (req, res) => {
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
-    // const property_owner_type= req.body.property_owner_type;
-    // console.log(req.body);
+
     const result = await createLandRecordService(
       {
-        // property_owner_type,
         owners,
         land_record,
         documents,

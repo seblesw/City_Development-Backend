@@ -9,8 +9,8 @@ const {
   LEASE_USER_TYPES,
   PAYMENT_TYPES,
   PAYMENT_STATUSES,
-  PROPERTY_OWNER_TYPE,
   sequelize,
+  OWNERSHIP_TYPES,
 } = require("../models");
 const { Op } = require("sequelize");
 
@@ -50,7 +50,7 @@ const createLeaseAgreementService = async (data, files, user) => {
     const landRecord = await LandRecord.findOne({
       where: {
         id: land_record_id,
-        property_owner_type: PROPERTY_OWNER_TYPE.LAND_BANK,
+        ownership_type: OWNERSHIP_TYPES.MERET_BANK,
         deletedAt: null,
       },
       transaction: t,

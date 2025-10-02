@@ -55,7 +55,7 @@ app.use('/api/v1/lease-agreements', leaseAgreementRoutes)
 // app.get('/', (req, res) => {
 //   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 // });
-app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 // Start server and cron jobs
 const startServer = async () => {

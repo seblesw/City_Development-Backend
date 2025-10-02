@@ -56,14 +56,8 @@ const LEASE_OWNERSHIP_TYPE = {
   INVESTMENT_ALLOCATION: "በኢንቨስትመንት በምደባ የተያዘ ይዞታ",
 };
 
-const PROPERTY_OWNER_TYPE = {
-  INSTITUTION: "ተቋም",
-  LAND_BANK: "መሬት ባንክ",
-  INDIVIDUALS: "የግለሰቦች",
-};
-
 const INFRASTRUCTURE_STATUS = {
- FULLFILLED: "የተሟላለት",
+  FULLFILLED: "የተሟላለት",
   NOT_FULLFILLED: "ያልተሟላለት",
 };
 
@@ -74,9 +68,8 @@ const LAND_HISTORY = {
   VACANT: "በክፍትነት የቆየ",
   ILLEGAL: "ከህገወጥ ይዞታ ተመላሽ የሆነ",
   TEMPORARY: "በጊዜአዊነት ተሰጥቶ ዉል የተቋረጠ",
-  OTHER:"ሌላ"
+  OTHER: "ሌላ",
 };
-
 
 module.exports = (db, DataTypes) => {
   const LandRecord = db.define(
@@ -239,95 +232,34 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      property_owner_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       //landbank specific attributes
       infrastructure_status: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isApplicable(value) {
-            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
-              throw new Error("የመሠረተ ልማት ሁኔታ ለመሬት ባንክ መግለጽ አለበት።");
-            }
-            if (value && !Object.values(INFRASTRUCTURE_STATUS).includes(value)) {
-              throw new Error(
-                `የመሠረተ ልማት ሁኔታ ከተፈቀዱቷ (${Object.values(
-                  INFRASTRUCTURE_STATUS
-                ).join(", ")}) ውስጥ መሆን አለበት።`
-              );
-            }
-          },
-        },
       },
       land_bank_code: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isApplicable(value) {
-            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
-              throw new Error("የመሬት ባንክ ኮድ ለመሬት ባንክ መግለጽ አለበት።");
-            }
-            if (value && value.length > 50) {
-              throw new Error("የመሬት ባንክ ኮድ ከ50 ፊደላት መብለጥ አይችልም።");
-            }
-          },
-        },
+        
       },
       land_history: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isApplicable(value) {
-            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
-              throw new Error("የመሬት ታሪክ ለመሬት ባንክ መግለጽ አለበት።");
-            }
-            if (value && !Object.values(LAND_HISTORY).includes(value)) {
-              throw new Error(
-                `የመሬት ታሪክ ከተፈቀዱቷ (${Object.values(LAND_HISTORY).join(
-                  ", "
-                )}) ውስጥ መሆን አለበት።`
-              );
-            }
-          },
-        },
       },
       landbank_registrer_name: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isApplicable(value) {
-            if (this.property_owner_type === PROPERTY_OWNER_TYPE.LAND_BANK && !value) {
-              throw new Error("የመሬት ባንክ መዝጋቢ ስም መግለጽ አለበት።");
-            }
-            if (value && value.length > 100) {
-              throw new Error(
-                "የመሬት ባንክ መዝጋቢ ስም ከ100 ፊደላት መብለጥ አይችልም።"
-              );
-            }
-          },
-        },
+  
       },
-      other_land_history:{
-        type:DataTypes.STRING,
-        allowNull:true,
+      other_land_history: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       //instituetion specific attributes
       institution_name: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: {
-          isApplicable(value) {
-            if (this.property_owner_type === PROPERTY_OWNER_TYPE.INSTITUTION && !value) {
-              throw new Error("የተቋም ስም ለተቋም መግለጽ አለበት።");
-            }
-            if (value && value.length > 100) {
-              throw new Error("የተቋም ስም ከ100 ፊደላት መብለጥ አይችልም።");
-            }
-          },
-        },
+  
       },
       remark: {
         type: DataTypes.STRING,
@@ -372,9 +304,7 @@ module.exports = (db, DataTypes) => {
                 throw new Error("የተግባር መዝገብ ተግባር ትክክለኛ መሆን አለበት።");
               }
               if (!entry.changed_at || isNaN(new Date(entry.changed_at))) {
-                throw new Error(
-                  "የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።"
-                );
+                throw new Error("የተግባር መዝገብ የተቀየረበት ቀን ትክክለኛ መሆን አለበት።");
               }
               if (!entry.changed_by) {
                 throw new Error("የተግባር መዝገብ ተቀያሪ መግለጥ አለበት።");
@@ -455,7 +385,6 @@ module.exports = (db, DataTypes) => {
         { fields: ["notification_status"] },
         { fields: ["created_by"] },
         { fields: ["approved_by"] },
-        { fields: ["property_owner_type"] },
       ],
     }
   );
@@ -468,7 +397,6 @@ module.exports = (db, DataTypes) => {
     LAND_USE_TYPES,
     ZONING_TYPES,
     OWNERSHIP_TYPES,
-    PROPERTY_OWNER_TYPE,
     INFRASTRUCTURE_STATUS,
     LAND_HISTORY,
   };

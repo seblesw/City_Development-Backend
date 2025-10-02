@@ -12,7 +12,6 @@ const {
   LandOwner,
   LandPayment,
   PAYMENT_TYPES,
-  PROPERTY_OWNER_TYPE,
   OWNERSHIP_TYPES,
 } = require("../models");
 const documentService = require("./documentService");
@@ -3099,7 +3098,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
 };
 const getLandBankRecordsService = async (user) => {
   try {
-    // Fetch land records where property_owner_type is LAND_BANK
+    // Fetch land records 
     const landRecords = await LandRecord.findAll({
       where: {
       ownership_type: OWNERSHIP_TYPES.MERET_BANK,
@@ -3110,11 +3109,6 @@ const getLandBankRecordsService = async (user) => {
       {
         model: Document,
         as: 'documents',
-      },
-      {
-        model:User,
-        as:"owners",
-        through:{}
 
       },
       {
@@ -3127,7 +3121,6 @@ const getLandBankRecordsService = async (user) => {
 
     // Transform the result to JSON format
     return landRecords.map(record => ({
-      owners:record.toJSON(),
       landRecord: record.toJSON(),
       documents: record.documents || [],
       landPayments: record.landPayments || [],
