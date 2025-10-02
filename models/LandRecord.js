@@ -63,7 +63,7 @@ const PROPERTY_OWNER_TYPE = {
 };
 
 const INFRASTRUCTURE_STATUS = {
-  NOT_FULLFILLED: "የተሟላለት",
+ FULLFILLED: "የተሟላለት",
   NOT_FULLFILLED: "ያልተሟላለት",
 };
 
