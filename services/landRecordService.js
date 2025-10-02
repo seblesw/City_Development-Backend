@@ -3111,10 +3111,6 @@ const getLandBankRecordsService = async (user) => {
         as: 'documents',
 
       },
-      {
-        model: LandPayment,
-        as: 'payments',
-      },
       ],
     });
 
@@ -3123,7 +3119,6 @@ const getLandBankRecordsService = async (user) => {
     return landRecords.map(record => ({
       landRecord: record.toJSON(),
       documents: record.documents || [],
-      landPayments: record.landPayments || [],
     }));
   } catch (error) {
     throw new Error(`የመሬት ባንክ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
