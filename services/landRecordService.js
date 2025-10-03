@@ -1181,7 +1181,7 @@ const getAllLandRecordService = async (options = {}) => {
     transaction,
     includeDeleted = false,
     page = 1,
-    pageSize = 50,
+    pageSize = 10,
     filters = {},
   } = options;
 
@@ -1627,67 +1627,154 @@ const getLandRecordByUserIdService = async (userId) => {
 const getLandRecordsByCreatorService = async (userId, options = {}) => {
   if (!userId) throw new Error("User ID is required");
 
-  const { transaction, page = 1, pageSize = 10 } = options;
+  const { 
+    transaction, 
+    page = 1, 
+    pageSize = 10, 
+    filters = {} 
+  } = options;
+  
   const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
-    // Fetch records with optimized includes
-    const { count, rows: records } = await LandRecord.findAndCountAll({
-      where: {
-        created_by: userId,
-        deletedAt: null,
+    // Build where conditions for filters
+    const whereConditions = {
+      created_by: userId,
+      deletedAt: null,
+    };
+
+    // Add text filters to where conditions
+    if (filters.parcelNumber) {
+      whereConditions.parcel_number = { 
+        [Op.like]: `%${filters.parcelNumber}%` 
+      };
+    }
+    
+    if (filters.blockNumber) {
+      whereConditions.block_number = { 
+        [Op.like]: `%${filters.blockNumber}%` 
+      };
+    }
+    
+    if (filters.record_status) {
+      whereConditions.record_status = filters.record_status;
+    }
+    
+    if (filters.land_use) {
+      whereConditions.land_use = filters.land_use;
+    }
+    
+    if (filters.ownership_type) {
+      whereConditions.ownership_type = filters.ownership_type;
+    }
+
+    // Build include conditions for related models
+    const includeConditions = [
+      {
+        model: User,
+        as: "owners",
+        through: { attributes: [] },
+        attributes: [
+          "id",
+          "first_name",
+          "middle_name",
+          "last_name",
+          "national_id",
+        ],
+        required: false,
+        // Add owner filters if provided
+        ...(filters.ownerName && {
+          where: {
+            [Op.or]: [
+              { first_name: { [Op.like]: `%${filters.ownerName}%` } },
+              { middle_name: { [Op.like]: `%${filters.ownerName}%` } },
+              { last_name: { [Op.like]: `%${filters.ownerName}%` } }
+            ]
+          }
+        }),
+        ...(filters.nationalId && {
+          where: {
+            national_id: { [Op.like]: `%${filters.nationalId}%` }
+          }
+        })
       },
-      include: [
-        {
-          model: User,
-          as: "owners",
-          through: { attributes: [] },
-          attributes: [
-            "id",
-            "first_name",
-            "middle_name",
-            "last_name",
-            "national_id",
-          ],
-          required: false,
-        },
-        {
-          model: AdministrativeUnit,
-          as: "administrativeUnit",
-          attributes: ["id", "name"],
-        },
-        // Include documents directly
-        {
-          model: Document,
-          as: "documents",
-          attributes: [
-            "id",
-            "plot_number",
-            "document_type",
-            "reference_number",
-            "createdAt",
-          ],
-          where: { deletedAt: null },
-          required: false,
-          limit: 3, // Get only 3 most recent documents
-        },
-        // Include payments directly
-        {
-          model: LandPayment,
-          as: "payments",
-          attributes: ["id", "payment_type", "paid_amount", "createdAt"],
-          where: { deletedAt: null },
-          required: false,
-          limit: 3, // Get only 3 most recent payments
-        },
-      ],
+      {
+        model: AdministrativeUnit,
+        as: "administrativeUnit",
+        attributes: ["id", "name"],
+      },
+      {
+        model: Document,
+        as: "documents",
+        attributes: [
+          "id",
+          "plot_number",
+          "document_type",
+          "reference_number",
+          "createdAt",
+        ],
+        where: { deletedAt: null },
+        required: false,
+        // Add plot number filter if provided
+        ...(filters.plotNumber && {
+          where: {
+            plot_number: { [Op.like]: `%${filters.plotNumber}%` }
+          }
+        }),
+        limit: 3,
+      },
+      {
+        model: LandPayment,
+        as: "payments",
+        attributes: ["id", "payment_type", "paid_amount", "payment_status", "createdAt"],
+        where: { deletedAt: null },
+        required: false,
+        limit: 3,
+      },
+    ];
+
+    // Handle global search across multiple fields
+    if (filters.search) {
+      const searchConditions = {
+        [Op.or]: [
+          { parcel_number: { [Op.like]: `%${filters.search}%` } },
+          { block_number: { [Op.like]: `%${filters.search}%` } },
+          { record_status: { [Op.like]: `%${filters.search}%` } },
+          { land_use: { [Op.like]: `%${filters.search}%` } },
+          { '$owners.first_name$': { [Op.like]: `%${filters.search}%` } },
+          { '$owners.middle_name$': { [Op.like]: `%${filters.search}%` } },
+          { '$owners.last_name$': { [Op.like]: `%${filters.search}%` } },
+          { '$owners.national_id$': { [Op.like]: `%${filters.search}%` } },
+          { '$documents.plot_number$': { [Op.like]: `%${filters.search}%` } }
+        ]
+      };
+      
+      // Merge search conditions with existing where conditions
+      whereConditions[Op.and] = [
+        whereConditions,
+        searchConditions
+      ];
+    }
+
+    console.log('[SERVICE] Final query conditions:', {
+      whereConditions,
+      offset,
+      limit: pageSize
+    });
+
+    // Fetch records with pagination and filters
+    const { count, rows: records } = await LandRecord.findAndCountAll({
+      where: whereConditions,
+      include: includeConditions,
       order: [["createdAt", "DESC"]],
       offset,
       limit: pageSize,
-      distinct: true, // For correct counting
+      distinct: true, // Important for correct counting with includes
       transaction: t,
     });
+
+    console.log(`[SERVICE] Query results: ${records.length} records out of ${count} total, offset: ${offset}, limit: ${pageSize}`);
 
     // Process records
     const processedRecords = records.map((record) => {
@@ -1711,6 +1798,8 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       pageSize,
       totalPages: Math.ceil(count / pageSize),
       data: processedRecords,
+      hasNextPage: page < Math.ceil(count / pageSize),
+      hasPrevPage: page > 1
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();

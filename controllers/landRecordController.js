@@ -357,8 +357,42 @@ const getLandRecordsByCreator = async (req, res) => {
         .status(400)
         .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
-    const records = await getLandRecordsByCreatorService(userId);
-    res.status(200).json({ status: "success", data: records });
+
+    // Extract pagination and filter parameters from query
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.limit || req.query.pageSize || 10, 10), 1), 100);
+    
+    // Extract filters from query
+    const filters = {
+      plotNumber: req.query.plotNumber,
+      ownerName: req.query.ownerName,
+      nationalId: req.query.nationalId,
+      parcelNumber: req.query.parcelNumber,
+      blockNumber: req.query.blockNumber,
+      record_status: req.query.record_status,
+      land_use: req.query.land_use,
+      ownership_type: req.query.ownership_type,
+      search: req.query.search,
+    };
+
+    // Remove undefined filters
+    Object.keys(filters).forEach(key => {
+      if (filters[key] === undefined || filters[key] === '') {
+        delete filters[key];
+      }
+    });
+
+ 
+    const records = await getLandRecordsByCreatorService(userId, {
+      page,
+      pageSize,
+      filters, // Pass filters to service
+    });
+
+    res.status(200).json({ 
+      status: "success", 
+      data: records 
+    });
   } catch (error) {
     res.status(500).json({
       status: "error",
