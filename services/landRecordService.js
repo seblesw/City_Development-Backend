@@ -1630,44 +1630,18 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
   const { 
     transaction, 
     page = 1, 
-    pageSize = 10, 
-    filters = {} 
+    pageSize = 10,
   } = options;
   
   const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
-    // Build where conditions for filters
+    // Build where conditions
     const whereConditions = {
       created_by: userId,
       deletedAt: null,
     };
-
-    // Add text filters to where conditions
-    if (filters.parcelNumber) {
-      whereConditions.parcel_number = { 
-        [Op.like]: `%${filters.parcelNumber}%` 
-      };
-    }
-    
-    if (filters.blockNumber) {
-      whereConditions.block_number = { 
-        [Op.like]: `%${filters.blockNumber}%` 
-      };
-    }
-    
-    if (filters.record_status) {
-      whereConditions.record_status = filters.record_status;
-    }
-    
-    if (filters.land_use) {
-      whereConditions.land_use = filters.land_use;
-    }
-    
-    if (filters.ownership_type) {
-      whereConditions.ownership_type = filters.ownership_type;
-    }
 
     // Build include conditions for related models
     const includeConditions = [
@@ -1683,21 +1657,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           "national_id",
         ],
         required: false,
-        // Add owner filters if provided
-        ...(filters.ownerName && {
-          where: {
-            [Op.or]: [
-              { first_name: { [Op.like]: `%${filters.ownerName}%` } },
-              { middle_name: { [Op.like]: `%${filters.ownerName}%` } },
-              { last_name: { [Op.like]: `%${filters.ownerName}%` } }
-            ]
-          }
-        }),
-        ...(filters.nationalId && {
-          where: {
-            national_id: { [Op.like]: `%${filters.nationalId}%` }
-          }
-        })
       },
       {
         model: AdministrativeUnit,
@@ -1716,12 +1675,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
         ],
         where: { deletedAt: null },
         required: false,
-        // Add plot number filter if provided
-        ...(filters.plotNumber && {
-          where: {
-            plot_number: { [Op.like]: `%${filters.plotNumber}%` }
-          }
-        }),
         limit: 3,
       },
       {
@@ -1734,36 +1687,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       },
     ];
 
-    // Handle global search across multiple fields
-    if (filters.search) {
-      const searchConditions = {
-        [Op.or]: [
-          { parcel_number: { [Op.like]: `%${filters.search}%` } },
-          { block_number: { [Op.like]: `%${filters.search}%` } },
-          { record_status: { [Op.like]: `%${filters.search}%` } },
-          { land_use: { [Op.like]: `%${filters.search}%` } },
-          { '$owners.first_name$': { [Op.like]: `%${filters.search}%` } },
-          { '$owners.middle_name$': { [Op.like]: `%${filters.search}%` } },
-          { '$owners.last_name$': { [Op.like]: `%${filters.search}%` } },
-          { '$owners.national_id$': { [Op.like]: `%${filters.search}%` } },
-          { '$documents.plot_number$': { [Op.like]: `%${filters.search}%` } }
-        ]
-      };
-      
-      // Merge search conditions with existing where conditions
-      whereConditions[Op.and] = [
-        whereConditions,
-        searchConditions
-      ];
-    }
-
-    console.log('[SERVICE] Final query conditions:', {
-      whereConditions,
-      offset,
-      limit: pageSize
-    });
-
-    // Fetch records with pagination and filters
+    // Fetch records with pagination
     const { count, rows: records } = await LandRecord.findAndCountAll({
       where: whereConditions,
       include: includeConditions,
@@ -1774,7 +1698,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       transaction: t,
     });
 
-    console.log(`[SERVICE] Query results: ${records.length} records out of ${count} total, offset: ${offset}, limit: ${pageSize}`);
 
     // Process records
     const processedRecords = records.map((record) => {
@@ -3185,30 +3108,54 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
     console.log(e);
   }
 };
-const getLandBankRecordsService = async (user) => {
+const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
   try {
-    // Fetch land records 
-    const landRecords = await LandRecord.findAll({
+    // Calculate offset
+    const offset = (page - 1) * pageSize;
+    
+    // Get total count
+    const totalCount = await LandRecord.count({
       where: {
-      ownership_type: OWNERSHIP_TYPES.MERET_BANK,
-      administrative_unit_id: user.administrative_unit_id,
-      deletedAt: null,
+        ownership_type: OWNERSHIP_TYPES.MERET_BANK,
+        administrative_unit_id: user.administrative_unit_id,
+        deletedAt: null,
       },
-      include: [
-      {
-        model: Document,
-        as: 'documents',
-
-      },
-      ],
     });
 
+    // Fetch paginated land records
+    const landRecords = await LandRecord.findAll({
+      where: {
+        ownership_type: OWNERSHIP_TYPES.MERET_BANK,
+        administrative_unit_id: user.administrative_unit_id,
+        deletedAt: null,
+      },
+      include: [
+        {
+          model: Document,
+          as: 'documents',
+        },
+      ],
+      limit: pageSize,
+      offset: offset,
+      order: [['createdAt', 'DESC']], // Optional: Add ordering
+    });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalCount / pageSize);
 
     // Transform the result to JSON format
-    return landRecords.map(record => ({
+    const data = landRecords.map(record => ({
       landRecord: record.toJSON(),
       documents: record.documents || [],
     }));
+
+    return {
+      count: totalCount,
+      totalPages: totalPages,
+      currentPage: page,
+      pageSize: pageSize,
+      data: data,
+    };
   } catch (error) {
     throw new Error(`የመሬት ባንክ መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }

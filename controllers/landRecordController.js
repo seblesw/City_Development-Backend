@@ -358,40 +358,23 @@ const getLandRecordsByCreator = async (req, res) => {
         .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
 
-    // Extract pagination and filter parameters from query
+    // Extract pagination parameters from query
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.limit || req.query.pageSize || 10, 10), 1), 100);
-    
-    // Extract filters from query
-    const filters = {
-      plotNumber: req.query.plotNumber,
-      ownerName: req.query.ownerName,
-      nationalId: req.query.nationalId,
-      parcelNumber: req.query.parcelNumber,
-      blockNumber: req.query.blockNumber,
-      record_status: req.query.record_status,
-      land_use: req.query.land_use,
-      ownership_type: req.query.ownership_type,
-      search: req.query.search,
-    };
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || 10, 10), 1), 100);
 
-    // Remove undefined filters
-    Object.keys(filters).forEach(key => {
-      if (filters[key] === undefined || filters[key] === '') {
-        delete filters[key];
-      }
-    });
-
- 
     const records = await getLandRecordsByCreatorService(userId, {
       page,
       pageSize,
-      filters, // Pass filters to service
     });
 
     res.status(200).json({ 
       status: "success", 
-      data: records 
+      count: records.total,
+      totalPages: records.totalPages,
+      currentPage: records.page,
+      pageSize: records.pageSize,
+      message: 'የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።',
+      data: records.data,
     });
   } catch (error) {
     res.status(500).json({
@@ -587,13 +570,18 @@ const updateLandRecord = async (req, res) => {
 const getLandBankRecords = async (req, res) => {
   try {
     const user = req.user;
-    const result = await getLandBankRecordsService(user);
-  const count = result.length
+    const { page = 1, pageSize = 10 } = req.query; 
+    
+    const result = await getLandBankRecordsService(user, parseInt(page), parseInt(pageSize));
+    
     return res.status(200).json({
       status: 'success',
-      count:count,
+      count: result.count,
+      totalPages: result.totalPages,
+      currentPage: result.currentPage,
+      pageSize: result.pageSize,
       message: 'የመሬት ባንክ መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።',
-      data: result,
+      data: result.data,
     });
   } catch (error) {
     return res.status(400).json({
