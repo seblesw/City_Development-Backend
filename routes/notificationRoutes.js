@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { createReminders, createOverdue, sendNotifications, createGlobalNoticeSchedule } = require('../controllers/notificationController');
-
+const { createReminders, createOverdue, sendNotifications, createGlobalNoticeSchedule, getNotices } = require('../controllers/notificationController');
+router.get('/notices', getNotices);
 router.post('/reminders', createReminders);
 router.post('/overdue', createOverdue);
 router.post('/send', sendNotifications);

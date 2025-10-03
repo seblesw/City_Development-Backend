@@ -75,9 +75,25 @@ const createGlobalNoticeSchedule = async (req, res) => {
   }
 };
 
+const getNotices = async (req, res) => {
+  try {
+    const notices = await GlobalNoticeSchedule.findAll();
+    res.status(200).json({
+      success: true,
+      notices,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `የአጠቃላይ ማሳወቂያ መርሃ ግብር መውሰድ አልተሳካም: ${error.message}`,
+    });
+  }
+};
+
 module.exports = {
   createReminders,
   createOverdue,
   sendNotifications,
   createGlobalNoticeSchedule,
+  getNotices,
 };
