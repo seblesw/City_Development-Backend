@@ -423,21 +423,32 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
       });
     }
 
+    // Extract pagination parameters from query
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || 10, 10), 1), 100);
+
     const records = await getLandRecordsByUserAdminUnitService(
-      user.administrative_unit_id
+      user.administrative_unit_id,
+      {
+        page,
+        pageSize,
+      }
     );
 
     // Try to get the admin unit name from the first record, fallback if not found
     const adminUnitName =
-      records.length > 0 &&
-      records[0].administrative_unit &&
-      records[0].administrative_unit.name
-        ? records[0].administrative_unit.name
+      records.data.length > 0 &&
+      records.data[0].administrative_unit &&
+      records.data[0].administrative_unit.name
+        ? records.data[0].administrative_unit.name
         : "አስተዳደር ክፍል";
 
     return res.status(200).json({
       status: "success",
-      count: records.length,
+      count: records.total,
+      totalPages: records.totalPages,
+      currentPage: records.page,
+      pageSize: records.pageSize,
       message: `የ ${adminUnitName} መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።`,
       data: records,
     });

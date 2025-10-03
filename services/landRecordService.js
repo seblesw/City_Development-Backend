@@ -1910,15 +1910,31 @@ const getLandRecordsByUserAdminUnitService = async (
   adminUnitId,
   options = {}
 ) => {
-  const { transaction } = options;
+  const { 
+    transaction, 
+    page = 1, 
+    pageSize = 10,
+  } = options;
+
+  const t = transaction || (await sequelize.transaction());
+  const offset = (page - 1) * pageSize;
 
   try {
+    // Build where conditions
+    const whereConditions = {
+      administrative_unit_id: adminUnitId,
+      deletedAt: { [Op.eq]: null },
+    };
+
+    // Get total count first
+    const totalCount = await LandRecord.count({
+      where: whereConditions,
+      transaction: t,
+    });
+
+    // Fetch paginated records
     const records = await LandRecord.findAll({
-      where: {
-        // record_status: RECORD_STATUSES.REJECTED,
-        administrative_unit_id: adminUnitId,
-        deletedAt: { [Op.eq]: null },
-      },
+      where: whereConditions,
       include: [
         {
           model: User,
@@ -1979,10 +1995,14 @@ const getLandRecordsByUserAdminUnitService = async (
         "updatedAt",
       ],
       order: [["createdAt", "DESC"]],
+      offset,
+      limit: pageSize,
       transaction,
+      distinct: true, // Important for correct counting with includes
     });
 
-    return records.map((record) => ({
+    // Process records
+    const processedRecords = records.map((record) => ({
       id: record.id,
       parcel_number: record.parcel_number,
       block_number: record.block_number,
@@ -2011,7 +2031,23 @@ const getLandRecordsByUserAdminUnitService = async (
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     }));
+
+    if (!transaction) await t.commit();
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    return {
+      total: totalCount,
+      page,
+      pageSize,
+      totalPages: totalPages,
+      data: processedRecords,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+    };
   } catch (error) {
+    if (!transaction && t) await t.rollback();
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
