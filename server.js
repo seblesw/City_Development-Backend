@@ -62,7 +62,7 @@ const startServer = async () => {
   try {
     await db.authenticate();
     console.log('Database connected successfully at', new Date().toISOString());
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
