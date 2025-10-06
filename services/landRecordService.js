@@ -21,7 +21,7 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const { fs } = require("fs");
-const { buildLandRecordFilters, buildLandRecordSorting } = require("../utils/landRecordFilterBuilder");
+const { buildLandRecordFilters, buildLandRecordSorting, buildIncludeConditions } = require("../utils/landRecordFilterBuilder");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -1185,7 +1185,6 @@ const getAllLandRecordService = async (options = {}) => {
     page = 1,
     pageSize = 10,
     filters = {},
-    // New: Allow query parameters for dynamic filtering
     queryParams = {}
   } = options;
 
@@ -1193,93 +1192,36 @@ const getAllLandRecordService = async (options = {}) => {
   const offset = (page - 1) * pageSize;
 
   try {
+
     // 1. Build dynamic filters from query parameters
     const dynamicFilters = buildLandRecordFilters(queryParams);
     
     // 2. Build sorting from query parameters
     const dynamicSorting = buildLandRecordSorting(queryParams);
 
-    // 3. Combine static filters with dynamic filters
+    // 3. Build include conditions with filtering
+    const includeConditions = buildIncludeConditions(queryParams, includeDeleted);
+
+    // 4. Combine static filters with dynamic filters
     const whereClause = {
       ...filters,
       ...dynamicFilters,
       ...(!includeDeleted && { deletedAt: null }),
     };
 
-    // 4. Fetch land records with optimized includes
+    // 5. First, let's count total records without includes to see the base count
+    const totalCount = await LandRecord.count({
+      where: whereClause,
+      distinct: true,
+      paranoid: !includeDeleted,
+      transaction: t,
+    });
+
+
+    // 6. Fetch land records with optimized includes
     const { count, rows } = await LandRecord.findAndCountAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "owners",
-          through: {
-            attributes: [],
-            where: includeDeleted ? {} : { deletedAt: null },
-          },
-          attributes: [
-            "id",
-            "first_name",
-            "middle_name",
-            "last_name",
-            "national_id",
-            "email",
-            "phone_number",
-            "address",
-          ],
-          paranoid: !includeDeleted,
-        },
-        {
-          model: AdministrativeUnit,
-          as: "administrativeUnit",
-          attributes: ["id", "name", "max_land_levels"],
-        },
-        {
-          model: User,
-          as: "creator",
-          attributes: ["id", "first_name", "middle_name", "last_name"],
-        },
-        {
-          model: User,
-          as: "approver",
-          attributes: ["id", "first_name", "middle_name", "last_name"],
-        },
-        // Include documents directly
-        {
-          model: Document,
-          as: "documents",
-          attributes: [
-            "id",
-            "plot_number",
-            "document_type",
-            "reference_number",
-            "files",
-            "issue_date",
-            "isActive",
-          ],
-          where: includeDeleted ? {} : { deletedAt: null },
-          required: false,
-          paranoid: !includeDeleted,
-          limit: 5, // Only get recent documents
-        },
-        // Include payments directly
-        {
-          model: LandPayment,
-          as: "payments",
-          attributes: [
-            "id",
-            "payment_type",
-            "total_amount",
-            "paid_amount",
-            "currency",
-            "payment_status",
-          ],
-          where: includeDeleted ? {} : { deletedAt: null },
-          required: false,
-          paranoid: !includeDeleted,
-          limit: 5,
-        },
-      ],
+      include: includeConditions,
       attributes: [
         "id",
         "parcel_number",
@@ -1311,9 +1253,11 @@ const getAllLandRecordService = async (options = {}) => {
       limit: pageSize,
       paranoid: !includeDeleted,
       transaction: t,
+      subQuery: false,
     });
 
-    // 5. Process the results
+
+    // 7. Process the results
     const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
 
@@ -1336,32 +1280,119 @@ const getAllLandRecordService = async (options = {}) => {
       return recordData;
     });
 
-    // 6. Commit transaction if we created it
+    // 8. Commit transaction if we created it
     if (!transaction) await t.commit();
 
-    return {
-      total: count,
+    const result = {
+      total: count, // Use count from findAndCountAll which considers includes
       page,
       pageSize,
       totalPages: Math.ceil(count / pageSize),
       data: processedRecords,
-      // Optional: Return applied filters for debugging
-      appliedFilters: Object.keys(dynamicFilters).length > 0 ? dynamicFilters : undefined
+      debug: {
+        baseTotalCount: totalCount,
+        finalCount: count,
+        appliedFilters: Object.keys(dynamicFilters).length > 0 ? dynamicFilters : undefined
+      }
     };
+
+    return result;
   } catch (error) {
-    // 7. Rollback transaction if we created it
+    // 9. Rollback transaction if we created it
     if (!transaction && t) await t.rollback();
 
-    console.error("Error fetching land records:", {
-      error: error.message,
-      stack: error.stack,
-      filters,
-      queryParams,
-      page,
-      pageSize,
+    throw new Error(`Failed to retrieve land records: ${error.message}`);
+  }
+};
+
+// Get filter options for frontend
+const getFilterOptionsService = async () => {
+  try {
+    const options = await LandRecord.findAll({
+      attributes: [
+        'land_use',
+        'ownership_type',
+        'lease_ownership_type',
+        'record_status',
+        'priority',
+        'notification_status',
+        'zoning_type',
+        'infrastructure_status',
+        'land_history',
+        'ownership_category'
+      ],
+      group: [
+        'land_use',
+        'ownership_type',
+        'lease_ownership_type',
+        'record_status',
+        'priority',
+        'notification_status',
+        'zoning_type',
+        'infrastructure_status',
+        'land_history',
+        'ownership_category'
+      ],
+      raw: true
     });
 
-    throw new Error(`Failed to retrieve land records: ${error.message}`);
+    // Get unique administrative units
+    const adminUnits = await AdministrativeUnit.findAll({
+      attributes: ['id', 'name'],
+      raw: true
+    });
+
+    const filterOptions = {
+      land_use: [...new Set(options.map(opt => opt.land_use).filter(Boolean))],
+      ownership_type: [...new Set(options.map(opt => opt.ownership_type).filter(Boolean))],
+      lease_ownership_type: [...new Set(options.map(opt => opt.lease_ownership_type).filter(Boolean))],
+      record_status: [...new Set(options.map(opt => opt.record_status).filter(Boolean))],
+      priority: [...new Set(options.map(opt => opt.priority).filter(Boolean))],
+      notification_status: [...new Set(options.map(opt => opt.notification_status).filter(Boolean))],
+      zoning_type: [...new Set(options.map(opt => opt.zoning_type).filter(Boolean))],
+      infrastructure_status: [...new Set(options.map(opt => opt.infrastructure_status).filter(Boolean))],
+      land_history: [...new Set(options.map(opt => opt.land_history).filter(Boolean))],
+      ownership_category: [...new Set(options.map(opt => opt.ownership_category).filter(Boolean))],
+      administrative_units: adminUnits.map(unit => ({ id: unit.id, name: unit.name }))
+    };
+
+    return {
+      success: true,
+      data: filterOptions
+    };
+  } catch (error) {
+    throw new Error(`Failed to get filter options: ${error.message}`);
+  }
+};
+
+// Get statistics for dashboard
+const getLandRecordsStatsService = async () => {
+  try {
+    const stats = await LandRecord.findAll({
+      attributes: [
+        'record_status',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      group: ['record_status'],
+      raw: true
+    });
+
+    const total = await LandRecord.count();
+    const withDebt = await LandRecord.count({ where: { has_debt: true } });
+    const draftCount = await LandRecord.count({ where: { is_draft: true } });
+
+    return {
+      success: true,
+      data: {
+        by_status: stats,
+        total,
+        with_debt: withDebt,
+        draft_count: draftCount,
+        approved_count: stats.find(stat => stat.record_status === 'ጸድቋል')?.count || 0
+      }
+    };
+  } catch (error) {
+    throw new Error(`Failed to get statistics: ${error.message}`);
   }
 };
 //Retrieving a single land record by ID with full details
@@ -1480,12 +1511,6 @@ const getLandRecordByIdService = async (id, options = {}) => {
   } catch (error) {
     // 5. Rollback transaction if we created it
     if (!transaction && t) await t.rollback();
-
-    console.error("Error fetching land record:", {
-      id,
-      error: error.message,
-      stack: error.stack,
-    });
 
     throw new Error(
       includeDeleted
@@ -3234,4 +3259,8 @@ module.exports = {
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
   getLandRecordStats,
+  getLandRecordsStatsService,
+  getFilterOptionsService,
+  
+
 };

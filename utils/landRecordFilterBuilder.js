@@ -1,5 +1,5 @@
-// utils/landRecordFilterBuilder.js
 const { Op } = require('sequelize');
+const { LandPayment, Document, User, AdministrativeUnit } = require('../models');
 
 /**
  * Build robust filter conditions for LandRecord queries
@@ -62,6 +62,13 @@ const buildLandRecordFilters = (queryParams) => {
     notes,
     address,
     plan,
+
+    // Text search filters from frontend
+    plotNumber,
+    ownerName,
+    nationalId,
+    parcelNumber,
+    blockNumber,
     
   } = queryParams;
 
@@ -69,7 +76,9 @@ const buildLandRecordFilters = (queryParams) => {
 
   // === EXACT MATCH FILTERS ===
   if (parcel_number) whereConditions.parcel_number = parcel_number;
+  if (parcelNumber) whereConditions.parcel_number = { [Op.iLike]: `%${parcelNumber}%` };
   if (block_number) whereConditions.block_number = block_number;
+  if (blockNumber) whereConditions.block_number = { [Op.iLike]: `%${blockNumber}%` };
   if (land_bank_code) whereConditions.land_bank_code = land_bank_code;
   if (institution_name) whereConditions.institution_name = institution_name;
 
@@ -156,6 +165,12 @@ const buildLandRecordFilters = (queryParams) => {
     ];
   }
 
+  // === OWNER RELATED FILTERS ===
+  // These will be handled in the include section
+  if (ownerName || nationalId || plotNumber) {
+    whereConditions[Op.and] = whereConditions[Op.and] || [];
+  }
+
   return whereConditions;
 };
 
@@ -182,7 +197,129 @@ const buildLandRecordSorting = (queryParams) => {
   return [[sortField, sortDirection]];
 };
 
+/**
+ * Build include conditions for related models with filtering
+ */
+/**
+ * Build include conditions for related models with filtering
+ */
+const buildIncludeConditions = (queryParams, includeDeleted = false) => {
+  const { ownerName, nationalId, plotNumber } = queryParams;
+  
+  const includeConditions = [
+    {
+      model: require('../models').User,
+      as: "owners",
+      through: {
+        attributes: [], // Only get the join table attributes you need
+        // REMOVE the where condition from through - this was causing the filter
+        // where: includeDeleted ? {} : { deletedAt: null },
+      },
+      attributes: [
+        "id",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "national_id",
+        "email",
+        "phone_number",
+        "address",
+      ],
+      where: {}, // Start with empty where
+      required: false, // ⭐️ CRITICAL: This makes it a LEFT JOIN instead of INNER JOIN
+      paranoid: !includeDeleted,
+    },
+    {
+      model: require('../models').AdministrativeUnit,
+      as: "administrativeUnit",
+      attributes: ["id", "name", "max_land_levels"],
+      required: false, // Make sure this is also false
+    },
+    {
+      model: require('../models').User,
+      as: "creator",
+      attributes: ["id", "first_name", "middle_name", "last_name"],
+      required: false,
+    },
+    {
+      model: require('../models').User,
+      as: "approver",
+      attributes: ["id", "first_name", "middle_name", "last_name"],
+      required: false,
+    },
+    {
+      model: require('../models').Document,
+      as: "documents",
+      attributes: [
+        "id",
+        "plot_number",
+        "document_type",
+        "reference_number",
+        "files",
+        "issue_date",
+        "isActive",
+      ],
+      where: includeDeleted ? {} : { deletedAt: null },
+      required: false, // Important: LEFT JOIN for documents too
+      paranoid: !includeDeleted,
+      limit: 5,
+    },
+    {
+      model: require('../models').LandPayment,
+      as: "payments",
+      attributes: [
+        "id",
+        "payment_type",
+        "total_amount",
+        "paid_amount",
+        "currency",
+        "payment_status",
+      ],
+      where: includeDeleted ? {} : { deletedAt: null },
+      required: false, // Important: LEFT JOIN for payments too
+      paranoid: !includeDeleted,
+      limit: 5,
+    },
+  ];
+
+  // Apply owner filters ONLY if they are provided
+  if (ownerName || nationalId) {
+    const ownerInclude = includeConditions.find(inc => inc.as === "owners");
+    if (ownerInclude) {
+      ownerInclude.where = ownerInclude.where || {};
+      ownerInclude.where[Op.or] = [];
+      
+      if (ownerName) {
+        ownerInclude.where[Op.or].push(
+          { first_name: { [Op.iLike]: `%${ownerName}%` } },
+          { middle_name: { [Op.iLike]: `%${ownerName}%` } },
+          { last_name: { [Op.iLike]: `%${ownerName}%` } }
+        );
+      }
+      if (nationalId) {
+        ownerInclude.where[Op.or].push({ national_id: { [Op.iLike]: `%${nationalId}%` } });
+      }
+      
+      // When filtering by owner, we want to require owners
+      ownerInclude.required = true;
+    }
+  }
+
+  // Apply document filters ONLY if they are provided
+  if (plotNumber) {
+    const documentInclude = includeConditions.find(inc => inc.as === "documents");
+    if (documentInclude) {
+      documentInclude.where = documentInclude.where || {};
+      documentInclude.where.plot_number = { [Op.iLike]: `%${plotNumber}%` };
+      documentInclude.required = true;
+    }
+  }
+
+  return includeConditions;
+};
+
 module.exports = {
   buildLandRecordFilters,
-  buildLandRecordSorting
+  buildLandRecordSorting,
+  buildIncludeConditions
 };

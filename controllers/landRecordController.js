@@ -24,6 +24,8 @@ const {
   getLandRecordStats,
   importLandRecordsFromXLSXService,
   getLandBankRecordsService,
+  getLandRecordsStatsService,
+  getFilterOptionsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -296,35 +298,90 @@ const submitDraftLandRecord = async (req, res) => {
 // controllers/landRecordController.js
 
 // Retrieving all land records with filtering
+// Get all land records with filtering
+// Get all land records with filtering
 const getAllLandRecords = async (req, res) => {
   try {
     const {
       page = 1,
       pageSize = 10,
       includeDeleted = false,
-      // All filter parameters will be passed automatically via req.query
+      // All filter parameters
       ...queryParams
     } = req.query;
 
-    const landRecords = await getAllLandRecordService({
+    console.log('🎯 CONTROLLER - Received query parameters:', {
+      page,
+      pageSize,
+      includeDeleted,
+      queryParams
+    });
+
+    const result = await getAllLandRecordService({
       page: parseInt(page),
       pageSize: parseInt(pageSize),
       includeDeleted: includeDeleted === 'true',
-      queryParams: queryParams // Pass all query parameters for filtering
+      queryParams: queryParams
+    });
+
+    console.log('🎯 CONTROLLER - Service returned:', {
+      totalRecords: result.total,
+      returnedRecords: result.data.length,
+      totalPages: result.totalPages
     });
 
     return res.status(200).json({
       status: "success",
       message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
-      data: landRecords,
+      data: result,
     });
   } catch (error) {
+    console.error('❌ CONTROLLER error:', error);
     return res.status(400).json({
       status: "error",
       message: error.message,
     });
   }
 };
+
+// Get filter options
+const getFilterOptions = async (req, res) => {
+  try {
+    const result = await getFilterOptionsService();
+    
+    return res.status(200).json({
+      status: "success",
+      message: "Filter options retrieved successfully",
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error getting filter options:', error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Get statistics
+const getLandRecordsStats = async (req, res) => {
+  try {
+    const result = await getLandRecordsStatsService();
+    
+    return res.status(200).json({
+      status: "success",
+      message: "Statistics retrieved successfully",
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error getting statistics:', error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 // Retrieving a single land record by ID
 const getLandRecordById = async (req, res) => {
   try {
@@ -871,4 +928,6 @@ module.exports = {
   submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
   getRecentActions,
+  getFilterOptions,
+  getLandRecordsStats,
 };
