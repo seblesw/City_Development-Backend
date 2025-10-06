@@ -23,17 +23,11 @@ const buildLandRecordFilters = (queryParams) => {
     
     // Status filters
     record_status,
-    priority,
-    notification_status,
-    is_draft,
     
     // Land bank specific
     infrastructure_status,
     land_bank_code,
     land_history,
-    
-    // Institution specific
-    institution_name,
     
     // Zoning
     zoning_type,
@@ -66,6 +60,7 @@ const buildLandRecordFilters = (queryParams) => {
     // Text search filters from frontend
     plotNumber,
     ownerName,
+    phoneNumber,
     nationalId,
     parcelNumber,
     blockNumber,
@@ -80,7 +75,6 @@ const buildLandRecordFilters = (queryParams) => {
   if (block_number) whereConditions.block_number = block_number;
   if (blockNumber) whereConditions.block_number = { [Op.iLike]: `%${blockNumber}%` };
   if (land_bank_code) whereConditions.land_bank_code = land_bank_code;
-  if (institution_name) whereConditions.institution_name = institution_name;
 
   // === ENUM FILTERS ===
   if (ownership_category) whereConditions.ownership_category = ownership_category;
@@ -88,8 +82,6 @@ const buildLandRecordFilters = (queryParams) => {
   if (ownership_type) whereConditions.ownership_type = ownership_type;
   if (lease_ownership_type) whereConditions.lease_ownership_type = lease_ownership_type;
   if (record_status) whereConditions.record_status = record_status;
-  if (priority) whereConditions.priority = priority;
-  if (notification_status) whereConditions.notification_status = notification_status;
   if (zoning_type) whereConditions.zoning_type = zoning_type;
   if (infrastructure_status) whereConditions.infrastructure_status = infrastructure_status;
   if (land_history) whereConditions.land_history = land_history;
@@ -97,9 +89,6 @@ const buildLandRecordFilters = (queryParams) => {
   // === BOOLEAN FILTERS ===
   if (has_debt !== undefined) {
     whereConditions.has_debt = has_debt === 'true' || has_debt === true;
-  }
-  if (is_draft !== undefined) {
-    whereConditions.is_draft = is_draft === 'true' || is_draft === true;
   }
 
   // === NUMERIC FILTERS ===
@@ -156,7 +145,6 @@ const buildLandRecordFilters = (queryParams) => {
       { address: { [Op.iLike]: `%${search}%` } },
       { notes: { [Op.iLike]: `%${search}%` } },
       { land_bank_code: { [Op.iLike]: `%${search}%` } },
-      { institution_name: { [Op.iLike]: `%${search}%` } },
       { remark: { [Op.iLike]: `%${search}%` } },
       { north_neighbor: { [Op.iLike]: `%${search}%` } },
       { east_neighbor: { [Op.iLike]: `%${search}%` } },
@@ -165,11 +153,8 @@ const buildLandRecordFilters = (queryParams) => {
     ];
   }
 
-  // === OWNER RELATED FILTERS ===
-  // These will be handled in the include section
-  if (ownerName || nationalId || plotNumber) {
-    whereConditions[Op.and] = whereConditions[Op.and] || [];
-  }
+  // REMOVED: Unnecessary [Op.and] condition for owner filters
+  // Owner filters are handled in include conditions
 
   return whereConditions;
 };
@@ -187,7 +172,7 @@ const buildLandRecordSorting = (queryParams) => {
 
   const validSortFields = [
     'parcel_number', 'area', 'land_level', 'createdAt', 'updatedAt', 
-    'record_status', 'priority', 'land_use', 'block_number',
+    'record_status', 'land_use', 'block_number',
     'ownership_type', 'zoning_type'
   ];
   
@@ -200,20 +185,15 @@ const buildLandRecordSorting = (queryParams) => {
 /**
  * Build include conditions for related models with filtering
  */
-/**
- * Build include conditions for related models with filtering
- */
 const buildIncludeConditions = (queryParams, includeDeleted = false) => {
-  const { ownerName, nationalId, plotNumber } = queryParams;
+  const { ownerName, nationalId, phoneNumber, plotNumber } = queryParams; // ✅ Added phoneNumber
   
   const includeConditions = [
     {
-      model: require('../models').User,
+      model: User,
       as: "owners",
       through: {
-        attributes: [], // Only get the join table attributes you need
-        // REMOVE the where condition from through - this was causing the filter
-        // where: includeDeleted ? {} : { deletedAt: null },
+        attributes: [], 
       },
       attributes: [
         "id",
@@ -222,33 +202,33 @@ const buildIncludeConditions = (queryParams, includeDeleted = false) => {
         "last_name",
         "national_id",
         "email",
-        "phone_number",
+        "phone_number", // ✅ You have phone_number here - good!
         "address",
       ],
-      where: {}, // Start with empty where
-      required: false, // ⭐️ CRITICAL: This makes it a LEFT JOIN instead of INNER JOIN
+      where: {}, 
+      required: false, 
       paranoid: !includeDeleted,
     },
     {
-      model: require('../models').AdministrativeUnit,
+      model: AdministrativeUnit,
       as: "administrativeUnit",
       attributes: ["id", "name", "max_land_levels"],
-      required: false, // Make sure this is also false
+      required: false, 
     },
     {
-      model: require('../models').User,
+      model: User,
       as: "creator",
       attributes: ["id", "first_name", "middle_name", "last_name"],
       required: false,
     },
     {
-      model: require('../models').User,
+      model: User,
       as: "approver",
       attributes: ["id", "first_name", "middle_name", "last_name"],
       required: false,
     },
     {
-      model: require('../models').Document,
+      model: Document,
       as: "documents",
       attributes: [
         "id",
@@ -260,12 +240,12 @@ const buildIncludeConditions = (queryParams, includeDeleted = false) => {
         "isActive",
       ],
       where: includeDeleted ? {} : { deletedAt: null },
-      required: false, // Important: LEFT JOIN for documents too
+      required: false, 
       paranoid: !includeDeleted,
       limit: 5,
     },
     {
-      model: require('../models').LandPayment,
+      model: LandPayment,
       as: "payments",
       attributes: [
         "id",
@@ -276,14 +256,14 @@ const buildIncludeConditions = (queryParams, includeDeleted = false) => {
         "payment_status",
       ],
       where: includeDeleted ? {} : { deletedAt: null },
-      required: false, // Important: LEFT JOIN for payments too
+      required: false,
       paranoid: !includeDeleted,
       limit: 5,
     },
   ];
 
-  // Apply owner filters ONLY if they are provided
-  if (ownerName || nationalId) {
+  // ✅ UPDATED: Apply owner filters including phoneNumber
+  if (ownerName || nationalId || phoneNumber) {
     const ownerInclude = includeConditions.find(inc => inc.as === "owners");
     if (ownerInclude) {
       ownerInclude.where = ownerInclude.where || {};
@@ -298,6 +278,9 @@ const buildIncludeConditions = (queryParams, includeDeleted = false) => {
       }
       if (nationalId) {
         ownerInclude.where[Op.or].push({ national_id: { [Op.iLike]: `%${nationalId}%` } });
+      }
+      if (phoneNumber) {
+        ownerInclude.where[Op.or].push({ phone_number: { [Op.iLike]: `%${phoneNumber}%` } });
       }
       
       // When filtering by owner, we want to require owners

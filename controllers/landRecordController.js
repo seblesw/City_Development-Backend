@@ -294,10 +294,7 @@ const submitDraftLandRecord = async (req, res) => {
     });
   }
 };
-// Retrieving all land records
-// controllers/landRecordController.js
 
-// Retrieving all land records with filtering
 // Get all land records with filtering
 // Get all land records with filtering
 const getAllLandRecords = async (req, res) => {
@@ -306,16 +303,8 @@ const getAllLandRecords = async (req, res) => {
       page = 1,
       pageSize = 10,
       includeDeleted = false,
-      // All filter parameters
       ...queryParams
     } = req.query;
-
-    console.log('🎯 CONTROLLER - Received query parameters:', {
-      page,
-      pageSize,
-      includeDeleted,
-      queryParams
-    });
 
     const result = await getAllLandRecordService({
       page: parseInt(page),
@@ -324,19 +313,12 @@ const getAllLandRecords = async (req, res) => {
       queryParams: queryParams
     });
 
-    console.log('🎯 CONTROLLER - Service returned:', {
-      totalRecords: result.total,
-      returnedRecords: result.data.length,
-      totalPages: result.totalPages
-    });
-
     return res.status(200).json({
       status: "success",
       message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
       data: result,
     });
   } catch (error) {
-    console.error('❌ CONTROLLER error:', error);
     return res.status(400).json({
       status: "error",
       message: error.message,
@@ -355,7 +337,6 @@ const getFilterOptions = async (req, res) => {
       data: result.data,
     });
   } catch (error) {
-    console.error('Error getting filter options:', error);
     return res.status(500).json({
       status: "error",
       message: error.message,
@@ -374,7 +355,6 @@ const getLandRecordsStats = async (req, res) => {
       data: result.data,
     });
   } catch (error) {
-    console.error('Error getting statistics:', error);
     return res.status(500).json({
       status: "error",
       message: error.message,
@@ -636,7 +616,6 @@ const updateLandRecord = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    console.error("Update error:", error);
 
     const statusCode = getStatusCodeForError(error);
     return res.status(statusCode).json({
@@ -744,7 +723,6 @@ const getRecentActions = async (req, res) => {
       data: recentActions
     });
   } catch (error) {
-    console.error("Error fetching recent actions:", error);
     res.status(500).json({
       success: false,
       message: `Error fetching recent actions: ${error.message}`
