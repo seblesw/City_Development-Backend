@@ -92,7 +92,7 @@ router.get(
 router.get(
   "/",
   authMiddleware.protect,
-  getLimiter,
+  // getLimiter,
   landRecordController.getAllLandRecords
 );
 // This route is used to get land records by the admin unit of the logged-in user

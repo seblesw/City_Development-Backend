@@ -1224,6 +1224,8 @@ const getAllLandRecordService = async (options = {}) => {
             "last_name",
             "national_id",
             "email",
+            "phone_number",
+            "address",
           ],
           paranoid: !includeDeleted,
         },
@@ -1275,7 +1277,7 @@ const getAllLandRecordService = async (options = {}) => {
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
           paranoid: !includeDeleted,
-          limit: 5, // Only get recent payments
+          limit: 5,
         },
       ],
       attributes: [
@@ -1303,8 +1305,8 @@ const getAllLandRecordService = async (options = {}) => {
         "updatedAt",
         "deletedAt",
       ],
-      order: dynamicSorting, // Use dynamic sorting
-      distinct: true, // Important for correct counting with includes
+      order: dynamicSorting, 
+      distinct: true, 
       offset,
       limit: pageSize,
       paranoid: !includeDeleted,
