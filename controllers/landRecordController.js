@@ -293,9 +293,26 @@ const submitDraftLandRecord = async (req, res) => {
   }
 };
 // Retrieving all land records
+// controllers/landRecordController.js
+
+// Retrieving all land records with filtering
 const getAllLandRecords = async (req, res) => {
   try {
-    const landRecords = await getAllLandRecordService(req.query);
+    const {
+      page = 1,
+      pageSize = 10,
+      includeDeleted = false,
+      // All filter parameters will be passed automatically via req.query
+      ...queryParams
+    } = req.query;
+
+    const landRecords = await getAllLandRecordService({
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+      includeDeleted: includeDeleted === 'true',
+      queryParams: queryParams // Pass all query parameters for filtering
+    });
+
     return res.status(200).json({
       status: "success",
       message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",

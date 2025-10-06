@@ -21,6 +21,7 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const { fs } = require("fs");
+const { buildLandRecordFilters, buildLandRecordSorting } = require("../utils/landRecordFilterBuilder");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
@@ -1176,6 +1177,7 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
   }
 };
 //Retrieving all
+// Retrieving all land records with robust filtering
 const getAllLandRecordService = async (options = {}) => {
   const {
     transaction,
@@ -1183,19 +1185,28 @@ const getAllLandRecordService = async (options = {}) => {
     page = 1,
     pageSize = 10,
     filters = {},
+    // New: Allow query parameters for dynamic filtering
+    queryParams = {}
   } = options;
 
   const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
-    // 1. Build the base query
+    // 1. Build dynamic filters from query parameters
+    const dynamicFilters = buildLandRecordFilters(queryParams);
+    
+    // 2. Build sorting from query parameters
+    const dynamicSorting = buildLandRecordSorting(queryParams);
+
+    // 3. Combine static filters with dynamic filters
     const whereClause = {
       ...filters,
+      ...dynamicFilters,
       ...(!includeDeleted && { deletedAt: null }),
     };
 
-    // 2. Fetch land records with optimized includes
+    // 4. Fetch land records with optimized includes
     const { count, rows } = await LandRecord.findAndCountAll({
       where: whereClause,
       include: [
@@ -1292,7 +1303,7 @@ const getAllLandRecordService = async (options = {}) => {
         "updatedAt",
         "deletedAt",
       ],
-      order: [["createdAt", "DESC"]],
+      order: dynamicSorting, // Use dynamic sorting
       distinct: true, // Important for correct counting with includes
       offset,
       limit: pageSize,
@@ -1300,7 +1311,7 @@ const getAllLandRecordService = async (options = {}) => {
       transaction: t,
     });
 
-    // 3. Process the results
+    // 5. Process the results
     const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
 
@@ -1323,7 +1334,7 @@ const getAllLandRecordService = async (options = {}) => {
       return recordData;
     });
 
-    // 4. Commit transaction if we created it
+    // 6. Commit transaction if we created it
     if (!transaction) await t.commit();
 
     return {
@@ -1332,15 +1343,18 @@ const getAllLandRecordService = async (options = {}) => {
       pageSize,
       totalPages: Math.ceil(count / pageSize),
       data: processedRecords,
+      // Optional: Return applied filters for debugging
+      appliedFilters: Object.keys(dynamicFilters).length > 0 ? dynamicFilters : undefined
     };
   } catch (error) {
-    // 5. Rollback transaction if we created it
+    // 7. Rollback transaction if we created it
     if (!transaction && t) await t.rollback();
 
     console.error("Error fetching land records:", {
       error: error.message,
       stack: error.stack,
       filters,
+      queryParams,
       page,
       pageSize,
     });
