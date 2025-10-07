@@ -402,7 +402,7 @@ const getLandRecordByUserId = async (req, res) => {
   }
 };
 //  Retrieving all land records created by the authenticated user to differentiate between user on same role
-// This function retrieves all land records created by the user making the request
+// Get land records by creator with pagination and filtering
 const getLandRecordsByCreator = async (req, res) => {
   try {
     const userId = parseInt(req.user.id);
@@ -412,13 +412,19 @@ const getLandRecordsByCreator = async (req, res) => {
         .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
 
-    // Extract pagination parameters from query
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || 10, 10), 1), 100);
+    // Extract pagination and filtering parameters
+    const {
+      page = 1,
+      pageSize = 10,
+      includeDeleted = false,
+      ...queryParams
+    } = req.query;
 
     const records = await getLandRecordsByCreatorService(userId, {
-      page,
-      pageSize,
+      page: parseInt(page),
+      pageSize: Math.min(parseInt(pageSize), 100),
+      includeDeleted: includeDeleted === 'true',
+      queryParams: queryParams
     });
 
     res.status(200).json({ 

@@ -120,7 +120,7 @@ router.get(
 router.get(
   "/my-records",
   authMiddleware.protect,
-  getLimiter,
+  // getLimiter,
   landRecordController.getLandRecordsByCreator
 );
 
