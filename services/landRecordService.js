@@ -1682,85 +1682,118 @@ const getLandRecordByUserIdService = async (userId) => {
     throw new Error(`Failed to retrieve land records: ${error.message}`);
   }
 };
+// Retrieving land records by creator with robust filtering and sorting
 const getLandRecordsByCreatorService = async (userId, options = {}) => {
   if (!userId) throw new Error("User ID is required");
 
-  const { transaction, page = 1, pageSize = 10 } = options;
+  const {
+    transaction,
+    includeDeleted = false,
+    page = 1,
+    pageSize = 10,
+    filters = {},
+    queryParams = {},
+  } = options;
 
   const t = transaction || (await sequelize.transaction());
   const offset = (page - 1) * pageSize;
 
   try {
-    // Build where conditions
-    const whereConditions = {
+    // 1. Build base filters for creator
+    const creatorFilters = {
       created_by: userId,
-      deletedAt: null,
+      ...filters
     };
 
-    // Build include conditions for related models
-    const includeConditions = [
-      {
-        model: User,
-        as: "owners",
-        through: { attributes: [] },
-        attributes: [
-          "id",
-          "first_name",
-          "middle_name",
-          "last_name",
-          "national_id",
-        ],
-        required: false,
-      },
-      {
-        model: AdministrativeUnit,
-        as: "administrativeUnit",
-        attributes: ["id", "name"],
-      },
-      {
-        model: Document,
-        as: "documents",
-        attributes: [
-          "id",
-          "plot_number",
-          "document_type",
-          "reference_number",
-          "createdAt",
-        ],
-        where: { deletedAt: null },
-        required: false,
-        limit: 3,
-      },
-      {
-        model: LandPayment,
-        as: "payments",
-        attributes: [
-          "id",
-          "payment_type",
-          "paid_amount",
-          "payment_status",
-          "createdAt",
-        ],
-        where: { deletedAt: null },
-        required: false,
-        limit: 3,
-      },
-    ];
+    // 2. Build dynamic filters from query parameters using your existing utility
+    const dynamicFilters = buildLandRecordFilters(queryParams);
 
-    // Fetch records with pagination
-    const { count, rows: records } = await LandRecord.findAndCountAll({
-      where: whereConditions,
-      include: includeConditions,
-      order: [["createdAt", "DESC"]],
-      offset,
-      limit: pageSize,
-      distinct: true, // Important for correct counting with includes
+    // 3. Build sorting from query parameters using your existing utility
+    const dynamicSorting = buildLandRecordSorting(queryParams);
+
+    // 4. Build include conditions with filtering using your existing utility
+    const includeConditions = buildIncludeConditions(
+      queryParams,
+      includeDeleted
+    );
+
+    // 5. Combine all filters
+    const whereClause = {
+      ...creatorFilters,
+      ...dynamicFilters,
+      ...(!includeDeleted && { deletedAt: null }),
+    };
+
+    // 6. First, let's count total records without includes to see the base count
+    const totalCount = await LandRecord.count({
+      where: whereClause,
+      distinct: true,
+      paranoid: !includeDeleted,
       transaction: t,
     });
 
-    // Process records
-    const processedRecords = records.map((record) => {
+    // 7. Fetch land records with optimized includes
+    const { count, rows } = await LandRecord.findAndCountAll({
+      where: whereClause,
+      include: includeConditions,
+      attributes: [
+        "id",
+        "parcel_number",
+        "block_number",
+        "block_special_name",
+        "area",
+        "land_level", 
+        "land_use",
+        "ownership_type",
+        "lease_ownership_type",
+        "ownership_category",
+        "zoning_type",
+        "record_status",
+        "infrastructure_status",
+        "land_bank_code",
+        "land_history",
+        "has_debt",
+        "north_neighbor",
+        "east_neighbor", 
+        "south_neighbor",
+        "west_neighbor",
+        "address",
+        "plan",
+        "notes",
+        "remark",
+        "rejection_reason",
+        "priority",
+        "notification_status",
+        "status_history", 
+        "action_log",
+        "administrative_unit_id",
+        "created_by",
+        "approved_by",
+        "createdAt",
+        "updatedAt",
+        "deletedAt"
+      ],
+      order: dynamicSorting,
+      distinct: true,
+      offset,
+      limit: pageSize,
+      paranoid: !includeDeleted,
+      transaction: t,
+      subQuery: false,
+    });
+
+    // 8. Process the results
+    const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
+
+      // Parse coordinates if they exist
+      if (recordData.coordinates) {
+        try {
+          recordData.coordinates = JSON.parse(recordData.coordinates);
+        } catch (e) {
+          recordData.coordinates = null;
+        }
+      }
 
       // Calculate total payments
       recordData.total_payments =
@@ -1769,23 +1802,53 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           0
         ) || 0;
 
+      // Add computed fields for easier frontend consumption
+      recordData.owner_names = recordData.owners?.map(owner => 
+        `${owner.first_name} ${owner.middle_name ? owner.middle_name + ' ' : ''}${owner.last_name}`
+      ).join(', ') || '';
+
+      recordData.document_count = recordData.documents?.length || 0;
+      recordData.payment_count = recordData.payments?.length || 0;
+
+      // Add administrative unit name for easy access
+      recordData.administrative_unit_name = recordData.administrativeUnit?.name || '';
+
+      // Add creator and approver names for easy access
+      recordData.creator_name = recordData.creator ? 
+        `${recordData.creator.first_name} ${recordData.creator.middle_name || ''} ${recordData.creator.last_name}`.trim() : '';
+      
+      recordData.approver_name = recordData.approver ? 
+        `${recordData.approver.first_name} ${recordData.approver.middle_name || ''} ${recordData.approver.last_name}`.trim() : '';
+
       return recordData;
     });
 
+    // 9. Commit transaction if we created it
     if (!transaction) await t.commit();
 
-    return {
+    const result = {
       total: count,
-      page,
-      pageSize,
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
       totalPages: Math.ceil(count / pageSize),
       data: processedRecords,
       hasNextPage: page < Math.ceil(count / pageSize),
       hasPrevPage: page > 1,
+      debug: {
+        baseTotalCount: totalCount,
+        finalCount: count,
+        appliedFilters: Object.keys(dynamicFilters).length > 0 ? dynamicFilters : undefined,
+        creatorId: userId,
+        includeDeleted: includeDeleted
+      },
     };
+
+    return result;
   } catch (error) {
+    // 10. Rollback transaction if we created it
     if (!transaction && t) await t.rollback();
-    throw new Error(`Failed to get records by creator: ${error.message}`);
+
+    throw new Error(`የመሬት መዝገቦችን በመጠቀም ላይ ስህተት ተፈጥሯል: ${error.message}`);
   }
 };
 const getMyLandRecordsService = async (userId, options = {}) => {
