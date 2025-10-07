@@ -24,6 +24,8 @@ const {
   getLandRecordStats,
   importLandRecordsFromXLSXService,
   getLandBankRecordsService,
+  getLandRecordsStatsService,
+  getFilterOptionsService,
 } = require("../services/landRecordService");
 
 // Creating a new land record
@@ -292,14 +294,29 @@ const submitDraftLandRecord = async (req, res) => {
     });
   }
 };
-// Retrieving all land records
+
+// Get all land records with filtering
+// Get all land records with filtering
 const getAllLandRecords = async (req, res) => {
   try {
-    const landRecords = await getAllLandRecordService(req.query);
+    const {
+      page = 1,
+      pageSize = 10,
+      includeDeleted = false,
+      ...queryParams
+    } = req.query;
+
+    const result = await getAllLandRecordService({
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+      includeDeleted: includeDeleted === 'true',
+      queryParams: queryParams
+    });
+
     return res.status(200).json({
       status: "success",
       message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
-      data: landRecords,
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({
@@ -308,6 +325,43 @@ const getAllLandRecords = async (req, res) => {
     });
   }
 };
+
+// Get filter options
+const getFilterOptions = async (req, res) => {
+  try {
+    const result = await getFilterOptionsService();
+    
+    return res.status(200).json({
+      status: "success",
+      message: "Filter options retrieved successfully",
+      data: result.data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Get statistics
+const getLandRecordsStats = async (req, res) => {
+  try {
+    const result = await getLandRecordsStatsService();
+    
+    return res.status(200).json({
+      status: "success",
+      message: "Statistics retrieved successfully",
+      data: result.data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 // Retrieving a single land record by ID
 const getLandRecordById = async (req, res) => {
   try {
@@ -562,7 +616,6 @@ const updateLandRecord = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    console.error("Update error:", error);
 
     const statusCode = getStatusCodeForError(error);
     return res.status(statusCode).json({
@@ -670,7 +723,6 @@ const getRecentActions = async (req, res) => {
       data: recentActions
     });
   } catch (error) {
-    console.error("Error fetching recent actions:", error);
     res.status(500).json({
       success: false,
       message: `Error fetching recent actions: ${error.message}`
@@ -854,4 +906,6 @@ module.exports = {
   submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
   getRecentActions,
+  getFilterOptions,
+  getLandRecordsStats,
 };
