@@ -63,35 +63,21 @@ const createLandRecord = async (req, res) => {
   }
 };
 // controllers/landRecordController.js
-// In your landRecordController.js
 const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
   
   try {
     if (!req.file) {
-      if (req.uploadProgress) {
-        req.uploadProgress.error('XLSX ፋይል ያስፈልጋል።');
-        setTimeout(() => res.end(), 100);
-        return;
-      }
       throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
 
-    // Notify processing start if using SSE
-    if (req.uploadProgress) {
-      req.uploadProgress.progress(5, 'Processing started...');
-    }
+    console.log('Starting XLSX import for user:', req.user.id); // Debug log
 
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
       { 
-        transaction: t,
-        progressCallback: req.uploadProgress 
-          ? (progress, message) => {
-              req.uploadProgress.progress(progress, message);
-            }
-          : null
+        transaction: t
       }
     );
 
@@ -102,13 +88,23 @@ const importLandRecordsFromXLSX = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    // Handle response based on whether SSE is active
-    if (req.uploadProgress) {
-      req.uploadProgress.complete(results);
-      setTimeout(() => res.end(), 100);
-    } else {
-      res.status(201).json(results);
-    }
+    console.log('Import completed successfully:', results); // Debug log
+
+    // Return consistent response format
+    res.status(201).json({
+      status: "success",
+      message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+      data: {
+        createdCount: results.createdCount,
+        skippedCount: results.skippedCount,
+        totalRows: results.totalRows,
+        totalGroups: results.totalGroups,
+        errors: results.errors || [],
+        errorDetails: results.errorDetails || [],
+        processingTime: results.processingTime,
+        performance: results.performance
+      }
+    });
 
   } catch (error) {
     await t.rollback();
@@ -118,17 +114,13 @@ const importLandRecordsFromXLSX = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    // Handle error based on whether SSE is active
-    if (req.uploadProgress) {
-      req.uploadProgress.error(error.message, error);
-      setTimeout(() => res.end(), 100);
-    } else {
-      res.status(400).json({
-        status: "error",
-        message: error.message,
-        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-      });
-    }
+    console.error('Import failed:', error); // Debug log
+
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+    });
   }
 };
 // Async file cleanup

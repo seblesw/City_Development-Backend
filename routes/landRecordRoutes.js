@@ -22,7 +22,7 @@ const postLimiter = rateLimit({
 router.post(
   "/import",
   authMiddleware.protect,
-  progressMiddlewareSSE,
+  // progressMiddlewareSSE,
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
