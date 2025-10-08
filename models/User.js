@@ -16,14 +16,14 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: { msg: "ስም ባዶ መሆን አይችልም።" },
-          len: { args: [2, 50], msg: "ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
+          len: { args: [2, 200], msg: "ስም ከ2 እስከ 200 ፊደል መሆን አለበት።" },
         },
       },
       last_name: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: { args: [0, 50], msg: "የ አባት  ስም ከ0 እስከ 50 ፊደል መሆን አለበት።" },
+          len: { args: [0, 200], msg: "የ አባት  ስም ከ0 እስከ 200 ፊደል መሆን አለበት።" },
         },
       },
       middle_name: {
@@ -31,7 +31,7 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           notEmpty: { msg: "የ አያት ስም ባዶ መሆን አይችልም።" },
-          len: { args: [2, 50], msg: "የ አያት ስም ከ2 እስከ 50 ፊደል መሆን አለበት።" },
+          len: { args: [2, 200], msg: "የ አያት ስም ከ2 እስከ 200 ፊደል መሆን አለበት።" },
         },
       },
       email: {
