@@ -106,7 +106,7 @@ router.get('/stats', landRecordController.getLandRecordsStats);
 router.get(
   "/admin-unit-records",
   authMiddleware.protect,
-  getLimiter,
+  // getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
 router.get(
