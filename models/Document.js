@@ -2,6 +2,8 @@ const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
 };
 
+
+
 module.exports = (db, DataTypes) => {
   const Document = db.define(
     "Document",
