@@ -213,6 +213,7 @@ const importLandRecordsFromXLSXService = async (
   options = {}
 ) => {
   const { transaction, progressCallback } = options;
+  const startTime = Date.now();
   const t = transaction || (await sequelize.transaction());
 
   try {
@@ -225,8 +226,13 @@ const importLandRecordsFromXLSXService = async (
       createdCount: 0,
       skippedCount: 0,
       totalRows: 0,
+      totalGroups: 0,
       errors: [],
       errorDetails: [],
+      processingTime: 0,
+      performance: {
+        rowsPerSecond: 0
+      }
     };
 
     // Send progress update
@@ -246,6 +252,7 @@ const importLandRecordsFromXLSXService = async (
     // 2. Group rows by parcel_number + plot_number
     const recordsGrouped = groupXLSXRows(xlsxData);
     const totalGroups = Object.keys(recordsGrouped).length;
+    results.totalGroups = totalGroups;
     let processedGroups = 0;
 
     // Send progress update
@@ -253,33 +260,31 @@ const importLandRecordsFromXLSXService = async (
       progressCallback(20, `Found ${totalGroups} unique parcels to process...`);
     }
 
-    // 3. Process each group
-    for (const [groupKey, rows] of Object.entries(recordsGrouped)) {
-      const rowTransaction = await sequelize.transaction();
+    // 3. Process each group with performance tracking
+    const groupKeys = Object.keys(recordsGrouped);
+    
+    for (let i = 0; i < groupKeys.length; i++) {
+      const groupKey = groupKeys[i];
+      const rows = recordsGrouped[groupKey];
       const primaryRow = rows[0];
 
       // Ensure rowNum is available for error handling
-      const rowNum =
-        xlsxData.findIndex(
-          (r) =>
-            r.parcel_number === primaryRow.parcel_number &&
-            r.plot_number === primaryRow.plot_number
-        ) + 1;
+      const rowNum = i + 1;
 
       try {
         // Send progress update
         if (progressCallback) {
-          const groupProgress =
-            20 + Math.floor((processedGroups / totalGroups) * 75);
+          const groupProgress = 20 + Math.floor((processedGroups / totalGroups) * 75);
           progressCallback(
             groupProgress,
-            `Processing parcel ${primaryRow.parcel_number}, plot ${primaryRow.plot_number}...`
+            `Processing parcel ${primaryRow.parcel_number}, plot ${primaryRow.plot_number}... (${processedGroups + 1}/${totalGroups})`
           );
         }
 
         const { owners, landRecordData, documents, payments } =
           await transformXLSXData(rows, adminUnitId);
 
+        // Use your existing createLandRecordService - DO NOT CHANGE THIS
         await createLandRecordService(
           {
             land_record: landRecordData,
@@ -290,15 +295,14 @@ const importLandRecordsFromXLSXService = async (
           [],
           user,
           {
-            transaction: rowTransaction,
+            transaction: t, // Use the main transaction for consistency
             isImport: true,
           }
         );
 
         results.createdCount++;
-        await rowTransaction.commit();
+        
       } catch (error) {
-        await rowTransaction.rollback();
         handleImportError(error, primaryRow, rowNum, results);
 
         // Send error progress update
@@ -313,16 +317,35 @@ const importLandRecordsFromXLSXService = async (
       processedGroups++;
     }
 
+    // Calculate processing time
+    const endTime = Date.now();
+    results.processingTime = (endTime - startTime) / 1000;
+    results.performance.rowsPerSecond = results.totalRows > 0 ? results.totalRows / results.processingTime : 0;
+
     // Send completion progress update
     if (progressCallback) {
       progressCallback(
         100,
-        `Import completed. ${results.createdCount} records created, ${results.skippedCount} skipped.`
+        `Import completed in ${results.processingTime.toFixed(2)}s. ${results.createdCount} records created, ${results.skippedCount} skipped.`
       );
     }
 
     if (!transaction) await t.commit();
-    return results;
+    
+    // Ensure all required fields are properly set
+    return {
+      status: "success",
+      message: `XLSX import completed successfully. ${results.createdCount} records created, ${results.skippedCount} skipped.`,
+      createdCount: results.createdCount,
+      skippedCount: results.skippedCount,
+      totalRows: results.totalRows,
+      totalGroups: results.totalGroups,
+      errors: results.errors,
+      errorDetails: results.errorDetails,
+      processingTime: results.processingTime,
+      performance: results.performance
+    };
+    
   } catch (error) {
     // Send error progress update
     if (progressCallback) {
@@ -347,7 +370,6 @@ async function parseAndValidateXLSX(filePath) {
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
       defval: null,
-      // dateNF: "DD/MM/YYYY",
     });
 
     // Validate data

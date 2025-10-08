@@ -63,12 +63,12 @@ const createLandRecord = async (req, res) => {
   }
 };
 // controllers/landRecordController.js
+// In your landRecordController.js
 const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
   
   try {
     if (!req.file) {
-      // Handle both SSE and regular responses
       if (req.uploadProgress) {
         req.uploadProgress.error('XLSX ፋይል ያስፈልጋል።');
         setTimeout(() => res.end(), 100);
@@ -79,7 +79,7 @@ const importLandRecordsFromXLSX = async (req, res) => {
 
     // Notify processing start if using SSE
     if (req.uploadProgress) {
-      req.uploadProgress.progress(100, 'Processing started...');
+      req.uploadProgress.progress(5, 'Processing started...');
     }
 
     const results = await importLandRecordsFromXLSXService(
@@ -87,15 +87,9 @@ const importLandRecordsFromXLSX = async (req, res) => {
       req.user,
       { 
         transaction: t,
-        // Add progress callback for processing phase if SSE is active
         progressCallback: req.uploadProgress 
           ? (progress, message) => {
-              // Processing phase
-              const overallProgress = 100 + Math.floor(progress);
-              req.uploadProgress.progress(
-                Math.min(200, overallProgress), 
-                message
-              );
+              req.uploadProgress.progress(progress, message);
             }
           : null
       }
@@ -110,26 +104,10 @@ const importLandRecordsFromXLSX = async (req, res) => {
 
     // Handle response based on whether SSE is active
     if (req.uploadProgress) {
-      req.uploadProgress.complete({
-        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
-        data: {
-          created: results.createdCount,
-          skipped: results.skippedCount,
-          errors: results.errors.slice(0, 10),
-        }
-      });
+      req.uploadProgress.complete(results);
       setTimeout(() => res.end(), 100);
     } else {
-      // Original response format for non-SSE requests
-      res.status(201).json({
-        status: "success",
-        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
-        data: {
-          created: results.createdCount,
-          skipped: results.skippedCount,
-          errors: results.errors.slice(0, 10),
-        },
-      });
+      res.status(201).json(results);
     }
 
   } catch (error) {
@@ -151,6 +129,14 @@ const importLandRecordsFromXLSX = async (req, res) => {
         ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
       });
     }
+  }
+};
+// Async file cleanup
+const cleanupFile = (filePath) => {
+  if (fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('File cleanup error:', err);
+    });
   }
 };
 const saveLandRecordAsDraft = async (req, res) => {

@@ -55,6 +55,11 @@ const LEASE_OWNERSHIP_TYPE = {
   DISPLACEMENT_ALLOCATION: "በትክና ልዩልዩ በምደባ የተያዙ ይዞታወች",
   INVESTMENT_ALLOCATION: "በኢንቨስትመንት በምደባ የተያዘ ይዞታ",
 };
+const LEASE_TRANSFER_REASONS = {
+  INHERITANCE: "በውርስ",
+  SALE: "በሽያጭ",
+  GIFT: "በስጦታ",
+};
 
 const INFRASTRUCTURE_STATUS = {
   FULLFILLED: "የተሟላለት",
@@ -232,6 +237,18 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      lease_transfer_reason: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(LEASE_TRANSFER_REASONS)],
+            msg: `የሊዝ ይዞታ ዝውውር ምክንያት ከተፈቀዱቷ (${Object.values(
+              LEASE_TRANSFER_REASONS
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          },
+        },
+      },
       //landbank specific attributes
       infrastructure_status: {
         type: DataTypes.STRING,
@@ -240,26 +257,24 @@ module.exports = (db, DataTypes) => {
       land_bank_code: {
         type: DataTypes.STRING,
         allowNull: true,
-        
       },
       land_history: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      other_land_history: {
         type: DataTypes.STRING,
         allowNull: true,
       },
       landbank_registrer_name: {
         type: DataTypes.STRING,
         allowNull: true,
-  
       },
-      other_land_history: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
+
       //instituetion specific attributes
       institution_name: {
         type: DataTypes.STRING,
         allowNull: true,
-  
       },
       remark: {
         type: DataTypes.STRING,
@@ -379,6 +394,11 @@ module.exports = (db, DataTypes) => {
         { fields: ["administrative_unit_id"] },
         { fields: ["land_use"] },
         { fields: ["ownership_type"] },
+        { fields: ["lease_ownership_type"] },
+        { fields: ["infrastructure_status"] },
+        { fields: ["land_history"] },
+        { fields: ["land_level"] },
+        { fields: ["lease_transfer_reason"] },
         { fields: ["block_number"] },
         { fields: ["record_status"] },
         { fields: ["priority"] },
@@ -399,5 +419,6 @@ module.exports = (db, DataTypes) => {
     OWNERSHIP_TYPES,
     INFRASTRUCTURE_STATUS,
     LAND_HISTORY,
+    LEASE_TRANSFER_REASONS,
   };
 };
