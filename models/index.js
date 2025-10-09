@@ -23,6 +23,7 @@ const {
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
   LEASE_OWNERSHIP_TYPE,
+  LEASE_TRANSFER_REASONS,
   ZONING_TYPES,
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
@@ -496,4 +497,5 @@ module.exports = {
   LEASE_STATUSES,
   LeaseUser,
   LEASE_USER_TYPES,
+  LEASE_TRANSFER_REASONS,
 };

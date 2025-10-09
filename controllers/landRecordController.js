@@ -68,36 +68,16 @@ const importLandRecordsFromXLSX = async (req, res) => {
   
   try {
     if (!req.file) {
-      // Handle both SSE and regular responses
-      if (req.uploadProgress) {
-        req.uploadProgress.error('XLSX ፋይል ያስፈልጋል።');
-        setTimeout(() => res.end(), 100);
-        return;
-      }
       throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
 
-    // Notify processing start if using SSE
-    if (req.uploadProgress) {
-      req.uploadProgress.progress(100, 'Processing started...');
-    }
+    console.log('Starting XLSX import for user:', req.user.id); // Debug log
 
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
       { 
-        transaction: t,
-        // Add progress callback for processing phase if SSE is active
-        progressCallback: req.uploadProgress 
-          ? (progress, message) => {
-              // Processing phase
-              const overallProgress = 100 + Math.floor(progress);
-              req.uploadProgress.progress(
-                Math.min(200, overallProgress), 
-                message
-              );
-            }
-          : null
+        transaction: t
       }
     );
 
@@ -108,29 +88,23 @@ const importLandRecordsFromXLSX = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    // Handle response based on whether SSE is active
-    if (req.uploadProgress) {
-      req.uploadProgress.complete({
-        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
-        data: {
-          created: results.createdCount,
-          skipped: results.skippedCount,
-          errors: results.errors.slice(0, 10),
-        }
-      });
-      setTimeout(() => res.end(), 100);
-    } else {
-      // Original response format for non-SSE requests
-      res.status(201).json({
-        status: "success",
-        message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
-        data: {
-          created: results.createdCount,
-          skipped: results.skippedCount,
-          errors: results.errors.slice(0, 10),
-        },
-      });
-    }
+    console.log('Import completed successfully:', results); // Debug log
+
+    // Return consistent response format
+    res.status(201).json({
+      status: "success",
+      message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
+      data: {
+        createdCount: results.createdCount,
+        skippedCount: results.skippedCount,
+        totalRows: results.totalRows,
+        totalGroups: results.totalGroups,
+        errors: results.errors || [],
+        errorDetails: results.errorDetails || [],
+        processingTime: results.processingTime,
+        performance: results.performance
+      }
+    });
 
   } catch (error) {
     await t.rollback();
@@ -140,17 +114,21 @@ const importLandRecordsFromXLSX = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    // Handle error based on whether SSE is active
-    if (req.uploadProgress) {
-      req.uploadProgress.error(error.message, error);
-      setTimeout(() => res.end(), 100);
-    } else {
-      res.status(400).json({
-        status: "error",
-        message: error.message,
-        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-      });
-    }
+    console.error('Import failed:', error); // Debug log
+
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+    });
+  }
+};
+// Async file cleanup
+const cleanupFile = (filePath) => {
+  if (fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('File cleanup error:', err);
+    });
   }
 };
 const saveLandRecordAsDraft = async (req, res) => {
@@ -470,7 +448,7 @@ const getMyLandRecords = async (req, res) => {
     });
   }
 };
-// Retrieving land records by user and administrative unit
+// Retrieving land records by user and administrative unit with filtering
 const getLandRecordsByUserAdminUnit = async (req, res) => {
   try {
     const user = req.user;
@@ -483,40 +461,32 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
       });
     }
 
-    // Extract pagination parameters from query
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || 10, 10), 1), 100);
+    const {
+      page = 1,
+      pageSize = 10,
+      includeDeleted = false,
+      ...queryParams
+    } = req.query;
 
-    const records = await getLandRecordsByUserAdminUnitService(
+    const result = await getLandRecordsByUserAdminUnitService(
       user.administrative_unit_id,
       {
-        page,
-        pageSize,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        includeDeleted: includeDeleted === 'true',
+        queryParams: queryParams
       }
     );
 
-    // Try to get the admin unit name from the first record, fallback if not found
-    const adminUnitName =
-      records.data.length > 0 &&
-      records.data[0].administrative_unit &&
-      records.data[0].administrative_unit.name
-        ? records.data[0].administrative_unit.name
-        : "አስተዳደር ክፍል";
-
     return res.status(200).json({
       status: "success",
-      count: records.total,
-      totalPages: records.totalPages,
-      currentPage: records.page,
-      pageSize: records.pageSize,
-      message: `የ ${adminUnitName} መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።`,
-      data: records,
+      message: "የመሬት መዝገቦች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({
       status: "error",
-      message: `የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`,
-      code: "error",
+      message: error.message,
     });
   }
 };

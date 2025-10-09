@@ -22,7 +22,7 @@ const postLimiter = rateLimit({
 router.post(
   "/import",
   authMiddleware.protect,
-  progressMiddlewareSSE,
+  // progressMiddlewareSSE,
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
@@ -106,7 +106,7 @@ router.get('/stats', landRecordController.getLandRecordsStats);
 router.get(
   "/admin-unit-records",
   authMiddleware.protect,
-  getLimiter,
+  // getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
 router.get(
