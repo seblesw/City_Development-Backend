@@ -19,7 +19,6 @@ const createDocumentController = async (req, res) => {
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "ቢያንስ አንዴ ፋይል መግለጥ አለበት።" });
     }
-    // console.log("body",body, "files",files,"user", user )
     const data = {
       map_number: body.map_number,
       document_type: body.document_type || null,
@@ -57,9 +56,6 @@ const importPDFDocuments = async (req, res) => {
   try {
     const uploaderId = req.user?.id;
     const files = req.files || [];
-    
-    console.log("Starting PDF import for", files.length, "files");
-    console.log("File names:", files.map(f => f.originalname));
 
     // Process filenames with multiple encoding fallbacks
     const processedFiles = files.map(file => {
@@ -113,8 +109,6 @@ const importPDFDocuments = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error("PDF Import Error:", error.message);
-    console.error("Stack trace:", error.stack);
     
     return res.status(500).json({
       status: "error",

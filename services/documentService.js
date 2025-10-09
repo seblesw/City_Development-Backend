@@ -307,10 +307,8 @@ const importPDFs = async ({ files, uploaderId }) => {
   const processedFiles = [];
   const skippedFiles = [];
 
-
   for (const [index, file] of files.entries()) {
     try {
-
       const plotNumberToMatch = file.filenameForMatching || file.originalname;
 
       if (!plotNumberToMatch || plotNumberToMatch.trim() === "") {
@@ -374,8 +372,6 @@ const importPDFs = async ({ files, uploaderId }) => {
         }
         continue;
       }
-
-
 
       const serverRelativePath = file.serverRelativePath || file.path;
 
@@ -486,8 +482,7 @@ const importPDFs = async ({ files, uploaderId }) => {
             uploader = await User.findByPk(uploaderId, {
               attributes: ["id", "first_name", "middle_name", "last_name"],
             });
-          } catch (e) {
-          }
+          } catch (e) {}
 
           actionLog.push({
             action: `DOCUMENT_UPLOAD_${document.document_type || "PDF"}`,
@@ -514,8 +509,7 @@ const importPDFs = async ({ files, uploaderId }) => {
             updated_at: new Date(),
           });
         }
-      } catch (logError) {
-      }
+      } catch (logError) {}
     } catch (error) {
       const errorMsg = `Error processing ${file.originalname}: ${error.message}`;
       unmatchedLogs.push(errorMsg);
@@ -526,7 +520,6 @@ const importPDFs = async ({ files, uploaderId }) => {
       });
     }
   }
-
 
   return {
     message: `${updatedDocuments.length} document(s) successfully updated with new PDF files. ${unmatchedLogs.length} files could not be matched.`,
