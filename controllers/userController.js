@@ -16,7 +16,7 @@ const addNewLandOwnerController = async (req, res) => {
     const { land_record_id } = req.params;
     const authUser = req.user;
 
-    // Extract all fields from body
+    
     const {
       first_name,
       middle_name,
@@ -29,14 +29,14 @@ const addNewLandOwnerController = async (req, res) => {
       ownership_percentage,
     } = req.body;
 
-    // Get uploaded file path (relative to your server root)
+    
     const profile_picture = req.file
       ? `/uploads/pictures/${req.file.filename}`
       : null;
 
-    // Basic validation
+    
     if (!land_record_id) {
-      // Clean up uploaded file if validation fails
+      
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: "Land record ID is required" });
     }
@@ -61,10 +61,10 @@ const addNewLandOwnerController = async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    // Clean up uploaded file if error occurs
+    
     if (req.file) fs.unlinkSync(req.file.path);
 
-    console.error("Error adding land owner:", error);
+    
     res.status(error.status || 500).json({
       error: error.message || "Failed to add land owner",
     });

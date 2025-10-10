@@ -28,12 +28,12 @@ const {
   getFilterOptionsService,
 } = require("../services/landRecordService");
 
-// Creating a new land record
+
 const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
 
-    // Parse string fields from form-data/request body
+    
     const owners = JSON.parse(req.body.owners || "[]");
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
@@ -62,7 +62,7 @@ const createLandRecord = async (req, res) => {
     });
   }
 };
-// controllers/landRecordController.js
+
 const importLandRecordsFromXLSX = async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -71,7 +71,7 @@ const importLandRecordsFromXLSX = async (req, res) => {
       throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
 
-    console.log('Starting XLSX import for user:', req.user.id); // Debug log
+    
 
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
@@ -83,14 +83,14 @@ const importLandRecordsFromXLSX = async (req, res) => {
 
     await t.commit();
     
-    // Clean up file
+    
     if (fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
 
-    console.log('Import completed successfully:', results); // Debug log
+    
 
-    // Return consistent response format
+    
     res.status(201).json({
       status: "success",
       message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
@@ -109,12 +109,12 @@ const importLandRecordsFromXLSX = async (req, res) => {
   } catch (error) {
     await t.rollback();
     
-    // Clean up file if it exists
+    
     if (req.file?.path && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
 
-    console.error('Import failed:', error); // Debug log
+    
 
     res.status(400).json({
       status: "error",
@@ -123,11 +123,11 @@ const importLandRecordsFromXLSX = async (req, res) => {
     });
   }
 };
-// Async file cleanup
+
 const cleanupFile = (filePath) => {
   if (fs.existsSync(filePath)) {
     fs.unlink(filePath, (err) => {
-      if (err) console.error('File cleanup error:', err);
+      
     });
   }
 };
@@ -135,8 +135,8 @@ const saveLandRecordAsDraft = async (req, res) => {
   try {
     const user = req.user;
 
-    // Parse string fields from form-data/request body
-    // All fields are optional for drafts
+    
+    
     const primary_user = req.body.primary_user
       ? JSON.parse(req.body.primary_user)
       : {};
@@ -193,7 +193,7 @@ const updateDraftLandRecord = async (req, res) => {
     const { id } = req.params;
     const user = req.user;
 
-    // Parse string fields from form-data/request body
+    
     const primary_user = req.body.primary_user
       ? JSON.parse(req.body.primary_user)
       : {};
@@ -236,7 +236,7 @@ const submitDraftLandRecord = async (req, res) => {
     const { id } = req.params;
     const user = req.user;
 
-    // Additional validation for required parameters
+    
     if (!id) {
       return res.status(400).json({
         status: "error",
@@ -252,7 +252,7 @@ const submitDraftLandRecord = async (req, res) => {
       data: result.data,
     });
   } catch (error) {
-    // Handle specific error types differently
+    
     if (error.message.includes("Validation failed")) {
       return res.status(422).json({
         status: "validation_error",
@@ -273,8 +273,8 @@ const submitDraftLandRecord = async (req, res) => {
   }
 };
 
-// Get all land records with filtering
-// Get all land records with filtering
+
+
 const getAllLandRecords = async (req, res) => {
   try {
     const {
@@ -304,7 +304,7 @@ const getAllLandRecords = async (req, res) => {
   }
 };
 
-// Get filter options
+
 const getFilterOptions = async (req, res) => {
   try {
     const result = await getFilterOptionsService();
@@ -322,7 +322,7 @@ const getFilterOptions = async (req, res) => {
   }
 };
 
-// Get statistics
+
 const getLandRecordsStats = async (req, res) => {
   try {
     const result = await getLandRecordsStatsService();
@@ -340,7 +340,7 @@ const getLandRecordsStats = async (req, res) => {
   }
 };
 
-// Retrieving a single land record by ID
+
 const getLandRecordById = async (req, res) => {
   try {
     const landRecord = await getLandRecordByIdService(req.params.id);
@@ -360,8 +360,8 @@ const getLandRecordById = async (req, res) => {
     });
   }
 };
-// Retrieving land records by user ID
-// This function retrieves all land records associated with a specific user ID
+
+
 const getLandRecordByUserId = async (req, res) => {
   try {
     const userId = parseInt(req.params.userId);
@@ -379,8 +379,8 @@ const getLandRecordByUserId = async (req, res) => {
     res.status(500).json({ status: "error", message: error.message });
   }
 };
-//  Retrieving all land records created by the authenticated user to differentiate between user on same role
-// Get land records by creator with pagination and filtering
+
+
 const getLandRecordsByCreator = async (req, res) => {
   try {
     const userId = parseInt(req.user.id);
@@ -390,7 +390,7 @@ const getLandRecordsByCreator = async (req, res) => {
         .json({ status: "error", message: "የተሳሳተ ባለቤት መለያ ቁጥር" });
     }
 
-    // Extract pagination and filtering parameters
+    
     const {
       page = 1,
       pageSize = 10,
@@ -448,7 +448,7 @@ const getMyLandRecords = async (req, res) => {
     });
   }
 };
-// Retrieving land records by user and administrative unit with filtering
+
 const getLandRecordsByUserAdminUnit = async (req, res) => {
   try {
     const user = req.user;
@@ -506,7 +506,7 @@ const getRejectedLandRecords = async (req, res) => {
       user.administrative_unit_id
     );
 
-    // Try to get the admin unit name from the first record, fallback if not found
+    
     const adminUnitName =
       records.length > 0 &&
       records[0].administrative_unit &&
@@ -528,14 +528,14 @@ const getRejectedLandRecords = async (req, res) => {
     });
   }
 };
-// Enhanced Controller
+
 const updateLandRecord = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const user = req.user;
     const recordId = req.params.id;
 
-    // Validate inputs
+    
     if (!recordId) {
       throw new Error("የመሬት አይዲ ያስገቡ");
     }
@@ -543,7 +543,7 @@ const updateLandRecord = async (req, res) => {
       throw new Error("ተጠቃሚው መለያ ቁጥር አልተገለጸም።");
     }
 
-    // Parse and validate request data
+    
     const updateData = {
       owners: req.body.owners
         ? safeJsonParse(req.body.owners, "owners")
@@ -559,7 +559,7 @@ const updateLandRecord = async (req, res) => {
         : undefined,
     };
 
-    // Validate at least one update field exists
+    
     const hasUpdates = Object.values(updateData).some(
       (field) =>
         field !== undefined && (!Array.isArray(field) || field.length > 0)
@@ -568,7 +568,7 @@ const updateLandRecord = async (req, res) => {
       throw new Error("ቢያንስ አንድ የሚያዘምኑ መረጃ አለብዎት።");
     }
 
-    // Process the update
+    
     const updatedRecord = await updateLandRecordService(
       recordId,
       updateData,
@@ -630,7 +630,7 @@ const getLandBankRecords = async (req, res) => {
     });
   }
 };
-// Helper function for safe JSON parsing// Helper Functions
+
 const safeJsonParse = (str, fieldName) => {
   try {
     const parsed = JSON.parse(str);
@@ -661,7 +661,7 @@ const getRecentActions = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     
-    // Get all land records with action logs
+    
     const landRecords = await LandRecord.findAll({
       attributes: ['id', 'parcel_number', 'action_log'],
       where: {
@@ -671,7 +671,7 @@ const getRecentActions = async (req, res) => {
       }
     });
 
-    // Process action logs
+    
     let allActions = [];
     landRecords.forEach(record => {
       const actions = Array.isArray(record.action_log) ? record.action_log : [];
@@ -680,15 +680,15 @@ const getRecentActions = async (req, res) => {
           land_record_id: record.id,
           parcel_number: record.parcel_number,
           ...action,
-          changed_at: new Date(action.changed_at) // Convert to Date object for sorting
+          changed_at: new Date(action.changed_at) 
         });
       });
     });
 
-    // Sort by date (newest first)
+    
     allActions.sort((a, b) => b.changed_at - a.changed_at);
     
-    // Limit results and convert dates back to strings
+    
     const recentActions = allActions.slice(0, parseInt(limit)).map(action => ({
       ...action,
       changed_at: action.changed_at.toISOString()
@@ -705,14 +705,14 @@ const getRecentActions = async (req, res) => {
     });
   }
 };
-// Changing the status of a land record
+
 const changeRecordStatus = async (req, res) => {
   try {
     const { record_status, notes, rejection_reason } = req.body;
     const { id: recordId } = req.params;
     const user = req.user;
 
-    // Basic validation
+    
     if (!record_status) {
       return res
         .status(400)
@@ -738,7 +738,7 @@ const changeRecordStatus = async (req, res) => {
     });
   }
 };
-// trash management
+
 const moveToTrash = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -837,10 +837,10 @@ const getTrash = async (req, res) => {
 };
 const getLandRecordStatsController = async (req, res, next) => {
   try {
-    // Get the admin unit ID from the authenticated user
+    
     const adminUnitId = req.user.administrative_unit_id || null;
 
-    // Get optional transaction from request if needed
+    
     const options = {};
     if (req.transaction) options.transaction = req.transaction;
 

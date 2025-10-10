@@ -13,9 +13,9 @@ const {
 const createDocumentController = async (req, res) => {
   try {
     const { body, files, user } = req;
-    // if (!user) {
-    //   return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
-    // }
+    
+    
+    
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "ቢያንስ አንዴ ፋይል መግለጥ አለበት።" });
     }
@@ -57,23 +57,23 @@ const importPDFDocuments = async (req, res) => {
     const uploaderId = req.user?.id;
     const files = req.files || [];
 
-    // Process filenames with multiple encoding fallbacks
+    
     const processedFiles = files.map(file => {
       let originalname = file.originalname;
       
-      // Try multiple decoding strategies
+      
       try {
-        // Remove file extension for matching
+        
         const filenameWithoutExt = originalname.replace(/\.pdf$/i, '');
         
-        // Try UTF-8 decoding first
+        
         originalname = decodeURIComponent(escape(filenameWithoutExt));
       } catch (error) {
         try {
-          // Fallback to Buffer conversion
+          
           originalname = Buffer.from(file.originalname, 'binary').toString('utf8').replace(/\.pdf$/i, '');
         } catch (e) {
-          // Keep original if all decoding fails
+          
           originalname = file.originalname.replace(/\.pdf$/i, '');
         }
       }
@@ -90,7 +90,7 @@ const importPDFDocuments = async (req, res) => {
       uploaderId 
     });
 
-    // Prepare detailed response
+    
     const response = {
       status: "success",
       message: result.message,
@@ -198,7 +198,7 @@ const toggleDocumentStatus = async (req, res) => {
     const { action, reason } = req.body; 
     const userId = req.user.id;
 
-    // Validate deactivation reason
+    
     if (action === 'deactivate' && !reason) {
       return res.status(400).json({ 
         status: "error",

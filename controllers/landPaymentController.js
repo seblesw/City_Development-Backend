@@ -8,7 +8,7 @@ const {
   
 } = require("../services/landPaymentService");
 
-//get all payments 
+
 const getAllPaymentsController = async (req, res) => {
   try {
     const payments = await LandPayment.findAll();
@@ -98,7 +98,7 @@ const updateSinglePaymentController = async (req, res) => {
   const updater = req.user;
 
   try {
-    // 1. Fetch the land record with its payments
+    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       include: [{ model: LandPayment, as: 'payments' }],
@@ -111,7 +111,7 @@ const updateSinglePaymentController = async (req, res) => {
       });
     }
 
-    // 2. Find the specific payment to update
+    
     const existingPayments = landRecord.payments || [];
     const paymentToUpdate = existingPayments.find(
       (p) => p.id === parsedPaymentId 
@@ -124,13 +124,13 @@ const updateSinglePaymentController = async (req, res) => {
       });
     }
 
-    // 3. Prepare the payload (only the single payment to update)
+    
     const newPaymentsData = [{
       id: parsedPaymentId, 
       ...paymentUpdates,
     }];
 
-    // 4. Reuse the existing service
+    
     const updatedPayments = await updateLandPaymentsService(
       landRecordId,
       existingPayments,
@@ -144,7 +144,7 @@ const updateSinglePaymentController = async (req, res) => {
       message: "ክፍያ በተሳካ ሁኔታ ዘምኗል",
     });
   } catch (error) {
-    console.error("Error updating payment:", error.message);
+    
     return res.status(400).json({
       success: false,
       message: error.message || "ክፍያ �ማዘመን አልተሳካም",

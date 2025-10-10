@@ -3,11 +3,11 @@ const path = require("path");
 const fs = require("fs");
 const iconv = require("iconv-lite");
 
-// Define root directories
+
 const DOCUMENTS_DIR = path.join(__dirname, "..", "uploads", "documents");
 const PICTURES_DIR = path.join(__dirname, "..", "uploads", "pictures");
 
-// Ensure upload directories exist
+
 [DOCUMENTS_DIR, PICTURES_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -24,7 +24,7 @@ const storage = multer.diskStorage({
   const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   const ext = path.extname(file.originalname);
   
-  // Use iconv-lite for better encoding handling
+  
   const originalName = iconv.decode(Buffer.from(file.originalname, 'binary'), 'utf8');
   const baseName = path.basename(originalName, ext);
   
@@ -34,7 +34,7 @@ const storage = multer.diskStorage({
   
   const filename = `${sanitizedName}-${uniqueSuffix}${ext}`;
   
-  // Add server-relative path to the file object
+  
   file.serverRelativePath = file.fieldname === 'profile_picture'
     ? `uploads/pictures/${filename}`
     : `uploads/documents/${filename}`;

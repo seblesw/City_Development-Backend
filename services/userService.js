@@ -22,7 +22,7 @@ const createLandOwner = async (
   try {
     const createdOwners = await Promise.all(
       ownersData.map(async (ownerData) => {
-        // Sanitize and prepare data
+        
         const nationalId = ownerData.national_id
           ? String(ownerData.national_id)
           : null;
@@ -31,12 +31,12 @@ const createLandOwner = async (
           : null;
         const profilePicture = ownerData.profile_picture || null;
 
-        // Set secure default password
+        
         const password = ownerData.password
           ? await bcrypt.hash(ownerData.password, 10)
           : await bcrypt.hash("12345678", 10);
 
-        // Build search query for existing user
+        
         const whereClause = {
           [Op.or]: [],
           deletedAt: { [Op.eq]: null },
@@ -51,7 +51,7 @@ const createLandOwner = async (
             : null;
 
         if (existingUser) {
-          // Update existing user (preserve existing profile picture if not provided)
+          
           await existingUser.update(
             {
               ...ownerData,
@@ -66,7 +66,7 @@ const createLandOwner = async (
           return existingUser;
         }
 
-        // Create new user with profile picture if provided
+        
         return await User.create(
           {
             ...ownerData,
@@ -88,9 +88,9 @@ const createLandOwner = async (
   } catch (error) {
     if (!transaction && t) await t.rollback();
 
-    // Enhance error message with more context
+    
     const errorMessage = `Failed to create land owners: ${error.message}`;
-    console.error(errorMessage, { ownersData, administrativeUnitId });
+    
     throw new Error(errorMessage);
   }
 };
@@ -105,7 +105,7 @@ const updateLandOwnersService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // First get the current land record to maintain its action log
+    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       transaction: t,
@@ -117,7 +117,7 @@ const updateLandOwnersService = async (
 
     const updatedOwners = await Promise.all(
       newOwnersData.map(async (ownerData) => {
-        // Verify owner exists in this land record
+        
         const existingOwner = existingOwners.find((o) => o.id === ownerData.id);
         if (!existingOwner) {
           throw new Error(
@@ -125,7 +125,7 @@ const updateLandOwnersService = async (
           );
         }
 
-        // Capture changes for logging
+        
         const changes = {};
         Object.keys(ownerData).forEach((key) => {
           if (
@@ -140,7 +140,7 @@ const updateLandOwnersService = async (
           }
         });
 
-        // Directly use ownerData from body, only adding updated_by
+        
         const updatePayload = {
           ...ownerData,
           updated_by: updater.id,
@@ -155,7 +155,7 @@ const updateLandOwnersService = async (
           transaction: t,
         });
 
-        // Only log if there were actual changes
+        
         if (Object.keys(changes).length > 0) {
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
@@ -337,16 +337,16 @@ const deleteUser = async (id, deleterId, options = {}) => {
   try {
     t = t || (await sequelize.transaction());
 
-    // Find user
+    
     const user = await User.findByPk(id, { transaction: t });
     if (!user) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
 
-    // Set deleted_by so association works
+    
     await user.update({ deleted_by: deleterId }, { transaction: t });
 
-    // Fetch with deleter info
+    
     const userWithDeleter = await User.findByPk(id, {
       include: [
         {
@@ -364,7 +364,7 @@ const deleteUser = async (id, deleterId, options = {}) => {
       transaction: t,
     });
 
-    // Hard delete
+    
     await user.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
@@ -381,9 +381,9 @@ const deleteUser = async (id, deleterId, options = {}) => {
 const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
-  let shouldCommit = false; // Track if we should commit the transaction
+  let shouldCommit = false; 
 
-  // Helper function to validate unique fields
+  
   const validateUniqueFields = async (userId, updateData) => {
     const uniqueFields = [
       { field: "email", error: "ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።" },
@@ -406,7 +406,7 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     }
   };
 
-  // Helper function to prepare update data
+  
   const prepareUpdateData = (updateData, currentUserData) => {
     const updatableFields = [
       "first_name",
@@ -437,13 +437,13 @@ const updateUser = async (id, data, updaterId, options = {}) => {
   };
 
   try {
-    // Only create a new transaction if one wasn't provided
+    
     if (!t) {
       t = await sequelize.transaction();
       shouldCommit = true;
     }
 
-    // 1. Get the user to be updated
+    
     const user = await User.findByPk(id, {
       transaction: t,
       include: [
@@ -456,10 +456,10 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
 
-    // 2. Validate unique fields if they're being changed
+    
     await validateUniqueFields(id, data);
 
-    // 3. Validate role if changed
+    
     if (data.role_id !== undefined && data.role_id !== user.role_id) {
       const roleExists = await Role.findByPk(data.role_id, { transaction: t });
       if (!roleExists) {
@@ -467,23 +467,23 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       }
     }
 
-    // 4. Prepare and execute update
+    
     const updateData = prepareUpdateData(data, user);
 
     if (Object.keys(updateData).length > 0) {
       updateData.updated_at = new Date();
-      updateData.updated_by = updaterId; // Track who made the update
+      updateData.updated_by = updaterId; 
 
       await user.update(updateData, { transaction: t });
     }
 
-    // Commit only if we created the transaction
+    
     if (shouldCommit) {
       await t.commit();
     }
 
-    // Return user with updater/creator information
-    // Don't use the transaction for the final query as it may have been committed
+    
+    
     return await User.findByPk(id, {
       include: [
         {
@@ -500,7 +500,7 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       attributes: { exclude: ["password"] },
     });
   } catch (error) {
-    // Rollback only if we created the transaction
+    
     if (shouldCommit && t) {
       await t.rollback();
     }
@@ -523,7 +523,7 @@ const deactivateUserService = async (id, deactivatorId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ ታግዷል!`);
     }
 
-    // Set is_active to false and track who deactivated
+    
     await user.update(
       {
         is_active: false,
@@ -532,7 +532,7 @@ const deactivateUserService = async (id, deactivatorId, options = {}) => {
       { transaction: t }
     );
 
-    // Fetch with deactivator info
+    
     const userWithDeactivator = await User.findByPk(id, {
       include: [
         {
@@ -576,7 +576,7 @@ const activateUserService = async (id, activatorId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ አክቲቭ  ነበር።`);
     }
 
-    // Set is_active to true and track who activated
+    
     await user.update(
       {
         is_active: true,
@@ -605,7 +605,7 @@ const addNewLandOwnerService = async ({
   const transaction = await LandOwner.sequelize.transaction();
 
   try {
-    // 1. Validate land record exists and is shared ownership
+    
     const landRecord = await LandRecord.findByPk(land_record_id, {
       include: [
         { model: User,
@@ -642,14 +642,14 @@ const addNewLandOwnerService = async ({
       };
     }
 
-    // 2. Check if user exists by national ID
+    
     const existingUser = await User.findOne({
       where: { national_id: userData.national_id },
       transaction,
     });
 
     if (existingUser) {
-      // Check if user is already an owner
+      
       const isAlreadyOwner = landRecord.owners.some(
         (owner) => owner.user_id === existingUser.id
       );
@@ -659,12 +659,12 @@ const addNewLandOwnerService = async ({
       }
     }
 
-    // 3. Create new user or use existing one
+    
     let user;
     if (existingUser) {
       user = existingUser;
     } else {
-      // Hash default password
+      
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
       user = await User.create(
@@ -679,7 +679,7 @@ const addNewLandOwnerService = async ({
       );
     }
 
-    // 4. Calculate ownership percentage
+    
     let finalPercentage = ownership_percentage;
 
     if (!ownership_percentage) {
@@ -692,7 +692,7 @@ const addNewLandOwnerService = async ({
         (100 - existingPercentageSum) / (landRecord.owners.length + 1);
     }
 
-    // 5. Create land owner relationship
+    
     const newOwner = await LandOwner.create(
       {
         user_id: user.id,
@@ -703,7 +703,7 @@ const addNewLandOwnerService = async ({
       { transaction }
     );
 
-    // 6. Update land record action log
+    
     const actionLogEntry = {
       action: `አዲስ ባለቤት ተጨምሯል: ${user.first_name} ${user.last_name}`,
       details: {
@@ -752,7 +752,7 @@ const addNewLandOwnerService = async ({
     };
   } catch (error) {
     await transaction.rollback();
-    console.error("የባለቤት አገልግሎት ስህተት:", error);
+    
     throw error;
   }
 };
@@ -768,7 +768,7 @@ const removeLandOwnerFromLandService = async (
   try {
     t = t || (await sequelize.transaction());
 
-    // 1. Validate land record exists
+    
     const landRecord = await LandRecord.findByPk(land_record_id, {
       include: [
         {
@@ -785,19 +785,19 @@ const removeLandOwnerFromLandService = async (
       throw new Error("የመሬት መዝገብ አልተገኘም");
     }
 
-    // 2. Check if owner exists in this land record
+    
     const owner = landRecord.owners.find((o) => o.id === parseInt(owner_id));
     if (!owner) {
       throw new Error("ይህ ባለቤት በዚህ  የመሬት መዝገብ አልተገኘም");
     }
 
-    // 3. Remove the owner
+    
     await LandOwner.destroy({
       where: { user_id: owner.id, land_record_id },
       transaction: t,
     });
 
-    // 4. Update action log
+    
     const actionLogEntry = {
       action: `ባለቤት ወጥቷል: ${owner.first_name} ${owner.last_name}`,
       details: { user_id: owner.id },
@@ -821,7 +821,7 @@ const removeLandOwnerFromLandService = async (
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    console.error("የባለቤት እንደገና ማስተካከያ ስህተት:", error);
+    
     throw new Error(`ባለቤት ማስተካከያ ስህተት: ${error.message}`);
   }
 };
@@ -830,7 +830,7 @@ module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
-  // removeOwnerFromLandRecord,
+  
   addNewLandOwnerService,
   deactivateUserService,
   activateUserService,

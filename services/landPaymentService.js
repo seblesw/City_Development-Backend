@@ -22,13 +22,13 @@ const addNewPaymentService = async (landRecordId, user, data) => {
     payer_id,
   } = data;
 
-  // 1. Validate land record exists
+  
   const landRecord = await LandRecord.findByPk(landRecordId);
   if (!landRecord) {
     throw new Error("የመሬት መዝገብ አልተገኘም።");
   }
 
-  // 2. Create new payment record
+  
   const payment = await LandPayment.create({
     land_record_id: landRecordId,
     payment_type,
@@ -44,7 +44,7 @@ const addNewPaymentService = async (landRecordId, user, data) => {
     created_by: user.id,
   });
 
-  // 3. Update land record action log
+  
   const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
   const newLog = [
     ...currentLog,
@@ -76,7 +76,7 @@ const createLandPaymentService = async (data, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // --- 1. Required field validation ---
+    
     const requiredFields = [
       "payment_type",
       "total_amount",
@@ -90,13 +90,13 @@ const createLandPaymentService = async (data, options = {}) => {
       throw new Error(`የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(", ")}`);
     }
 
-    // --- 2. Type & value validation ---
+    
     if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    // if (typeof data.payer_id !== "number" || data.payer_id <= 0) {
-    //   throw new Error("ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
-    // }
+    
+    
+    
     if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
       throw new Error(
         `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(
@@ -114,7 +114,7 @@ const createLandPaymentService = async (data, options = {}) => {
       throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ አይችልም።");
     }
 
-    // --- 3. Auto-set payment status ---
+    
     const payment_status =
       data.paid_amount >= data.total_amount
         ? PAYMENT_STATUSES.COMPLETED
@@ -122,7 +122,7 @@ const createLandPaymentService = async (data, options = {}) => {
         ? PAYMENT_STATUSES.PARTIAL
         : PAYMENT_STATUSES.PENDING;
 
-    // --- 4. Create payment record ---
+    
     const payment = await LandPayment.create(
       {
         land_record_id: data.land_record_id,
@@ -142,7 +142,7 @@ const createLandPaymentService = async (data, options = {}) => {
       { transaction: t }
     );
 
-    // --- 5. Lock and update land record action log ---
+    
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
       lock: transaction ? undefined : t.LOCK.UPDATE,
@@ -155,7 +155,7 @@ const createLandPaymentService = async (data, options = {}) => {
     const currentLog = Array.isArray(landRecord.action_log)
       ? landRecord.action_log
       : [];
-    // Fetch creator's user info
+    
     let creator = null;
     if (data.created_by) {
       creator = await User.findByPk(data.created_by, { transaction: t });
@@ -184,7 +184,7 @@ const createLandPaymentService = async (data, options = {}) => {
       { where: { id: data.land_record_id }, transaction: t }
     );
 
-    // --- 6. Commit only if we started the transaction ---
+    
     if (!transaction) await t.commit();
 
     return payment;
@@ -201,8 +201,8 @@ const getLandPaymentByIdService = async (id, options = {}) => {
         {
           model: LandRecord,
           as: "landRecord",
-          //commented to get all attribuetes of land record
-          // attributes: ["id", "parcel_number"],
+          
+          
         },
       ],
       transaction,
@@ -257,7 +257,7 @@ const getPaymentsByLandRecordId = async (landRecordId, options = {}) => {
   }
 };
 
-// Update Land Payment Service
+
 const updateLandPaymentsService = async (
   landRecordId,
   existingPayments,
@@ -269,7 +269,7 @@ const updateLandPaymentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // First get the current land record to maintain its action log
+    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       transaction: t,
@@ -289,7 +289,7 @@ const updateLandPaymentsService = async (
           throw new Error(`ይህ የክፍያ አይዲ ${paymentData.id} ያለው ክፍያ አልተገኘም።`);
         }
 
-        // Capture changes for logging
+        
         const changes = {};
         Object.keys(paymentData).forEach((key) => {
           if (
@@ -304,13 +304,13 @@ const updateLandPaymentsService = async (
           }
         });
 
-        // Directly use the paymentData from body, only adding updated_by
+        
         const updatePayload = {
           ...paymentData,
           updated_by: updater.id,
         };
 
-        // Auto-calculate status if paid_amount was provided
+        
         if (paymentData.paid_amount !== undefined) {
           if (
             paymentData.paid_amount >=
@@ -326,7 +326,7 @@ const updateLandPaymentsService = async (
 
         await paymentToUpdate.update(updatePayload, { transaction: t });
 
-        // Only log if there were actual changes
+        
         if (Object.keys(changes).length > 0) {
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
@@ -384,7 +384,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው የመሬት ክፍያ አልተገኘም።`);
     }
 
-    // Log deletion in LandRecord.action_log
+    
     const landRecord = await LandRecord.findByPk(payment.land_record_id, {
       transaction: t,
     });
@@ -401,7 +401,7 @@ const deleteLandPaymentService = async (id, deleterId, options = {}) => {
       await landRecord.save({ transaction: t });
     }
 
-    // Soft delete payment
+    
     await payment.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();

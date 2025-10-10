@@ -92,7 +92,7 @@ const getAllAdministrativeUnitsService = async () => {
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
       { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
-      // { model: LandRecord, as: "landRecords" },
+      
     ],
     order: [["createdAt", "DESC"]],
   });
@@ -121,7 +121,7 @@ const getAdministrativeUnitByIdService = async (id) => {
 const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, transaction = null) => {
   try {
 
-    // 1. Get the existing unit
+    
     const unit = await AdministrativeUnit.findByPk(id, { 
       where: { deletedAt: null },
       transaction 
@@ -132,7 +132,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
     }
 
 
-    // 2. Prepare update data - use existing values if not provided
+    
     const updateData = {
       name: unitData.name !== undefined ? unitData.name : unit.name,
       region_id: unitData.region_id !== undefined ? unitData.region_id : unit.region_id,
@@ -146,12 +146,12 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
     };
 
 
-    // 3. Validate type if provided
+    
     if (updateData.type && !typeLevels[updateData.type]) {
       throw new Error("Invalid unit type");
     }
 
-    // 4. Check for duplicate name only if name is being updated
+    
     if (unitData.name !== undefined) {
       const existingUnit = await AdministrativeUnit.findOne({
         where: {
@@ -169,13 +169,13 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
       }
     }
 
-    // 5. Validate region
+    
     const region = await Region.findByPk(updateData.region_id, { transaction });
     if (!region) {
       throw new Error("Invalid region selected");
     }
 
-    // 6. Validate zone if provided
+    
     if (updateData.zone_id !== null && updateData.zone_id !== undefined) {
       const zone = await Zone.findByPk(updateData.zone_id, { transaction });
       if (!zone) {
@@ -186,7 +186,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
       }
     }
 
-    // 7. Validate woreda if provided
+    
     if (updateData.woreda_id !== null && updateData.woreda_id !== undefined) {
       const woreda = await Woreda.findByPk(updateData.woreda_id, { transaction });
       if (!woreda) {
@@ -198,7 +198,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
       }
     }
 
-    // 8. Validate oversight office if provided
+    
     if (updateData.oversight_office_id !== null && updateData.oversight_office_id !== undefined) {
       const oversightOffice = await OversightOffice.findByPk(updateData.oversight_office_id, { transaction });
       if (!oversightOffice) {
@@ -209,7 +209,7 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
       }
     }
 
-    // 9. Update code if location changed
+    
     const locationChanged = (
       unitData.region_id !== undefined ||
       unitData.zone_id !== undefined ||
@@ -229,17 +229,17 @@ const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, tr
       updateData.code = `${region.code}-${zoneCode}-${woredaCode}-AU${count + 1}`;
     }
 
-    // 10. Update level mappings if type changed
+    
     if (unitData.type !== undefined) {
       updateData.unit_level = typeLevels[updateData.type];
       updateData.max_land_levels = levelMap[typeLevels[updateData.type]];
 
     }
 
-    // 11. Perform the update
+    
     await unit.update(updateData, { transaction });
 
-    // 12. Return the updated unit with associations
+    
     const updatedUnit = await AdministrativeUnit.findByPk(id, {
       include: [
         { model: Region, as: "region" },

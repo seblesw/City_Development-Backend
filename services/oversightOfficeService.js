@@ -18,7 +18,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
 
   try {
-    // Check for existing office with same name in the region (including soft-deleted)
+    
     const existingOffice = await OversightOffice.findOne({
       where: {
         name,
@@ -31,13 +31,13 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
     }
 
-    // Validate region
+    
     const region = await Region.findByPk(region_id, { transaction });
     if (!region) {
       throw new Error("ትክክለኛ ክልል ይምረጡ።");
     }
 
-    // Validate zone if provided
+    
     let zone = null;
     if (zone_id) {
       zone = await Zone.findByPk(zone_id, { transaction });
@@ -46,7 +46,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
-    // Validate woreda if provided
+    
     let woreda = null;
     if (woreda_id) {
       if (!zone_id) {
@@ -59,7 +59,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
-    // Generate a unique code with retry logic
+    
     let code;
     let attempts = 0;
     const maxAttempts = 5;
@@ -67,7 +67,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
     while (attempts < maxAttempts) {
       attempts++;
       
-      // Find count of active offices in this region/zone/woreda
+      
       const where = {
         region_id,
         deletedAt: { [Op.eq]: null },
@@ -86,7 +86,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
       code = `${regionCode}-${zoneCode}-${woredaCode}-OF${count + 1}`;
 
-      // Check if code already exists
+      
       const codeExists = await OversightOffice.findOne({
         where: { code },
         transaction,
@@ -101,7 +101,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
-    // Create the oversight office
+    
     return await OversightOffice.create(
       {
         name,
@@ -114,7 +114,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       { transaction }
     );
   } catch (error) {
-    console.error(error);
+    
     throw new Error(error.message || "ቢሮ መፍጠር አልተሳካም።");
   }
 };
@@ -217,7 +217,7 @@ const deleteOversightOfficeService = async (id, transaction) => {
 
 const getOversightOfficeStatsService = async (oversightOfficeId) => {
   try {
-    // 1. Get the oversight office and its hierarchy
+    
     const oversightOffice = await OversightOffice.findByPk(oversightOfficeId, {
       include: [
         { model: Region, as: "region", attributes: ["id", "name", "code"] },
@@ -230,7 +230,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       throw new Error("ቢሮ አልተገኘም።");
     }
 
-    // 2. Determine hierarchy level and build query
+    
     const where = { deletedAt: null };
     if (oversightOffice.woreda_id) {
       where.woreda_id = oversightOffice.woreda_id;
@@ -240,7 +240,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
     }
     where.region_id = oversightOffice.region_id;
 
-    // 3. Get all oversight offices in this hierarchy with their admin units
+    
     const offices = await OversightOffice.findAll({
       where,
       include: [{
@@ -251,7 +251,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       }],
     });
 
-    // 4. Get all admin unit IDs
+    
     const adminUnitIds = offices.flatMap(o => 
       o.administrativeUnits.map(u => u.id)
     );
@@ -278,7 +278,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       };
     }
 
-    // 5. Get all land records for these admin units with their owners
+    
     const landRecords = await LandRecord.findAll({
       where: {
         administrative_unit_id: { [Op.in]: adminUnitIds },
@@ -294,15 +294,15 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       }],
     });
 
-    // 6. Initialize statsByAdminUnit with all possible enum values
+    
     const statsByAdminUnit = {};
     
-    // Get all enum values as arrays
+    
     const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
     const landUseValues = Object.values(LAND_USE_TYPES);
     const zoningTypeValues = Object.values(ZONING_TYPES);
 
-    // Initialize each admin unit with all enum values set to 0
+    
     adminUnitIds.forEach(adminUnitId => {
       statsByAdminUnit[adminUnitId] = {
         landRecordCount: 0,
@@ -325,28 +325,28 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       });
     });
 
-    // 7. Process the land records to populate the counts
+    
     landRecords.forEach(record => {
       const adminUnitId = record.administrative_unit_id;
       
       statsByAdminUnit[adminUnitId].landRecordCount++;
       
-      // Count by ownership type
+      
       if (record.ownership_type && ownershipTypeValues.includes(record.ownership_type)) {
         statsByAdminUnit[adminUnitId].ownershipTypes[record.ownership_type]++;
       }
       
-      // Count by land use
+      
       if (record.land_use && landUseValues.includes(record.land_use)) {
         statsByAdminUnit[adminUnitId].landUses[record.land_use]++;
       }
       
-      // Count by zoning type
+      
       if (record.zoning_type && zoningTypeValues.includes(record.zoning_type)) {
         statsByAdminUnit[adminUnitId].zoningTypes[record.zoning_type]++;
       }
       
-      // Process owners - ensure we have valid owner data
+      
       if (record.owners && Array.isArray(record.owners)) {
         record.owners.forEach(owner => {
           if (owner && owner.id) {
@@ -356,13 +356,13 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
       }
     });
 
-    // 8. Get admin unit details
+    
     const adminUnits = await AdministrativeUnit.findAll({
       where: { id: { [Op.in]: adminUnitIds } },
       attributes: ["id", "name"]
     });
 
-    // 9. Prepare the final stats
+    
     const stats = {
       status: "success",
       data: {
@@ -395,7 +395,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
     return stats;
 
   } catch (error) {
-    console.error('Error in getOversightOfficeStatsService:', error);
+    
     throw new Error(error.message || "Failed to get oversight office statistics");
   }
 };

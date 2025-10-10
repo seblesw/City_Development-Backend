@@ -4,7 +4,7 @@ const { Region, Zone, AdministrativeUnit, OversightOffice } = require("../models
 const createRegionService = async (regionData, createdByUserId) => {
   const { name } = regionData;
 
-  // Generate code: first 3 letters of name in uppercase + random suffix
+  
   const code = `${name.slice(0, 3).toUpperCase()}`;
 
   const existingRegion = await Region.findOne({

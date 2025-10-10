@@ -34,7 +34,7 @@ const registerOfficial = async (data, options = {}) => {
     }
 
     t = t || (await sequelize.transaction());
-    // Validate Oversight Office (optional)
+    
     if (data.oversight_office_id) {
       const office = await OversightOffice.findByPk(data.oversight_office_id, {
         transaction: t,
@@ -43,7 +43,7 @@ const registerOfficial = async (data, options = {}) => {
         throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
       }
     }
-    //validate Administrative Unit(optional)
+    
     if (data.administrative_unit_id) {
       const administrativeUnit = await AdministrativeUnit.findByPk(
         data.administrative_unit_id,
@@ -56,7 +56,7 @@ const registerOfficial = async (data, options = {}) => {
       }
     }
 
-    // Check for unique email (if provided)
+    
     if (data.email) {
       const existingEmail = await User.findOne({
         where: { email: data.email, deletedAt: { [Op.eq]: null } },
@@ -67,7 +67,7 @@ const registerOfficial = async (data, options = {}) => {
       }
     }
 
-    // Check for unique phone_number (if provided)
+    
     if (data.phone_number) {
       const existingPhone = await User.findOne({
         where: {
@@ -81,7 +81,7 @@ const registerOfficial = async (data, options = {}) => {
       }
     }
 
-    // Check for unique national_id
+    
     const existingNationalId = await User.findOne({
       where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
       transaction: t,
@@ -90,11 +90,11 @@ const registerOfficial = async (data, options = {}) => {
       throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
     }
 
-    //  Default password if not provided
+    
     const rawPassword = data.password || "12345678";
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    // Create user
+    
     const official = await User.create(
       {
         ...data,
@@ -113,16 +113,16 @@ const registerOfficial = async (data, options = {}) => {
 };
 
 const login = async ({ email, password }, options = {}) => {
-  // Use provided transaction or create new one
+  
   const t = options.transaction || await sequelize.transaction();
-  const shouldCommit = !options.transaction; // Only commit if we created the transaction
+  const shouldCommit = !options.transaction; 
 
   try {
-    // Validate inputs
+    
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
     if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል");
 
-    // Find user with transaction
+    
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
@@ -132,11 +132,11 @@ const login = async ({ email, password }, options = {}) => {
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
 
-    // Verify password
+    
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new Error("የተሳሳተ የይለፍ ቃል");
 
-    // First-time login flow
+    
     if (user.isFirstLogin) {
       await sendOTP(user.email, { transaction: t });
       
@@ -148,7 +148,7 @@ const login = async ({ email, password }, options = {}) => {
       };
     }
 
-    // Regular login flow
+    
     await user.update({ last_login: new Date() }, { transaction: t });
 
     const token = jwt.sign(
@@ -163,7 +163,7 @@ const login = async ({ email, password }, options = {}) => {
       { expiresIn: "1d" }
     );
 
-    // console.log(user)
+    
     if (shouldCommit) await t.commit();
     return { 
       token, 
@@ -200,7 +200,7 @@ const sendOTP = async (email, options = {}) => {
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check if previous OTP is still valid (not expired)
+    
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
@@ -211,13 +211,13 @@ const sendOTP = async (email, options = {}) => {
       );
     }
 
-    // Generate and save new OTP
+    
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log("Generated OTP:", otp); 
+    
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
     await user.update({ otp, otpExpiry }, { transaction: t });
 
-    // Send OTP email (same as before)
+    
     const transporter = nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE,
       auth: {
@@ -268,7 +268,7 @@ const resendOTP = async (email, options = {}) => {
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check if previous OTP is still valid
+    
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
@@ -312,7 +312,7 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
     if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
     if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
 
-    // Complete verification
+    
     await user.update({
       isFirstLogin: false,
       last_login: new Date(),
@@ -347,22 +347,22 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
     };
   } catch (error) {
     if (shouldCommit && !t.finished) await t.rollback();
-    console.error("የOTP ማረጋገጫ ስህተት:", error);
+    
     throw error;
   }
 };
-// logoute service
+
 const logoutService = async (userId, options = {}) => {
   const { transaction } = options;
   try {
-    // If you have a session store, you can destroy the session here.
+    
 
     return { message: "በተሳካ ሁኔታ ወጣል።" };
   } catch (error) {
     throw new Error(`መውጫ ስህተት: ${error.message}`);
   }
 };
-//forgot password service
+
 const forgotPasswordService = async (email) => {
   if (!email) throw new Error("Email is required.");
 
@@ -374,7 +374,7 @@ const forgotPasswordService = async (email) => {
   });
   if (!user) throw new Error("User not found.");
 
-  // Generate JWT token (expires in 1h)
+  
   const resetToken = jwt.sign(
     {
       userId: user.id, 
@@ -384,12 +384,12 @@ const forgotPasswordService = async (email) => {
     { expiresIn: "1h" }
   );
 
-  // Save token to DB
+  
   user.resetPasswordToken = resetToken;
   user.resetPasswordExpires = Date.now() + 3600000;
   await user.save();
 
-  // Send email
+  
   await sendPasswordResetEmail(user.email, user.name, resetToken);
 
   return { success: true, message: "የሪሴት ሊንክ ወደ ኢሜልዎ ተልኳል" };
@@ -397,18 +397,18 @@ const forgotPasswordService = async (email) => {
 
 const resetPasswordService = async (token, newPassword) => {
   try {
-    // Verify token
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded.userId) {
-      // Check for userId instead of id
+      
       throw new Error("Invalid token: missing user ID");
     }
 
-    // Find user with valid token
+    
     const user = await User.findOne({
       where: {
-        id: decoded.userId, // Use userId here
+        id: decoded.userId, 
         resetPasswordToken: token,
         resetPasswordExpires: { [Op.gt]: Date.now() },
       },
@@ -416,7 +416,7 @@ const resetPasswordService = async (token, newPassword) => {
 
     if (!user) throw new Error("Invalid or expired token");
 
-    // Proceed with password update
+    
     await user.update({
       password: newPassword,
       resetPasswordToken: null,
@@ -425,7 +425,7 @@ const resetPasswordService = async (token, newPassword) => {
 
     return { success: true, message: "Password reset successful" };
   } catch (error) {
-    console.error("Reset error:", error);
+    
     throw new Error(`Reset failed: ${error.message}`);
   }
 };
@@ -442,12 +442,12 @@ const changePasswordService = async (
     if (!user) {
       throw new Error("ተጠቃሚው አልተገኘም።");
     }
-    // Check old password
+    
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       throw new Error("የተሳሳተ የይለፍ ቃል።");
     }
-    // Hash and update new password
+    
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await user.update({ password: hashedNewPassword }, { transaction });
 

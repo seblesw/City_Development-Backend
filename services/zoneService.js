@@ -117,7 +117,7 @@ const deleteZoneService = async (id, deletedByUserId) => {
     throw new Error("ዞን አልተገኘም።");
   }
 
-  // Hard delete the zone
+  
   await zone.destroy({ force: true });
 
   return { message: "ዞን ተሰርዟል።", id };

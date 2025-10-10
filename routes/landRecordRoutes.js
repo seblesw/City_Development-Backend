@@ -4,7 +4,6 @@ const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
-const progressMiddlewareSSE = require("../middlewares/uploadProgressSSE");
 
 // Rate limiters
 const getLimiter = rateLimit({

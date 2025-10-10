@@ -15,12 +15,12 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate required fields
+    
     if (!data.plot_number) {
       throw new Error("የሰነድ መረጃዎች (plot_number) አስፈላጊ ናቸው።");
     }
 
-    // Check for existing document
+    
     const existingDocument = await Document.findOne({
       where: {
         plot_number: data.plot_number,
@@ -37,7 +37,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ አስፈላጊ ነው።");
     }
 
-    // Document versioning
+    
     const version =
       (await Document.count({
         where: {
@@ -48,18 +48,18 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       })) + 1;
 
-    // Prepare file metadata with server-relative paths
+    
     const fileMetadata = [];
     if (Array.isArray(files) && files.length > 0) {
       for (const file of files) {
-        // Get server-relative path (from project root)
+        
         const serverRelativePath = path
           .relative(
-            path.join(__dirname, ".."), // Go up to project root
+            path.join(__dirname, ".."), 
             file.path
           )
           .split(path.sep)
-          .join("/"); // Convert to forward slashes
+          .join("/"); 
 
         fileMetadata.push({
           file_path: serverRelativePath,
@@ -74,7 +74,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       }
     }
 
-    // Create document
+    
     const document = await Document.create(
       {
         plot_number: data.plot_number,
@@ -94,7 +94,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       { transaction: t }
     );
 
-    // Log document creation to land record
+    
     const landRecord = await LandRecord.findByPk(data.land_record_id, {
       transaction: t,
       lock: true,
@@ -108,7 +108,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       ? landRecord.action_log
       : [];
 
-    // Fetch creator user info for action log
+    
     let creator = null;
     try {
       creator = await User.findByPk(creatorId, {
@@ -225,7 +225,7 @@ const addFilesToDocumentService = async (
       throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
-    // Normalize existing files
+    
     const normalizedExistingFiles = Array.isArray(document.files)
       ? document.files.map((file) =>
           typeof file === "string"
@@ -241,7 +241,7 @@ const addFilesToDocumentService = async (
         )
       : [];
 
-    // Prepare new files with server-relative paths
+    
     const newFiles = files.map((file) => ({
       file_path: file.serverRelativePath,
       file_name: file.originalname,
@@ -251,10 +251,10 @@ const addFilesToDocumentService = async (
       uploaded_by: updaterId,
     }));
 
-    // Combine all files
+    
     const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
-    // Update the document
+    
     await document.update(
       {
         files: updatedFiles,
@@ -264,12 +264,12 @@ const addFilesToDocumentService = async (
       { transaction: t }
     );
 
-    // Log the action
+    
     const landRecord = await LandRecord.findByPk(document.land_record_id, {
       transaction: t,
     });
     if (landRecord) {
-      // Fetch updater user info
+      
       const updater = await User.findByPk(updaterId, {
         attributes: ["id", "first_name", "middle_name", "last_name"],
         transaction: t,
@@ -322,12 +322,12 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // Multiple matching strategies
+      
       let document = await Document.findOne({
         where: { plot_number: plotNumberToMatch },
       });
 
-      // Strategy 2: Try case-insensitive matching
+      
       if (!document) {
         const allDocuments = await Document.findAll();
         document = allDocuments.find(
@@ -338,7 +338,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         );
       }
 
-      // Strategy 3: Try partial matching (remove special characters)
+      
       if (!document) {
         const cleanPlotNumber = plotNumberToMatch
           .replace(/[^\w\s]/gi, "")
@@ -360,7 +360,7 @@ const importPDFs = async ({ files, uploaderId }) => {
           error: "No matching document found",
         });
 
-        // Clean up unmatched file
+        
         try {
           if (fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
@@ -375,7 +375,7 @@ const importPDFs = async ({ files, uploaderId }) => {
 
       const serverRelativePath = file.serverRelativePath || file.path;
 
-      // Process existing files array
+      
       const filesArray = Array.isArray(document.files)
         ? document.files.map((f) =>
             typeof f === "string"
@@ -391,7 +391,7 @@ const importPDFs = async ({ files, uploaderId }) => {
           )
         : [];
 
-      // Check for duplicate file name
+      
       const fileNameExists = filesArray.some(
         (f) =>
           f.file_name &&
@@ -417,7 +417,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // Check for duplicate file path
+      
       const filePathExists = filesArray.some(
         (f) => f.file_path === serverRelativePath
       );
@@ -434,7 +434,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         continue;
       }
 
-      // Add new file to document
+      
       const newFileMetadata = {
         file_path: serverRelativePath,
         file_name: file.originalname,
@@ -446,14 +446,14 @@ const importPDFs = async ({ files, uploaderId }) => {
 
       filesArray.push(newFileMetadata);
 
-      // Update document
+      
       await document.update({
         files: filesArray,
         updated_at: new Date(),
         uploaded_by: uploaderId,
       });
 
-      // Record successful processing
+      
       updatedDocuments.push({
         id: document.id,
         plot_number: document.plot_number,
@@ -469,7 +469,7 @@ const importPDFs = async ({ files, uploaderId }) => {
         status: "success",
       });
 
-      // Update LandRecord action log
+      
       try {
         const landRecord = await LandRecord.findByPk(document.land_record_id);
         if (landRecord) {
@@ -618,7 +618,7 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
       transaction,
     });
 
-    // No need to throw error if documents not found
+    
     return documents || [];
   } catch (error) {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
@@ -636,7 +636,7 @@ const updateDocumentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // First get the current land record to maintain its action log
+    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       transaction: t,
@@ -653,11 +653,11 @@ const updateDocumentsService = async (
           throw new Error(`አይዲ ${docData.id} ያለው ሰነድ በዚህ መዝገብ አልተገኘም`);
         }
 
-        // Capture changes for logging
+        
         const changes = {};
         const fileChanges = [];
 
-        // Track document field changes
+        
         Object.keys(docData).forEach((key) => {
           if (
             document[key] !== docData[key] &&
@@ -672,25 +672,25 @@ const updateDocumentsService = async (
           }
         });
 
-        // Prepare update payload
+        
         const updatePayload = {
           ...docData,
           updated_by: updater.id,
         };
 
-        // Handle file upload if present
+        
         if (files[index]) {
-          // Get existing files or initialize empty array
+          
           const existingFiles = document.files ? [...document.files] : [];
 
-          // Record file being added
+          
           fileChanges.push({
             action: "ለማሻሻል ሰነድ ተጨምሯል",
             file_name: files[index].originalname,
             mime_type: files[index].mimetype,
           });
 
-          // Add new file to the array
+          
           existingFiles.push({
             file_path: files[index].path,
             file_name: files[index].originalname,
@@ -699,13 +699,13 @@ const updateDocumentsService = async (
             uploaded_by: updater.id,
           });
 
-          // Assign the updated files array to the payload
+          
           updatePayload.files = existingFiles;
         }
 
         await document.update(updatePayload, { transaction: t });
 
-        // Only log if there were actual changes
+        
         if (Object.keys(changes).length > 0 || fileChanges.length > 0) {
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
@@ -756,7 +756,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
 
-    // Log deletion in LandRecord.action_log
+    
     const landRecord = await LandRecord.findByPk(document.land_record_id, {
       transaction: t,
     });
@@ -772,7 +772,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       ];
       await landRecord.save({ transaction: t });
     }
-    // Soft delete document
+    
     await document.destroy({ transaction: t });
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
@@ -793,7 +793,7 @@ const toggleDocumentStatusService = async (
     throw new Error("የሰነድ መለያ ቁጥር አልተገኘም።");
   }
 
-  // Prevent redundant operations
+  
   if (action === "activate" && document.isActive) {
     throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ ሁኗል");
   }
@@ -801,10 +801,10 @@ const toggleDocumentStatusService = async (
     throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ አይደለም");
   }
 
-  // Toggle status
+  
   document.isActive = action === "activate";
 
-  // Only set reason when deactivating
+  
   if (action === "deactivate") {
     document.inActived_reason = reason;
     document.inactived_by = userId;

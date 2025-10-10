@@ -103,11 +103,11 @@ const createLeaseSchedules = async (dueDate, description = '') => {
 
 const checkOverdueSchedules = async (testDate = null) => {
   const today = testDate ? new Date(testDate) : new Date();
-  console.log(`Checking overdue schedules as of ${today.toISOString()}`);
   
-  // Calculate the maximum due_date for overdue schedules
+  
+  
   const maxDueDate = new Date(today);
-  maxDueDate.setDate(maxDueDate.getDate() - 15); // grace_period_days = 15
+  maxDueDate.setDate(maxDueDate.getDate() - 15); 
   
   const schedules = await PaymentSchedule.findAll({
     where: {
@@ -128,7 +128,7 @@ const checkOverdueSchedules = async (testDate = null) => {
       },
     ],
   });
-  console.log(`Found ${schedules.length} overdue schedules`);
+  
 
   const penaltySchedules = [];
   const transaction = await sequelize.transaction();
@@ -139,32 +139,32 @@ const checkOverdueSchedules = async (testDate = null) => {
         transaction,
       });
       if (existingPenalty) {
-        console.log(`Penalty already exists for schedule ID ${schedule.id}: penalty ID ${existingPenalty.id}`);
+        
         continue;
       }
 
       const graceEnd = new Date(schedule.due_date);
       graceEnd.setDate(graceEnd.getDate() + schedule.grace_period_days);
-      console.log(`Schedule ID ${schedule.id}: due_date=${schedule.due_date}, graceEnd=${graceEnd.toISOString()}`);
+      
 
       const landPayment = schedule.landPayment;
       const landRecord = landPayment.landRecord;
       const firstOwner = landRecord.owners[0];
       if (!firstOwner) {
-        console.log(`No owner found for LandRecord ID ${landRecord.id}`);
+        
         continue;
       }
 
       const remaining = Number(schedule.expected_amount) - Number(landPayment.paid_amount);
       if (remaining <= 0) {
-        console.log(`Schedule ID ${schedule.id}: No penalty due, remaining=${remaining}`);
+        
         continue;
       }
 
       const overdueDays = Math.floor((today - graceEnd) / (1000 * 60 * 60 * 24));
       const overdueMonths = Math.max(1, Math.floor(overdueDays / 30));
       const penalty = Number((remaining * schedule.penalty_rate * overdueMonths).toFixed(2));
-      console.log(`Schedule ID ${schedule.id}: remaining=${remaining}, overdueDays=${overdueDays}, overdueMonths=${overdueMonths}, penalty=${penalty}`);
+      
 
       if (penalty > 0) {
         const penaltyPayment = await LandPayment.create({
@@ -197,11 +197,11 @@ const checkOverdueSchedules = async (testDate = null) => {
     }
 
     await transaction.commit();
-    console.log(`Created ${penaltySchedules.length} penalty schedules`);
+    
     return penaltySchedules;
   } catch (error) {
     await transaction.rollback();
-    console.error('Error creating penalty schedules:', error.message);
+    
     throw error;
   }
 };

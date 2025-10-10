@@ -85,7 +85,7 @@ const deleteOversightOffice = async (req, res) => {
     });
   }
 };
-//get the statistics of the oversight office
+
 const getOversightOfficeStats = async (req, res) => {
   try {
     const userOversightOfficeId = req.user.oversight_office_id;

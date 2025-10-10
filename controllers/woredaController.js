@@ -8,7 +8,7 @@ const {
 
 const createWoreda = async (req, res) => {
   try {
-    // const userId = req.user.id;
+    
     const woreda = await createWoredaService(req.body);
     res.status(201).json({
       status: "success",

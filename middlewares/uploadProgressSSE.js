@@ -1,12 +1,12 @@
-// middlewares/uploadProgressSSE.js
+
 const progressMiddlewareSSE = (req, res, next) => {
-  // Only activate for multipart uploads and specific routes if needed
+  
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) {
     return next();
   }
 
-  // Set SSE headers
+  
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -16,7 +16,7 @@ const progressMiddlewareSSE = (req, res, next) => {
   const totalBytes = parseInt(req.headers['content-length']) || 0;
   let uploadedBytes = 0;
 
-  // Add progress methods to request object
+  
   req.uploadProgress = {
     send: (type, data = {}) => {
       const messageData = {
@@ -27,13 +27,13 @@ const progressMiddlewareSSE = (req, res, next) => {
       
       res.write(`data: ${JSON.stringify(messageData)}\n\n`);
       
-      // Flush if available
+      
       if (typeof res.flush === 'function') {
         res.flush();
       }
     },
     
-    // Helper methods
+    
     progress: (percentage, message = '', extraData = {}) => {
       req.uploadProgress.send('progress', {
         percentage: Math.min(100, Math.max(0, percentage)),
@@ -65,10 +65,10 @@ const progressMiddlewareSSE = (req, res, next) => {
     }
   };
 
-  // Send initial progress
+  
   req.uploadProgress.progress(0, 'Starting upload...');
 
-  // Track upload progress
+  
   req.on('data', (chunk) => {
     uploadedBytes += chunk.length;
     const percentage = totalBytes > 0 

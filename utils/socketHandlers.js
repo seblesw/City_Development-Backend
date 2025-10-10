@@ -6,11 +6,11 @@ module.exports = (io) => {
 
   // Enhanced connection logger
   const logConnections = () => {
-    console.log('=== Active Connections ===');
+    // console.log('=== Active Connections ===');
     connectedUsers.forEach((socketData, userId) => {
-      console.log(`User ${userId}: Socket ${socketData.socketId} | Last Active: ${socketData.lastActive}`);
+      // console.log(`User ${userId}: Socket ${socketData.socketId} | Last Active: ${socketData.lastActive}`);
     });
-    console.log(`Total connections: ${connectedUsers.size}`);
+    // console.log(`Total connections: ${connectedUsers.size}`);
   };
 
   // Authentication middleware
@@ -18,7 +18,7 @@ module.exports = (io) => {
     try {
       const token = socket.handshake.auth.token;
       if (!token) {
-        console.log('Connection attempt without token');
+        // console.log('Connection attempt without token');
         return next(new Error('Authentication error'));
       }
       
@@ -28,7 +28,7 @@ module.exports = (io) => {
       });
       
       if (!user) {
-        console.log(`User ${decoded.id} not found in database`);
+        // console.log(`User ${decoded.id} not found in database`);
         return next(new Error('User not found'));
       }
       
@@ -39,18 +39,18 @@ module.exports = (io) => {
         adminUnit: user.administrative_unit_id
       };
       
-      console.log(`Socket ${socket.id} authenticated for user ${user.id} (${user.email})`);
+      // console.log(`Socket ${socket.id} authenticated for user ${user.id} (${user.email})`);
       next();
     } catch (err) {
-      console.error('Authentication error:', err.message);
+      // console.error('Authentication error:', err.message);
       next(new Error('Invalid token'));
     }
   });
 
   io.on('connection', (socket) => {
-    console.log(`\nNew connection: ${socket.id}`);
-    console.log(`Headers:`, socket.handshake.headers);
-    console.log(`Auth:`, socket.handshake.auth);
+    // console.log(`\nNew connection: ${socket.id}`);
+    // console.log(`Headers:`, socket.handshake.headers);
+    // console.log(`Auth:`, socket.handshake.auth);
 
     // Authentication handler
     socket.on('authenticate', async () => {
@@ -74,7 +74,7 @@ module.exports = (io) => {
         rooms: rooms
       });
 
-      console.log(`User ${socket.user.id} (${socket.user.email}) joined rooms:`, rooms);
+      // console.log(`User ${socket.user.id} (${socket.user.email}) joined rooms:`, rooms);
       logConnections();
 
       socket.emit('authentication_success', {
@@ -94,7 +94,7 @@ module.exports = (io) => {
     // Disconnection handler
     socket.on('disconnect', (reason) => {
       if (socket.user?.id) {
-        console.log(`\nUser ${socket.user.id} disconnected (Reason: ${reason})`);
+        // console.log(`\nUser ${socket.user.id} disconnected (Reason: ${reason})`);
         connectedUsers.delete(socket.user.id);
         logConnections();
       }
@@ -102,29 +102,29 @@ module.exports = (io) => {
 
     // Error handler
     socket.on('error', (err) => {
-      console.error(`Socket ${socket.id} error:`, err);
+      // console.error(`Socket ${socket.id} error:`, err);
     });
   });
 
   // Enhanced notification with logging
   io.notifyUser = async (userId, event, data) => {
     try {
-      console.log(`\nAttempting to notify user ${userId} of ${event}`);
+      // console.log(`\nAttempting to notify user ${userId} of ${event}`);
       
       const user = await User.findByPk(userId, {
         attributes: ['id', 'email', 'last_login']
       });
 
       if (!user) {
-        console.error(`User ${userId} not found in database`);
+        // console.error(`User ${userId} not found in database`);
         return false;
       }
 
       const connection = connectedUsers.get(userId);
       
       if (connection) {
-        console.log(`User ${userId} is connected via socket ${connection.socketId}`);
-        console.log(`Last active: ${connection.lastActive}`);
+        // console.log(`User ${userId} is connected via socket ${connection.socketId}`);
+        // console.log(`Last active: ${connection.lastActive}`);
         
         io.to(`user_${userId}`).emit(event, {
           ...data,
@@ -134,15 +134,15 @@ module.exports = (io) => {
           }
         });
         
-        console.log(`Notification sent successfully to user ${userId}`);
+        // console.log(`Notification sent successfully to user ${userId}`);
         return true;
       } else {
         console.warn(`User ${userId} is not currently connected`);
-        console.log(`Last login was at: ${user.last_login}`);
+        // console.log(`Last login was at: ${user.last_login}`);
         return false;
       }
     } catch (error) {
-      console.error(`Notification error for user ${userId}:`, error);
+      // console.error(`Notification error for user ${userId}:`, error);
       return false;
     }
   };

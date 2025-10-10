@@ -57,7 +57,7 @@ const protect = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Auth middleware error:", { error: error.message });
+    // console.error("Auth middleware error:", { error: error.message });
     res.status(error.status || 401).json({
       success: false,
       message: error.message || "የማስመሰያ ስህተት። እባክዎ ትክክለኛ ማስመሰያ ያክሉ።",

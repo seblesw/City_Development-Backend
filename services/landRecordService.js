@@ -33,7 +33,7 @@ const createLandRecordService = async (data, files, user) => {
   try {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
-    // Check for Duplicate Parcel
+    
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -47,9 +47,9 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    //  Process Profile Pictures
+    
     const processOwnerPhotos = () => {
-      // Handle both array and single file upload
+      
       const profilePictures = Array.isArray(files?.profile_picture)
         ? files.profile_picture
         : files?.profile_picture
@@ -64,7 +64,7 @@ const createLandRecordService = async (data, files, user) => {
 
     const ownersWithPhotos = processOwnerPhotos();
 
-    // 4. Create Land Record
+    
     const landRecord = await LandRecord.create(
       {
         ...land_record,
@@ -102,7 +102,7 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    // Create and Link Owners to land record
+    
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -133,7 +133,7 @@ const createLandRecordService = async (data, files, user) => {
       )
     );
 
-    // Handle Documents
+    
     const processDocuments = async () => {
       if (!documents.length) return [];
 
@@ -158,13 +158,13 @@ const createLandRecordService = async (data, files, user) => {
 
     const documentResults = await processDocuments();
 
-    // Handle Payment
+    
     let landPayment = null;
     if (
       land_payment &&
       (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
     ) {
-      // Only validate if payment data exists
+      
       if (!land_payment.payment_type) {
         throw new Error("የክፍያ አይነት መግለጽ አለበት።");
       }
@@ -191,7 +191,7 @@ const createLandRecordService = async (data, files, user) => {
   } catch (error) {
     await t.rollback();
 
-    // Cleanup uploaded files if transaction fails remove file
+    
     if (files) {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach((file) => {
@@ -235,25 +235,25 @@ const importLandRecordsFromXLSXService = async (
       },
     };
 
-    // console.log("🔍 Starting XLSX import process...");
-    // console.log("📁 File path:", filePath);
-    // console.log("👤 User ID:", user.id);
+    
+    
+    
 
-    // 1. Parse and validate XLSX
-    // console.log("📊 Parsing XLSX file...");
+    
+    
     const xlsxData = await parseAndValidateXLSX(filePath);
     results.totalRows = xlsxData.length;
-    // console.log(`✅ Found ${results.totalRows} rows in XLSX file`);
+    
 
-    // 2. Group rows by parcel_number + plot_number
-    // console.log("📋 Grouping data by parcel and plot numbers...");
+    
+    
     const recordsGrouped = groupXLSXRows(xlsxData);
     const totalGroups = Object.keys(recordsGrouped).length;
     results.totalGroups = totalGroups;
-    // console.log(`✅ Grouped into ${totalGroups} unique parcels`);
+    
 
-    // 3. Process each group
-    // console.log("🚀 Processing parcels...");
+    
+    
     const groupKeys = Object.keys(recordsGrouped);
     let successCount = 0;
     let errorCount = 0;
@@ -270,7 +270,7 @@ const importLandRecordsFromXLSXService = async (
         const { owners, landRecordData, documents, payments } =
           await transformXLSXData(rows, adminUnitId);
 
-        // Use your existing createLandRecordService
+        
         await createLandRecordService(
           {
             land_record: landRecordData,
@@ -289,74 +289,74 @@ const importLandRecordsFromXLSXService = async (
         results.createdCount++;
         successCount++;
       } catch (error) {
-        // console.error(
-        //   `❌ Error processing parcel ${primaryRow.parcel_number}:`,
-        //   error.message
-        // );
+        
+        
+        
+        
         handleImportError(error, primaryRow, rowNum, results);
         errorCount++;
       }
 
-      // Log progress every 10 records
+      
       if ((i + 1) % 10 === 0 || i + 1 === totalGroups) {
-        // console.log(
-        //   `📈 Progress: ${
-        //     i + 1
-        //   }/${totalGroups} (${successCount} success, ${errorCount} errors)`
-        // );
+        
+        
+        
+        
+        
       }
     }
 
-    // Calculate processing time and performance
+    
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
     results.performance.rowsPerSecond =
       results.totalRows > 0 ? results.totalRows / results.processingTime : 0;
 
-    // console.log(`🎉 Import completed in ${results.processingTime.toFixed(2)}s`);
-    // console.log(
-    //   `📊 Results: ${results.createdCount} created, ${results.skippedCount} skipped, ${results.errors.length} errors`
-    // );
-    // console.log(
-    //   `⚡ Performance: ${results.performance.rowsPerSecond.toFixed(
-    //     2
-    //   )} rows/second`
-    // );
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     if (!transaction) await t.commit();
 
-    // Return clean results object (no nested structure)
+    
     return results;
   } catch (error) {
-    // console.error("💥 Import failed:", error);
+    
 
     if (!transaction) await t.rollback();
     throw new Error(`XLSX import failed: ${error.message}`);
   }
 };
 
-// ------------------ Enhanced Helper Functions ------------------
+
 
 async function parseAndValidateXLSX(filePath) {
   try {
-    // console.log("📖 Reading XLSX file...");
+    
 
-    // Using xlsx library to parse the file
+    
     const workbook = XLSX.readFile(filePath);
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
 
-    // console.log("📄 Converting sheet to JSON...");
+    
 
-    // Convert to JSON
+    
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
       defval: null,
     });
 
-    // console.log(`📝 Validating ${xlsxData.length} rows...`);
+    
 
-    // Validate data
+    
     const validatedData = [];
     const validationErrors = [];
 
@@ -373,20 +373,20 @@ async function parseAndValidateXLSX(filePath) {
     }
 
     if (validationErrors.length > 0) {
-      // console.warn(`⚠️ ${validationErrors.length} validation errors found`);
+      
     }
 
-    // console.log(`✅ Validation complete: ${validatedData.length} valid rows`);
+    
     return validatedData;
   } catch (error) {
-    // console.error("❌ XLSX parsing failed:", error);
+    
     throw new Error(`ፋይሉን ፓርስ ማድረግ አልተቻለም: ${error.message}`);
   }
 }
 
 function groupXLSXRows(xlsxData) {
   try {
-    // console.log("👥 Grouping rows by parcel_number + plot_number...");
+    
 
     const groups = {};
     let duplicateCount = 0;
@@ -401,14 +401,14 @@ function groupXLSXRows(xlsxData) {
       groups[key].push(row);
     }
 
-    // console.log(
-    //   `✅ Created ${
-    //     Object.keys(groups).length
-    //   } groups (${duplicateCount} duplicate entries)`
-    // );
+    
+    
+    
+    
+    
     return groups;
   } catch (error) {
-    console.error("❌ Grouping failed:", error);
+    
     throw new Error(`ሮው በቡድን መመደብ አልተቻለም: ${error.message}`);
   }
 }
@@ -418,11 +418,11 @@ async function transformXLSXData(rows, adminUnitId) {
     const primaryRow = rows[0];
     const ownershipCategory = primaryRow.ownership_category?.trim();
 
-    // console.log(
-    //   `🛠️ Transforming data for parcel ${primaryRow.parcel_number}, ownership: ${ownershipCategory}`
-    // );
+    
+    
+    
 
-    // Validate required fields
+    
     if (!primaryRow.parcel_number || !primaryRow.plot_number) {
       throw new Error("የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።");
     }
@@ -431,10 +431,10 @@ async function transformXLSXData(rows, adminUnitId) {
       throw new Error("የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።");
     }
 
-    // 1. Prepare Owners
+    
     let owners = [];
     if (ownershipCategory === "የጋራ") {
-      // console.log(`👥 Preparing ${rows.length} joint owners...`);
+      
       owners = rows.map((row, index) => {
         if (!row.first_name || !row.middle_name) {
           throw new Error(`ተጋሪ ${index + 1} ሙሉ ስም ያስፈልጋል።`);
@@ -453,7 +453,7 @@ async function transformXLSXData(rows, adminUnitId) {
         };
       });
     } else if (ownershipCategory === "የግል") {
-      // console.log("👤 Preparing single owner...");
+      
       if (!primaryRow.first_name || !primaryRow.middle_name) {
         throw new Error("ዋና ባለቤት ሙሉ ስም ያስፈልጋል።");
       }
@@ -474,7 +474,7 @@ async function transformXLSXData(rows, adminUnitId) {
       throw new Error(`የተሳሳተ የይዞታ ምድብ: ${ownershipCategory}`);
     }
 
-    // 2. Prepare Land Record
+    
     const landRecordData = {
       parcel_number: primaryRow.parcel_number,
       land_level: parseInt(primaryRow.land_level) || 1,
@@ -495,7 +495,7 @@ async function transformXLSXData(rows, adminUnitId) {
       remark: primaryRow.remark || null,
     };
 
-    // 3. Prepare Documents (one shared for የጋራ, first row only)
+    
     const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
     const documents = documentRows.map((row) => ({
       document_type: DOCUMENT_TYPES.TITLE_DEED,
@@ -508,7 +508,7 @@ async function transformXLSXData(rows, adminUnitId) {
       files: [],
     }));
 
-    // 4. Prepare Payments (one shared for የጋራ, from first row only)
+    
     const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
     const payments = paymentRows
       .filter((row) => row.payment_type)
@@ -521,13 +521,13 @@ async function transformXLSXData(rows, adminUnitId) {
         description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
       }));
 
-    // console.log(
-    //   `✅ Transformation complete: ${owners.length} owners, ${documents.length} documents, ${payments.length} payments`
-    // );
+    
+    
+    
 
     return { owners, landRecordData, documents, payments };
   } catch (error) {
-    // console.error("❌ Data transformation failed:", error);
+    
     throw new Error(`Failed to transform XLSX data: ${error.message}`);
   }
 }
@@ -557,10 +557,10 @@ function handleImportError(error, row, rowNum, results) {
     stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
   });
 
-  // console.log(`📝 Error recorded: ${errorMsg}`);
+  
 }
 
-//save drafts
+
 const saveLandRecordAsDraftService = async (
   data,
   files,
@@ -588,7 +588,7 @@ const saveLandRecordAsDraftService = async (
     let documentResults = [];
     let landPayment = null;
 
-    // 1. Handle Existing Draft Update
+    
     if (draft_id) {
       landRecord = await LandRecord.findOne({
         where: {
@@ -617,10 +617,10 @@ const saveLandRecordAsDraftService = async (
         throw new Error("Draft record not found or already submitted");
       }
 
-      // Assign existing primaryOwner from DB
+      
       primaryOwner = landRecord.user;
 
-      // Update draft
+      
       await landRecord.update(
         {
           ...land_record,
@@ -642,7 +642,7 @@ const saveLandRecordAsDraftService = async (
       await landRecord.save({ transaction: t });
     }
 
-    // 2. Handle New Draft Creation
+    
     else {
       if (primary_user) {
         primary_user.administrative_unit_id = administrative_unit_id;
@@ -666,7 +666,7 @@ const saveLandRecordAsDraftService = async (
         },
       ];
 
-      // Create primary owner and co-owners
+      
       if (primary_user && Object.keys(primary_user).length > 0) {
         const ownerResult = await userService.createLandOwner(
           primary_user,
@@ -700,7 +700,7 @@ const saveLandRecordAsDraftService = async (
       );
     }
 
-    // 3. Handle Documents (only process if files are provided)
+    
     if (Array.isArray(files) && files.length > 0 && documents.length > 0) {
       documentResults = await Promise.all(
         documents
@@ -737,7 +737,7 @@ const saveLandRecordAsDraftService = async (
       }
     }
 
-    // 4. Handle Payment
+    
     if (
       land_payment &&
       (land_payment.payment_type ||
@@ -793,12 +793,12 @@ const getDraftLandRecordService = async (draftId, userId, options = {}) => {
       include: [
         {
           model: User,
-          as: "user", //  This is the primary owner alias
+          as: "user", 
           attributes: { exclude: ["password"] },
           include: [
             {
               model: User,
-              as: "coOwners", //  Get co-owners from primary owner
+              as: "coOwners", 
               attributes: { exclude: ["password"] },
             },
           ],
@@ -823,7 +823,7 @@ const getDraftLandRecordService = async (draftId, userId, options = {}) => {
       throw new Error("Draft record not found or already submitted");
     }
 
-    // Format coordinates if they exist
+    
     if (draftRecord.coordinates) {
       draftRecord.coordinates = JSON.parse(draftRecord.coordinates);
     }
@@ -862,7 +862,7 @@ const updateDraftLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Step 1: Check if draft exists
+    
     const existingDraft = await LandRecord.findOne({
       where: {
         id: draftId,
@@ -892,7 +892,7 @@ const updateDraftLandRecordService = async (
       throw new Error("Draft record not found or already submitted");
     }
 
-    // Step 2: Prepare data
+    
     const {
       primary_user,
       co_owners = [],
@@ -901,7 +901,7 @@ const updateDraftLandRecordService = async (
       land_payment,
     } = data;
 
-    // Step 3: Update primary owner and co-owners if provided
+    
     let primaryOwnerId = existingDraft.user?.id;
     if (primary_user) {
       const { primaryOwner, coOwners } = await userService.createLandOwner(
@@ -917,7 +917,7 @@ const updateDraftLandRecordService = async (
       land_record.user_id = primaryOwnerId;
     }
 
-    // Step 4: Update land record fields
+    
     await existingDraft.update(
       {
         ...land_record,
@@ -931,7 +931,7 @@ const updateDraftLandRecordService = async (
       { transaction: t }
     );
 
-    // Step 5: Update or create documents
+    
     const documentResults = await Promise.all(
       documents.map(async (doc, index) => {
         const file = files[index];
@@ -950,7 +950,7 @@ const updateDraftLandRecordService = async (
           updated_by: user.id,
         };
         if (doc.id) {
-          // Update existing document
+          
           const existingDoc = await Document.findOne({
             where: {
               id: doc.id,
@@ -973,14 +973,14 @@ const updateDraftLandRecordService = async (
             return existingDoc;
           }
         }
-        // Create new document
+        
         return documentService.createDocumentService(docData, [file], user.id, {
           transaction: t,
         });
       })
     );
 
-    // Step 6: Update or create payment
+    
     let landPayment;
     if (land_payment) {
       if (!land_payment.payer_id) {
@@ -991,7 +991,7 @@ const updateDraftLandRecordService = async (
       }
       const existingPayment = existingDraft.payments?.[0];
       if (existingPayment) {
-        // Update existing payment
+        
         await existingPayment.update(
           {
             ...land_payment,
@@ -1005,7 +1005,7 @@ const updateDraftLandRecordService = async (
         );
         landPayment = existingPayment;
       } else {
-        // Create new payment
+        
         landPayment = await landPaymentService.createLandPaymentService(
           {
             ...land_payment,
@@ -1019,7 +1019,7 @@ const updateDraftLandRecordService = async (
       }
     }
 
-    // Step 7: Update action log
+    
     await existingDraft.update(
       {
         action_log: [
@@ -1174,7 +1174,7 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
     await draftRecord.update(
       {
         is_draft: false,
-        record_status: RECORD_STATUSES.SUBMITTED, // Fixed field name
+        record_status: RECORD_STATUSES.SUBMITTED, 
         submitted_at: new Date(),
         action_log: [
           ...(draftRecord.action_log || []),
@@ -1211,88 +1211,88 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
     throw new Error(`የረቂቅ መዝገብ ማስፈጸም ስህተት: ${error.message}`);
   }
 };
-// Retrieving all land records with simplified robust filtering
+
 const getAllLandRecordService = async (options = {}) => {
   const { page = 1, pageSize = 10, queryParams = {} } = options;
 
   try {
-    // Calculate offset
+    
     const offset = (page - 1) * pageSize;
 
-    // Build base where clause
+    
     const whereClause = {
       deletedAt: null,
     };
 
-    // Apply parcel number filter if provided
+    
     if (queryParams.parcelNumber) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcelNumber}%`,
       };
     }
 
-    // Apply block number filter if provided
+    
     if (queryParams.blockNumber) {
       whereClause.block_number = { [Op.iLike]: `%${queryParams.blockNumber}%` };
     }
 
-    // Apply record status filter if provided
+    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    // Apply land use filter if provided
+    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    // Apply ownership type filter if provided
+    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    // Apply ownership category filter if provided
+    
     if (queryParams.ownership_category) {
       whereClause.ownership_category = queryParams.ownership_category;
     }
 
-    // Apply zoning type filter if provided
+    
     if (queryParams.zoning_type) {
       whereClause.zoning_type = queryParams.zoning_type;
     }
 
-    // Apply infrastructure status filter if provided
+    
     if (queryParams.infrastructure_status) {
       whereClause.infrastructure_status = queryParams.infrastructure_status;
     }
 
-    // Apply land history filter if provided
+    
     if (queryParams.land_history) {
       whereClause.land_history = queryParams.land_history;
     }
 
-    // Apply priority filter if provided
+    
     if (queryParams.priority) {
       whereClause.priority = queryParams.priority;
     }
 
-    // Apply notification status filter if provided
+    
     if (queryParams.notification_status) {
       whereClause.notification_status = queryParams.notification_status;
     }
 
-    // Apply has_debt filter if provided
+    
     if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
       whereClause.has_debt =
         queryParams.has_debt === "true" || queryParams.has_debt === true;
     }
 
-    // Apply land level filter if provided
+    
     if (queryParams.land_level && !isNaN(queryParams.land_level)) {
       whereClause.land_level = parseInt(queryParams.land_level);
     }
 
-    // Apply area range filters if provided
+    
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
       (queryParams.area_max !== undefined && queryParams.area_max !== "")
@@ -1306,7 +1306,7 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    // Apply global search if provided
+    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -1325,12 +1325,12 @@ const getAllLandRecordService = async (options = {}) => {
       ];
     }
 
-    // Get total count
+    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    // Build include conditions
+    
     const includeConditions = [
       {
         model: User,
@@ -1389,7 +1389,7 @@ const getAllLandRecordService = async (options = {}) => {
       },
     ];
 
-    // Apply plot number filter to documents if provided
+    
     if (queryParams.plotNumber) {
       const documentInclude = includeConditions.find(
         (inc) => inc.as === "documents"
@@ -1401,7 +1401,7 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    // Apply owner filters if provided
+    
     if (
       queryParams.ownerName ||
       queryParams.nationalId ||
@@ -1431,7 +1431,7 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    // Build sorting
+    
     let order = [["createdAt", "DESC"]];
     if (queryParams.sort_by && queryParams.sort_order) {
       const validSortFields = [
@@ -1462,7 +1462,7 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    // Fetch paginated land records
+    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -1508,21 +1508,21 @@ const getAllLandRecordService = async (options = {}) => {
       subQuery: false,
     });
 
-    // Calculate total pages
+    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Process the results
+    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      // Calculate total payments
+      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      // Add computed fields for easier frontend consumption
+      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -1535,11 +1535,11 @@ const getAllLandRecordService = async (options = {}) => {
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      // Add administrative unit name for easy access
+      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
-      // Add creator and approver names for easy access
+      
       recordData.creator_name = recordData.creator
         ? `${recordData.creator.first_name || ""} ${
             recordData.creator.middle_name || ""
@@ -1552,7 +1552,7 @@ const getAllLandRecordService = async (options = {}) => {
           } ${recordData.approver.last_name || ""}`.trim()
         : "";
 
-      // Add owner details summary
+      
       recordData.owner_details =
         recordData.owners?.map((owner) => ({
           name: `${owner.first_name || ""} ${owner.middle_name || ""} ${
@@ -1582,7 +1582,7 @@ const getAllLandRecordService = async (options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማምጣት አልተቻለም: ${error.message}`);
   }
 };
-// Get filter options for frontend
+
 const getFilterOptionsService = async () => {
   try {
     const options = await LandRecord.findAll({
@@ -1613,7 +1613,7 @@ const getFilterOptionsService = async () => {
       raw: true,
     });
 
-    // Get unique administrative units
+    
     const adminUnits = await AdministrativeUnit.findAll({
       attributes: ["id", "name"],
       raw: true,
@@ -1673,7 +1673,7 @@ const getFilterOptionsService = async () => {
   }
 };
 
-// Get statistics for dashboard
+
 const getLandRecordsStatsService = async () => {
   try {
     const stats = await LandRecord.findAll({
@@ -1704,17 +1704,17 @@ const getLandRecordsStatsService = async () => {
     throw new Error(`Failed to get statistics: ${error.message}`);
   }
 };
-//Retrieving a single land record by ID with full details
+
 const getLandRecordByIdService = async (id, options = {}) => {
   const { transaction, includeDeleted = false } = options;
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Fetch land record with optimized includes
+    
     const landRecord = await LandRecord.findOne({
       where: { id },
       include: [
-        // Owners through the join table
+        
         {
           model: User,
           as: "owners",
@@ -1735,19 +1735,19 @@ const getLandRecordByIdService = async (id, options = {}) => {
           ],
           paranoid: !includeDeleted,
         },
-        // Administrative unit
+        
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
           attributes: ["id", "name", "type", "unit_level", "max_land_levels"],
         },
-        // Creator info
+        
         {
           model: User,
           as: "creator",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        // Approver info
+        
         {
           model: User,
           as: "approver",
@@ -1775,7 +1775,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
           required: false,
           paranoid: !includeDeleted,
         },
-        // Include payments directly
+        
         {
           model: LandPayment,
           as: "payments",
@@ -1803,22 +1803,22 @@ const getLandRecordByIdService = async (id, options = {}) => {
       throw new Error(`Land record with ID ${id} not found`);
     }
 
-    // 2. Process the record data
+    
     const result = landRecord.toJSON();
 
-    // 3. Add calculated fields if needed
+    
     result.total_payments =
       result.payments?.reduce(
         (sum, payment) => sum + parseFloat(payment.paid_amount),
         0
       ) || 0;
 
-    // 4. Commit transaction if we created it
+    
     if (!transaction) await t.commit();
 
     return result;
   } catch (error) {
-    // 5. Rollback transaction if we created it
+    
     if (!transaction && t) await t.rollback();
 
     throw new Error(
@@ -1831,21 +1831,21 @@ const getLandRecordByIdService = async (id, options = {}) => {
 const getLandRecordByUserIdService = async (userId) => {
   const transaction = await sequelize.transaction();
   try {
-    // 1. Fetch land records with optimized includes
+    
     const landRecords = await LandRecord.findAll({
       where: {
         [Op.or]: [
           { created_by: userId },
-          { "$owners.id$": userId }, // Check through the join table
+          { "$owners.id$": userId }, 
         ],
         deletedAt: null,
       },
       include: [
-        // Owners through the join table
+        
         {
           model: User,
           as: "owners",
-          through: { attributes: [] }, // Exclude join table attributes
+          through: { attributes: [] }, 
           attributes: [
             "id",
             "first_name",
@@ -1857,25 +1857,25 @@ const getLandRecordByUserIdService = async (userId) => {
             "address",
           ],
         },
-        // Administrative unit
+        
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
           attributes: ["id", "name", "max_land_levels"],
         },
-        // Creator info
+        
         {
           model: User,
           as: "creator",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        // Approver info
+        
         {
           model: User,
           as: "approver",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        // Include documents directly
+        
         {
           model: Document,
           as: "documents",
@@ -1891,7 +1891,7 @@ const getLandRecordByUserIdService = async (userId) => {
           where: { isActive: true },
           required: false,
         },
-        // Include payments directly
+        
         {
           model: LandPayment,
           as: "payments",
@@ -1939,23 +1939,23 @@ const getLandRecordByUserIdService = async (userId) => {
       return [];
     }
 
-    // 2. Process records in a single pass
+    
     const processedRecords = landRecords.map((record) => {
       const recordJson = record.toJSON();
 
-      // Transform documents if needed
+      
       if (recordJson.documents) {
         recordJson.documents = recordJson.documents.map((doc) => ({
           ...doc,
-          // Add any document transformations here
+          
         }));
       }
 
-      // Transform payments if needed
+      
       if (recordJson.payments) {
         recordJson.payments = recordJson.payments.map((payment) => ({
           ...payment,
-          // Add any payment transformations here
+          
         }));
       }
 
@@ -1970,50 +1970,50 @@ const getLandRecordByUserIdService = async (userId) => {
     throw new Error(`Failed to retrieve land records: ${error.message}`);
   }
 };
-// Retrieving land records by creator with simplified robust filtering
+
 const getLandRecordsByCreatorService = async (userId, options = {}) => {
   if (!userId) throw new Error("User ID is required");
 
   const { page = 1, pageSize = 10, queryParams = {} } = options;
 
   try {
-    // Calculate offset
+    
     const offset = (page - 1) * pageSize;
 
-    // Build base where clause
+    
     const whereClause = {
       created_by: userId,
       deletedAt: null,
     };
 
-    // Apply parcel number filter if provided
+    
     if (queryParams.parcelNumber) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcelNumber}%`,
       };
     }
 
-    // Apply block number filter if provided
+    
     if (queryParams.blockNumber) {
       whereClause.block_number = { [Op.iLike]: `%${queryParams.blockNumber}%` };
     }
 
-    // Apply record status filter if provided
+    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    // Apply land use filter if provided
+    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    // Apply ownership type filter if provided
+    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    // Apply global search if provided
+    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -2022,12 +2022,12 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       ];
     }
 
-    // Get total count
+    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    // Build include conditions
+    
     const includeConditions = [
       {
         model: User,
@@ -2065,7 +2065,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       },
     ];
 
-    // Apply plot number filter to documents if provided
+    
     if (queryParams.plotNumber) {
       const documentInclude = includeConditions.find(
         (inc) => inc.as === "documents"
@@ -2077,7 +2077,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       }
     }
 
-    // Apply owner filters if provided
+    
     if (
       queryParams.ownerName ||
       queryParams.nationalId ||
@@ -2107,7 +2107,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       }
     }
 
-    // Fetch paginated land records
+    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -2153,21 +2153,21 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       subQuery: false,
     });
 
-    // Calculate total pages
+    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Process the results
+    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      // Calculate total payments
+      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      // Add computed fields for easier frontend consumption
+      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2180,7 +2180,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      // Add administrative unit name for easy access
+      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
@@ -2213,7 +2213,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
   const offset = (page - 1) * pageSize;
 
   try {
-    // 1. First find all land records where user is an owner
+    
     const userLandRecords = await LandRecord.findAll({
       attributes: ["id"],
       include: [
@@ -2241,7 +2241,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       };
     }
 
-    // 2. Fetch complete records with all owners
+    
     const { count, rows } = await LandRecord.findAndCountAll({
       where: {
         id: { [Op.in]: landRecordIds },
@@ -2308,19 +2308,19 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       paranoid: !includeDeleted,
       transaction: t,
     });
-    // (records)
+    
 
-    // 3. Process and transform the data
+    
     const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
 
-      // Mark the logged-in user among owners
+      
       const owners = (recordData.owners || []).map((owner) => ({
         ...owner,
         is_current_user: owner.id === userId,
       }));
 
-      // Parse coordinates safely
+      
       try {
         recordData.coordinates = recordData.coordinates
           ? JSON.parse(recordData.coordinates)
@@ -2329,7 +2329,7 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         recordData.coordinates = null;
       }
 
-      // Calculate payment summary
+      
       const paymentSummary = recordData.payments?.reduce(
         (acc, payment) => {
           acc.total += parseFloat(payment.total_amount || 0);
@@ -2375,57 +2375,57 @@ const getLandRecordsByUserAdminUnitService = async (
   const { page = 1, pageSize = 10, includeDeleted = false, queryParams = {} } = options;
 
   try {
-    // Calculate offset
+    
     const offset = (page - 1) * pageSize;
 
-    // Build base where clause
+    
     const whereClause = {
       administrative_unit_id: adminUnitId,
     };
 
-    // Handle deleted records
+    
     if (!includeDeleted) {
       whereClause.deletedAt = null;
     }
 
-    // Apply parcel number filter if provided
+    
     if (queryParams.parcel_number) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcel_number}%`,
       };
     }
 
-    // Apply block number filter if provided
+    
     if (queryParams.block_number) {
       whereClause.block_number = { [Op.iLike]: `%${queryParams.block_number}%` };
     }
 
-    // Apply record status filter if provided
+    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    // Apply land use filter if provided
+    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    // Apply ownership type filter if provided
+    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    // Apply ownership category filter if provided
+    
     if (queryParams.ownership_category) {
       whereClause.ownership_category = queryParams.ownership_category;
     }
 
-    // Apply priority filter if provided
+    
     if (queryParams.priority) {
       whereClause.priority = queryParams.priority;
     }
 
-    // Apply area range filters if provided
+    
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
       (queryParams.area_max !== undefined && queryParams.area_max !== "")
@@ -2439,7 +2439,7 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    // Apply global search if provided
+    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -2447,7 +2447,7 @@ const getLandRecordsByUserAdminUnitService = async (
       ];
     }
 
-    // Apply date range filters if provided
+    
     if (queryParams.startDate || queryParams.endDate) {
       whereClause.createdAt = {};
       if (queryParams.startDate) {
@@ -2458,12 +2458,12 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    // Get total count
+    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    // Build include conditions
+    
     const includeConditions = [
       {
         model: User,
@@ -2510,7 +2510,7 @@ const getLandRecordsByUserAdminUnitService = async (
       },
     ];
 
-    // Apply owner filters if provided
+    
     if (queryParams.owner_name || queryParams.national_id || queryParams.phone_number) {
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
       if (ownerInclude) {
@@ -2536,7 +2536,7 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    // Build sorting
+    
     let order = [["createdAt", "DESC"]];
     if (queryParams.sortBy && queryParams.sortOrder) {
       const validSortFields = [
@@ -2557,7 +2557,7 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    // Fetch paginated land records
+    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -2581,14 +2581,14 @@ const getLandRecordsByUserAdminUnitService = async (
       distinct: true,
     });
 
-    // Calculate total pages
+    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Process the results
+    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      // Process owners with ownership data
+      
       recordData.owners = recordData.owners
         ? recordData.owners.map((owner) => ({
             ...owner,
@@ -2597,14 +2597,14 @@ const getLandRecordsByUserAdminUnitService = async (
           }))
         : [];
 
-      // Calculate total payments
+      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      // Add computed fields for easier frontend consumption
+      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2617,7 +2617,7 @@ const getLandRecordsByUserAdminUnitService = async (
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      // Add administrative unit name for easy access
+      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
@@ -2748,7 +2748,7 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-//Updating an existing land record
+
 const updateLandRecordService = async (
   recordId,
   data,
@@ -2760,7 +2760,7 @@ const updateLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Get the complete land record with all associations
+    
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
@@ -2791,12 +2791,12 @@ const updateLandRecordService = async (
       throw new Error("Land record not found");
     }
 
-    // Process land record updates if provided
+    
     if (data.land_record && Object.keys(data.land_record).length > 0) {
       const previousStatus = existingRecord.record_status;
       const newStatus = RECORD_STATUSES.SUBMITTED;
 
-      // Track changes for logging
+      
       const changes = {};
       Object.keys(data.land_record).forEach((key) => {
         if (
@@ -2811,14 +2811,14 @@ const updateLandRecordService = async (
         }
       });
 
-      // Prepare update payload
+      
       const updatePayload = {
         ...data.land_record,
         updated_by: updater.id,
         record_status: newStatus,
       };
 
-      // Update status history if status changed
+      
       if (newStatus !== previousStatus) {
         const currentStatusHistory = Array.isArray(
           existingRecord.status_history
@@ -2839,7 +2839,7 @@ const updateLandRecordService = async (
 
       await existingRecord.update(updatePayload, { transaction: t });
 
-      // Always log the land record update action
+      
       const currentLog = Array.isArray(existingRecord.action_log)
         ? existingRecord.action_log
         : [];
@@ -2874,7 +2874,7 @@ const updateLandRecordService = async (
       );
     }
 
-    // 3. Process owner updates (if owners array provided)
+    
     if (data.owners && data.owners.length > 0) {
       await userService.updateLandOwnersService(
         recordId,
@@ -2885,7 +2885,7 @@ const updateLandRecordService = async (
       );
     }
 
-    // 4. Process document updates (if documents array provided)
+    
     if (data.documents && data.documents.length > 0) {
       await documentService.updateDocumentsService(
         recordId,
@@ -2897,7 +2897,7 @@ const updateLandRecordService = async (
       );
     }
 
-    // 5. Process payment updates (if payment data provided)
+    
     if (data.payments && data.payments.length > 0) {
       await landPaymentService.updateLandPaymentsService(
         recordId,
@@ -2910,7 +2910,7 @@ const updateLandRecordService = async (
 
     if (!transaction) await t.commit();
 
-    // Return the fully updated record with fresh associations
+    
     return await getLandRecordByIdService(recordId, {
       transaction: t,
       includeAll: true,
@@ -2930,7 +2930,7 @@ const changeRecordStatusService = async (
   const t = await sequelize.transaction();
 
   try {
-    // 1. Get the record with owners
+    
     const record = await LandRecord.findByPk(recordId, {
       transaction: t,
       include: [
@@ -2953,7 +2953,7 @@ const changeRecordStatusService = async (
       throw new Error("Land record not found");
     }
 
-    // 2. Validate status transition
+    
     const allowedTransitions = {
       [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
       [RECORD_STATUSES.SUBMITTED]: [
@@ -2975,11 +2975,11 @@ const changeRecordStatusService = async (
       );
     }
 
-    // 3. Prepare update data
+    
     const currentHistory = Array.isArray(record.status_history)
       ? record.status_history
       : [];
-    // Fetch user info for status changer
+    
     const statusChanger = await User.findByPk(userId, {
       attributes: ["id", "first_name", "middle_name", "last_name", "email"],
       transaction: t,
@@ -3021,10 +3021,10 @@ const changeRecordStatusService = async (
       updateData.approved_by = userId;
     }
 
-    // 4. Update the record
+    
     await record.update(updateData, { transaction: t });
 
-    // 5. Pre-fetch updater information BEFORE email loop
+    
     const updaterWithAdminUnit = await User.findByPk(userId, {
       attributes: ["first_name", "middle_name", "last_name"],
       include: [
@@ -3044,10 +3044,10 @@ const changeRecordStatusService = async (
 
     const emailSubject = `የመሬት ሁኔታ ማሻሻል ${record.parcel_number}`;
 
-    // 6. Prepare email promises (optimized - no DB queries in loop)
+    
     const emailPromises = record.owners.map(async (owner) => {
       if (owner.email) {
-        // Get the updater's admin unit details
+        
         const updaterWithAdminUnit = await User.findByPk(userId, {
           attributes: [
             "id",
@@ -3135,15 +3135,15 @@ const changeRecordStatusService = async (
       }
     });
 
-    // Commit transaction before sending emails
+    
     await t.commit();
 
-    // Wait for emails (non-blocking, don't fail operation if emails fail)
+    
     Promise.allSettled(emailPromises).catch(() => {
-      // Silent catch - emails are non-critical
+      
     });
 
-    // 7. Return updated record (lightweight query)
+    
     return await LandRecord.findByPk(recordId, {
       include: [
         {
@@ -3165,7 +3165,7 @@ const changeRecordStatusService = async (
     throw error;
   }
 };
-// trash management services
+
 const moveToTrashService = async (
   recordId,
   user,
@@ -3176,12 +3176,12 @@ const moveToTrashService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // Validate deletion reason
+    
     if (!deletion_reason || deletion_reason.trim().length < 5) {
       throw new Error("የመሰረዝ ምክንያት ቢያንስ 5 ቁምፊ መሆን አለበት።");
     }
 
-    // Fetch the record with associated data
+    
     const record = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
@@ -3201,7 +3201,7 @@ const moveToTrashService = async (
       throw new Error("መዝገብ አልተገኘም ወይም አስቀድሞ ተሰርዟል።");
     }
 
-    // Update action log and deletion info
+    
     record.action_log = [
       ...(record.action_log || []),
       {
@@ -3220,24 +3220,24 @@ const moveToTrashService = async (
     record.deletion_reason = deletion_reason;
     await record.save({ transaction: t });
 
-    // Soft delete LandRecord
+    
     await record.destroy({ transaction: t });
 
-    // Soft delete related Documents
+    
     if (record.documents?.length) {
       for (const doc of record.documents) {
         await doc.destroy({ transaction: t });
       }
     }
 
-    // Soft delete related Payments
+    
     if (record.payments?.length) {
       for (const payment of record.payments) {
         await payment.destroy({ transaction: t });
       }
     }
 
-    // Soft delete ownership links (LandOwner join table)
+    
     await LandOwner.destroy({
       where: { land_record_id: record.id },
       transaction: t,
@@ -3245,7 +3245,7 @@ const moveToTrashService = async (
 
     if (!transaction) await t.commit();
 
-    // Re-fetch the trashed record including owners, documents, and payments
+    
     const trashedRecord = await LandRecord.findOne({
       where: { id: record.id },
       paranoid: false,
@@ -3253,7 +3253,7 @@ const moveToTrashService = async (
         {
           model: User,
           as: "owners",
-          through: { attributes: [], paranoid: false }, // include trashed join rows
+          through: { attributes: [], paranoid: false }, 
           attributes: ["id", "first_name", "last_name", "email"],
         },
         { model: Document, as: "documents", paranoid: false },
@@ -3287,7 +3287,7 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Find the record (including soft-deleted) with minimal associations
+    
     const record = await LandRecord.findOne({
       where: { id: recordId },
       paranoid: false,
@@ -3303,24 +3303,24 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
       throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም።");
     }
 
-    // 2. Restore main record and associations in parallel
+    
     await Promise.all([
       record.restore({ transaction: t }),
 
-      // Restore all documents in bulk (more efficient than individual restores)
+      
       Document.restore({
         where: { land_record_id: recordId },
         transaction: t,
       }),
 
-      // Restore all payments in bulk
+      
       LandPayment.restore({
         where: { land_record_id: recordId },
         transaction: t,
       }),
     ]);
 
-    // 3. Update action log with full user details
+    
     record.action_log = [
       ...(record.action_log || []),
       {
@@ -3340,12 +3340,12 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
 
     if (!transaction) await t.commit();
 
-    // 4. Return the full record by calling existing service
+    
     return await getLandRecordByIdService(recordId, { transaction: t });
   } catch (error) {
     if (!transaction && t) await t.rollback();
 
-    // Enhanced error handling
+    
     if (error.name.includes("Sequelize")) {
       throw new Error("የዳታቤዝ ስህተት፡ መልሶ ማስጀመር አልተቻለም።");
     }
@@ -3363,7 +3363,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    // 1. Verify record exists
+    
     const record = await LandRecord.findOne({
       where: { id: recordId },
       paranoid: false,
@@ -3373,7 +3373,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
     if (!record) throw new Error("መዝገብ አልተገኘም።");
     if (!record.deletedAt) throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም።");
 
-    // 2. Prepare action log entry
+    
     const newActionEntry = {
       action: "PERMANENT_DELETION",
       changed_at: new Date(),
@@ -3385,7 +3385,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       },
     };
 
-    // 3. Update action log
+    
     await record.update(
       {
         action_log: [...(record.action_log || []), newActionEntry],
@@ -3395,7 +3395,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       }
     );
 
-    // 4. Execute deletions
+    
     await Promise.all([
       Document.destroy({
         where: { land_record_id: recordId },
@@ -3414,7 +3414,7 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       }),
     ]);
 
-    // 5. Final deletion
+    
     await record.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
@@ -3502,7 +3502,7 @@ const getTrashItemsService = async (user, options = {}) => {
   }
 };
 
-//stats
+
 const getLandRecordStats = async (adminUnitId, options = {}) => {
   try {
     const pLimit = (await import("p-limit")).default;
@@ -3512,16 +3512,16 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
     const baseWhere = { deletedAt: null };
     if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
 
-    // Helpers
+    
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const last7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // System totals (no heavy includes)
+    
     const sysTasks = [
       limit(() => LandRecord.count({ where: baseWhere })),
-      limit(() => Document.count({ where: { deletedAt: null } })), // no include
+      limit(() => Document.count({ where: { deletedAt: null } })), 
       limit(() => User.count()),
       limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
     ];
@@ -3534,10 +3534,10 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
 
     if (!adminUnitId) return result;
 
-    // Use raw SQL to avoid count+include; bind adminUnitId once
+    
     const bind = { adminUnitId };
 
-    // by_status, by_zoning, by_ownership, by_land_use (each in ONE query)
+    
     const [by_status, by_zoning, by_ownership, by_land_use] = await Promise.all(
       [
         limit(() =>
@@ -3587,7 +3587,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ]
     );
 
-    // Area stats (sum + grouped top 10)
+    
     const [area_total_row, area_by_zoning, area_by_land_use] =
       await Promise.all([
         limit(() =>
@@ -3629,7 +3629,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ]);
     const total_area = Number(area_total_row?.[0]?.total_area || 0);
 
-    // Owners count (avoid include by using EXISTS)
+    
     const [{ owners_count }] = await limit(() =>
       sequelize.query(
         `
@@ -3646,21 +3646,21 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       )
     );
 
-    // Temporal (three counts in one query via conditional aggregation)
-    // const [temporal_row] = await limit(() => sequelize.query(
-    //   `
-    //   SELECT
-    //     COUNT(*) FILTER (WHERE "createdAt" >= :last30)::int AS last_30_days,
-    //     COUNT(*) FILTER (WHERE "createdAt" >= :last7)::int  AS last_7_days,
-    //     COUNT(*) FILTER (WHERE "createdAt" >= :startOfToday)::int AS today
-    //   FROM "land_records"
-    //   WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
-    //   `,
-    //   { type: sequelize.QueryTypes.SELECT,
-    //     bind: { ...bind, last30, last7, startOfToday } }
-    // ));
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-    // Documents tied to unit (raw join instead of count+include)
+    
     const [{ documents_count }] = await limit(() =>
       sequelize.query(
         `
@@ -3675,7 +3675,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       )
     );
 
-    // ownership_category, land_level (grouped)
+    
     const [by_ownership_category, by_land_level] = await Promise.all([
       limit(() =>
         sequelize.query(
@@ -3717,11 +3717,11 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
           by_land_use: area_by_land_use,
         },
         owners_count,
-        // temporal: {
-        //   last_30_days: temporal_row.last_30_days,
-        //   last_7_days: temporal_row.last_7_days,
-        //   today: temporal_row.today,
-        // },
+        
+        
+        
+        
+        
         documents: documents_count,
         by_ownership_category,
         by_land_level,
@@ -3734,10 +3734,10 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
 
 const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
   try {
-    // Calculate offset
+    
     const offset = (page - 1) * pageSize;
 
-    // Get total count
+    
     const totalCount = await LandRecord.count({
       where: {
         ownership_type: OWNERSHIP_TYPES.MERET_BANK,
@@ -3746,7 +3746,7 @@ const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
       },
     });
 
-    // Fetch paginated land records
+    
     const landRecords = await LandRecord.findAll({
       where: {
         ownership_type: OWNERSHIP_TYPES.MERET_BANK,
@@ -3761,13 +3761,13 @@ const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
       ],
       limit: pageSize,
       offset: offset,
-      order: [["createdAt", "DESC"]], // Optional: Add ordering
+      order: [["createdAt", "DESC"]], 
     });
 
-    // Calculate total pages
+    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Transform the result to JSON format
+    
     const data = landRecords.map((record) => ({
       landRecord: record.toJSON(),
       documents: record.documents || [],

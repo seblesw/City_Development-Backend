@@ -58,7 +58,7 @@ const updateAdministrativeUnit = async (req, res) => {
   try {
 
 
-    // Validate required parameters
+    
     if (!req.params.id) {
       throw new Error('Unit ID is required');
     }
@@ -80,13 +80,13 @@ const updateAdministrativeUnit = async (req, res) => {
       data: unit,
     });
   } catch (error) {
-    console.error('Error in updateAdministrativeUnit controller:', {
-      message: error.message,
-      stack: error.stack,
-      params: req.params,
-      body: req.body,
-      user: req.user
-    });
+    
+    
+    
+    
+    
+    
+    
 
     const statusCode = error.message.includes('not found') ? 404 : 400;
     res.status(statusCode).json({

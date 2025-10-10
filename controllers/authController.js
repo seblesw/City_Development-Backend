@@ -59,7 +59,7 @@ const loginController = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Login error:", error);
+    
     
     const errorMessage = error.message.includes("Invalid") || error.message.includes("Incorrect")
       ? "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።"
@@ -87,7 +87,7 @@ const resendOTPController = async (req, res) => {
 
     return res.status(200).json(result);
   } catch (error) {
-    console.error("Error resending OTP:", error.message);
+    
     return res.status(400).json({
       success: false,
       message: error.message || "የOTP እንደገና ላክ አልተሳካም", 
@@ -112,7 +112,7 @@ const verifyOtpController = async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error("OTP verification error:", error);
+    
     
     const errorMessage = error.message.includes("Invalid") || error.message.includes("No OTP")
       ? "የተሳሳተ ወይም ያልተገኘ OTP"
@@ -125,11 +125,11 @@ const verifyOtpController = async (req, res) => {
     });
   }
 };
-//logout controller
+
 const logoutController = (req, res) => {
   try {
-    // Assuming you have a logout service that handles the logout logic
-    // For example, clearing the session or token
+    
+    
     req.logout((err) => {
       if (err) {
         return res.status(500).json({ error: "መውጫ ስህተት አለ።" });
@@ -140,14 +140,14 @@ const logoutController = (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
-//forgot password controller
+
 const forgotPasswordController = async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: "ኢሜይል መግለጽ አለበት።" });
     }
-    // Assuming you have a service to handle password reset logic
+    
     await forgotPasswordService(email);
     return res
       .status(200)
@@ -177,7 +177,7 @@ const changePasswordController = async (req, res) => {
       return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
     }
 
-    // Call the service to change the password
+    
     const result = await changePasswordService(
       userId,
       oldPassword,

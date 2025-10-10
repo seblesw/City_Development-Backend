@@ -45,7 +45,7 @@ const createReminderNotifications = async () => {
       const landRecord = landPayment.landRecord;
       const firstOwner = landRecord.owners[0];
       if (!firstOwner) {
-        console.log(`በመዝገብ ቁጥር ${landRecord.id} ውስጥ ባለቤት የለም`);
+        
         continue;
       }
 
@@ -67,7 +67,7 @@ const createReminderNotifications = async () => {
         phone: firstOwner.phone || null,
       };
       if (!recipient.email && !recipient.phone) {
-        console.log(`መለያ ቁጥር ${firstOwner.id} ያለው ባለቤት ኢሜይል ወይም ስልክ የለውም`);
+        
         continue;
       }
 
@@ -93,12 +93,12 @@ const createReminderNotifications = async () => {
 
     await transaction.commit();
     if (notifications.length > 0) {
-      console.log(` ${notifications.length} ያክል የክፍያ ማንቂያ ማስታወቂያዎች ተፈጥሯል።`);
+      
     }
     return notifications;
   } catch (error) {
     await transaction.rollback();
-    console.error('ማንቂያ ማሳወቂያ መፋጠር ስህተት:', error.message);
+    
     throw error;
   }
 };
@@ -159,7 +159,7 @@ const createOverdueNotifications = async () => {
       const landRecord = landPayment.landRecord;
       const firstOwner = landRecord.owners[0];
       if (!firstOwner) {
-        console.log(`በመዝገብ ቁጥር ${landRecord.id} ውስጥ ባለቤት የለም`);
+        
         continue;
       }
 
@@ -169,7 +169,7 @@ const createOverdueNotifications = async () => {
         phone: firstOwner.phone || null,
       };
       if (!recipient.email && !recipient.phone) {
-        console.log(`መለያ ቁጥር ${firstOwner.id} ያለው ባለቤት ኢሜይል ወይም ስልክ የለውም`);
+        
         continue;
       }
 
@@ -195,12 +195,12 @@ const createOverdueNotifications = async () => {
 
     await transaction.commit();
     if (notifications.length > 0) {
-      console.log(`${notifications.length} ያለፈበት ማሳወቂያዎች ተፈጥሯል`);
+      
     }
     return notifications;
   } catch (error) {
     await transaction.rollback();
-    console.error('ያለፈበት ማሳወቂያ መፍጠር ስህተት:', error.message);
+    
     throw error;
   }
 };
@@ -337,7 +337,7 @@ const createGlobalNoticeNotifications = async () => {
       },
     },
   });
-  console.log('Found notices:', notices.map(n => ({ id: n.id, scheduled_date: n.scheduled_date, is_active: n.is_active })));
+  
 
   const notifications = [];
   const transaction = await sequelize.transaction();
@@ -356,12 +356,12 @@ const createGlobalNoticeNotifications = async () => {
           email: { [Op.ne]: null },
         },
       });
-      console.log('Found landowners:', landowners.map(u => ({ id: u.id, email: u.email, ownedLandRecords: u.ownedLandRecords?.length })));
+      
 
       const notificationData = [];
       for (const user of landowners) {
         if (!isValidEmail(user.email)) {
-          console.log(`መለያ ቁጥር ${user.id} ያለው ባለቤት ልክ ያልሆነ ኢሜይል አለው: ${user.email}`);
+          
           continue;
         }
 
@@ -375,7 +375,7 @@ const createGlobalNoticeNotifications = async () => {
           transaction,
         });
         if (existingNotification) {
-          console.log(`Notification already exists for user ${user.id} and schedule ${notice.id}`);
+          
           continue;
         }
 
@@ -396,10 +396,10 @@ const createGlobalNoticeNotifications = async () => {
       if (notificationData.length > 0) {
         const createdNotifications = await PaymentNotification.bulkCreate(notificationData, { transaction });
         notifications.push(...createdNotifications);
-        console.log(`${createdNotifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል`, {
-          noticeId: notice.id,
-          userIds: createdNotifications.map(n => n.recipients.user_id),
-        });
+        
+        
+        
+        
       }
 
       await notice.update({ is_active: false }, { transaction });
@@ -409,11 +409,11 @@ const createGlobalNoticeNotifications = async () => {
     return notifications;
   } catch (error) {
     await transaction.rollback();
-    console.error('አጠቃላይ ማሳወቂያ መፍጠር ስህተት:', {
-      message: error.message,
-      stack: error.stack,
+    
+    
+    
 
-    });
+    
     return notifications; 
   }
 };
@@ -450,13 +450,13 @@ const sendPendingNotifications = async () => {
             </div>
           `,
         });
-        console.log(
-          `Email sent for notification ID ${notification.id} to ${notification.recipients.email}: ${notification.message}`
-        );
+        
+        
+        
       } else {
-        console.log(
-          `No email for notification ID ${notification.id}, logging only: ${notification.message} to ${JSON.stringify(notification.recipients)}`
-        );
+        
+        
+        
       }
 
       await notification.update({
@@ -465,10 +465,10 @@ const sendPendingNotifications = async () => {
       });
       sentCount++;
     } catch (error) {
-      console.error(
-        `Failed to send notification ID ${notification.id}:`,
-        error.message
-      );
+      
+      
+      
+      
       await notification.update({ delivery_status: 'FAILED' });
     }
   }
