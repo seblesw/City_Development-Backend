@@ -8,7 +8,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const path = require("path");
-const fs = require("fs");
+const {fs} = require("fs");
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
@@ -48,7 +48,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       })) + 1;
 
-    
+
     const fileMetadata = [];
     if (Array.isArray(files) && files.length > 0) {
       for (const file of files) {
