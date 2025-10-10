@@ -21,11 +21,6 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const { fs } = require("fs");
-const {
-  buildLandRecordFilters,
-  buildLandRecordSorting,
-  buildIncludeConditions,
-} = require("../utils/landRecordFilterBuilder");
 
 const createLandRecordService = async (data, files, user) => {
   const t = await sequelize.transaction();
