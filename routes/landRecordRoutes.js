@@ -96,23 +96,17 @@ router.get(
   landRecordController.getAllLandRecords
 );
 router.get('/filter-options', landRecordController.getFilterOptions);
-/**
- * @route GET /api/land-records/stats
- * @description Get land records statistics for dashboard
- */
+
 router.get('/stats', landRecordController.getLandRecordsStats);
-// This route is used to get land records by the admin unit of the logged-in user
 //this helps to filter land records geographically by admin unit
 router.get(
   "/admin-unit-records",
   authMiddleware.protect,
-  // getLimiter,
   landRecordController.getLandRecordsByUserAdminUnit
 );
 router.get(
   "/admin-unit-records/rejected",
   authMiddleware.protect,
-  getLimiter,
   landRecordController.getRejectedLandRecords
 );
 
@@ -120,21 +114,18 @@ router.get(
 router.get(
   "/my-records",
   authMiddleware.protect,
-  // getLimiter,
   landRecordController.getLandRecordsByCreator
 );
 
 router.get(
   "/:id",
   authMiddleware.protect,
-  getLimiter,
   landRecordController.getLandRecordById
 );
 
 router.get(
   "/user/:userId",
   authMiddleware.protect,
-  getLimiter,
   landRecordController.getLandRecordByUserId
 );
 

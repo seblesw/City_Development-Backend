@@ -19,7 +19,6 @@ const createDocumentController = async (req, res) => {
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "ቢያንስ አንዴ ፋይል መግለጥ አለበት።" });
     }
-    // console.log("body",body, "files",files,"user", user )
     const data = {
       map_number: body.map_number,
       document_type: body.document_type || null,
@@ -57,30 +56,65 @@ const importPDFDocuments = async (req, res) => {
   try {
     const uploaderId = req.user?.id;
     const files = req.files || [];
-    
-    // Ensure filenames are properly decoded (as backup)
-    const processedFiles = files.map(file => ({
-      ...file,
-      originalname: Buffer.from(file.originalname, 'binary').toString('utf8')
-    }));
 
-    console.log("Importing PDFs:", processedFiles);
+    // Process filenames with multiple encoding fallbacks
+    const processedFiles = files.map(file => {
+      let originalname = file.originalname;
+      
+      // Try multiple decoding strategies
+      try {
+        // Remove file extension for matching
+        const filenameWithoutExt = originalname.replace(/\.pdf$/i, '');
+        
+        // Try UTF-8 decoding first
+        originalname = decodeURIComponent(escape(filenameWithoutExt));
+      } catch (error) {
+        try {
+          // Fallback to Buffer conversion
+          originalname = Buffer.from(file.originalname, 'binary').toString('utf8').replace(/\.pdf$/i, '');
+        } catch (e) {
+          // Keep original if all decoding fails
+          originalname = file.originalname.replace(/\.pdf$/i, '');
+        }
+      }
+      
+      return {
+        ...file,
+        originalname: originalname,
+        filenameForMatching: originalname.normalize("NFC").trim()
+      };
+    });
 
-    const result = await importPDFs({ files: processedFiles, uploaderId });
+    const result = await importPDFs({ 
+      files: processedFiles, 
+      uploaderId 
+    });
 
-    return res.status(200).json({
+    // Prepare detailed response
+    const response = {
       status: "success",
       message: result.message,
+      processedFiles: result.processedFiles || [],
       updatedCount: result.updatedDocuments.length,
       updatedDocuments: result.updatedDocuments,
-      unmatchedLogs: result.unmatchedLogs, 
-    });
+      unmatchedLogs: result.unmatchedLogs,
+      errorFiles: result.errorFiles || [],
+      summary: {
+        totalFiles: files.length,
+        successful: result.updatedDocuments.length,
+        failed: result.unmatchedLogs.length + (result.errorFiles?.length || 0),
+        skipped: result.skippedFiles || 0
+      }
+    };
+
+    return res.status(200).json(response);
   } catch (error) {
-    console.error("PDF Import Error:", error.message);
+    
     return res.status(500).json({
       status: "error",
       message: "PDF import failed",
       error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
