@@ -46,8 +46,8 @@ const createLandRecordService = async (data, files, user) => {
     const processOwnerPhotos = () => {
       
       const profilePictures = Array.isArray(files?.profile_picture)
-        ? files.profile_picture
-        : files?.profile_picture
+        ? files.profile_picture.filter(file => file && file.serverRelativePath)
+        : files?.profile_picture && files.profile_picture.serverRelativePath
         ? [files.profile_picture]
         : [];
 
@@ -132,7 +132,9 @@ const createLandRecordService = async (data, files, user) => {
     const processDocuments = async () => {
       if (!documents.length) return [];
 
-      const filesArr = Array.isArray(files?.documents) ? files.documents : [];
+      const filesArr = Array.isArray(files?.documents) 
+        ? files.documents.filter(file => file && file.serverRelativePath)
+        : [];
 
       return Promise.all(
         documents.map((doc, index) => {
@@ -191,9 +193,11 @@ const createLandRecordService = async (data, files, user) => {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach((file) => {
         try {
-          if (file.path) fs.unlinkSync(file.path);
+          if (file && file.path) {
+            fs.unlinkSync(file.path);
+          }
         } catch (cleanupError) {
-          throw new Error(`Failed to clean up file: ${cleanupError.message}`);
+          // Silent fail - no error thrown during cleanup
         }
       });
     }
