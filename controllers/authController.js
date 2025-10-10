@@ -31,6 +31,10 @@ const registerOfficialController = async (req, res) => {
       is_active: body.is_active !== undefined ? body.is_active : true,
     };
 
+
+
+    
+
     const official = await registerOfficial(data);
 
     return res.status(201).json({
