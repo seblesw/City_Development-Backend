@@ -35,7 +35,7 @@ const registerOfficialController = async (req, res) => {
 
 
     
-
+ 
     const official = await registerOfficial(data);
 
     return res.status(201).json({

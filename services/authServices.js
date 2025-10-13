@@ -300,7 +300,7 @@ const sendOTP = async (email, options = {}) => {
 
     
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+    console.log(`Generated OTP for ${email}: ${otp}`);
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
     await user.update({ otp, otpExpiry }, { transaction: t });
 
@@ -483,36 +483,45 @@ const forgotPasswordService = async (email) => {
 };
 
 const resetPasswordService = async (token, newPassword) => {
+  let transaction;
+  
   try {
+    transaction = await sequelize.transaction();
     
+    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded.userId) {
-      
       throw new Error("Invalid token: missing user ID");
     }
 
-    
+    // Find user with valid token
     const user = await User.findOne({
       where: {
         id: decoded.userId, 
         resetPasswordToken: token,
         resetPasswordExpires: { [Op.gt]: Date.now() },
       },
+      transaction: transaction,
     });
 
     if (!user) throw new Error("Invalid or expired token");
 
-    
+    // Hash the new password before saving
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user with hashed password
     await user.update({
-      password: newPassword,
+      password: hashedPassword, 
       resetPasswordToken: null,
       resetPasswordExpires: null,
-    });
+    }, { transaction: transaction });
 
+    await transaction.commit();
+    
     return { success: true, message: "Password reset successful" };
   } catch (error) {
-    
+    if (transaction) await transaction.rollback();
     throw new Error(`Reset failed: ${error.message}`);
   }
 };
