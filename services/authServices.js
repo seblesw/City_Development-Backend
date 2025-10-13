@@ -14,7 +14,6 @@ const jwt = require("jsonwebtoken");
 const { sendPasswordResetEmail } = require("../utils/mailService");
 const nodemailer = require('nodemailer');
 
-
 const registerOfficial = async (data, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -99,6 +98,94 @@ const registerOfficial = async (data, options = {}) => {
       {
         ...data,
         password: hashedPassword,
+      },
+      { transaction: t }
+    );
+
+    if (!transaction) await t.commit();
+
+    return official;
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
+  }
+};
+const registerOfficialByManagerService = async (data, user, options = {}) => {
+  const { transaction } = options;
+  let t = transaction;
+
+  try {
+    if (
+      !data.first_name ||
+      !data.last_name ||
+      !data.phone_number ||
+      !data.national_id ||
+      !data.role_id
+    ) {
+      throw new Error(
+        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
+      );
+    }
+
+    t = t || (await sequelize.transaction());
+        
+    // Verify that the manager has an administrative unit
+    if (!user.administrative_unit_id) {
+      throw new Error("ማኔጅሩ አስተዳደራዊ ክፍል የለውም።");
+    }
+    
+    // Verify the administrative unit exists
+    const administrativeUnit = await AdministrativeUnit.findByPk(user.administrative_unit_id, {
+      transaction: t,
+    });
+    if (!administrativeUnit) {
+      throw new Error("የማኔጅር አስተዳደራዊ ክፍል አልተገኘም።");
+    }
+
+    // Email validation (optional field)
+    if (data.email) {
+      const existingEmail = await User.findOne({
+        where: { email: data.email, deletedAt: { [Op.eq]: null } },
+        transaction: t,
+      });
+      if (existingEmail) {
+        throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
+      }
+    }
+
+    // Phone number validation
+    if (data.phone_number) {
+      const existingPhone = await User.findOne({
+        where: {
+          phone_number: data.phone_number,
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction: t,
+      });
+      if (existingPhone) {
+        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
+      }
+    }
+
+    // National ID validation
+    const existingNationalId = await User.findOne({
+      where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
+      transaction: t,
+    });
+    if (existingNationalId) {
+      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
+    }
+
+    // Hash password
+    const rawPassword = data.password || "12345678";
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    // Create official
+    const official = await User.create(
+      {
+        ...data,
+        password: hashedPassword,
+        administrative_unit_id: user.administrative_unit_id,
       },
       { transaction: t }
     );
@@ -461,6 +548,7 @@ module.exports = {
   registerOfficial,
   changePasswordService,
   resetPasswordService,
+  registerOfficialByManagerService,
   login,
   verifyOTP,
   sendOTP,

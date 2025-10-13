@@ -6,6 +6,7 @@ const {
   resetPasswordService,
   verifyOTP,
   resendOTP,
+  registerOfficialByManagerService,
 } = require("../services/authServices");
 const fs= require("fs")
 const registerOfficialController = async (req, res) => {
@@ -36,6 +37,42 @@ const registerOfficialController = async (req, res) => {
     
 
     const official = await registerOfficial(data);
+
+    return res.status(201).json({
+      message: "ባለሥልጣን በተሳካ ሁኔታ ተመዝግቧል።",
+      data: official,
+    });
+  } catch (error) {
+     if (req.file) fs.unlinkSync(req.file.path);
+    
+    return res.status(400).json({ error: error.message });
+  }
+};
+const registerOfficialByManagerController = async (req, res) => {
+  try {
+    const { body } = req;
+    const user = req.user; 
+    const profilePicture = req.file ? `uploads/pictures/${req.file.filename}` : null;
+    
+    const data = {
+      first_name: body.first_name,
+      last_name: body.last_name,
+      middle_name: body.middle_name || null,
+      email: body.email || null, 
+      phone_number: body.phone_number,
+      password: body.password || "12345678",
+      role_id: body.role_id,
+      administrative_unit_id: user.administrative_unit_id,
+      national_id: body.national_id,
+      address: body.address || null,
+      gender: body.gender,
+      profile_picture: profilePicture,
+      relationship_type: null,
+      marital_status: body.marital_status || null,
+      is_active: body.is_active !== undefined ? body.is_active : true,
+    };
+
+    const official = await registerOfficialByManagerService(data, user);
 
     return res.status(201).json({
       message: "ባለሥልጣን በተሳካ ሁኔታ ተመዝግቧል።",
@@ -201,6 +238,7 @@ module.exports = {
   registerOfficialController,
   resetPassword,
   loginController,
+  registerOfficialByManagerController,
   resendOTPController,
   logoutController,
   verifyOtpController,
