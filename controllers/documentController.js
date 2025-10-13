@@ -57,32 +57,59 @@ const importPDFDocuments = async (req, res) => {
     const uploaderId = req.user?.id;
     const files = req.files || [];
 
-    
+    if (!files.length) {
+      return res.status(400).json({
+        status: "error",
+        message: "No files uploaded for processing"
+      });
+    }
+
+    // Enhanced filename processing with better error handling
     const processedFiles = files.map(file => {
       let originalname = file.originalname;
-      
+      let processingError = null;
       
       try {
-        
+        // Remove .pdf extension case-insensitively
         const filenameWithoutExt = originalname.replace(/\.pdf$/i, '');
         
-        
-        originalname = decodeURIComponent(escape(filenameWithoutExt));
-      } catch (error) {
+        // Multiple decoding strategies with fallbacks
         try {
-          
-          originalname = Buffer.from(file.originalname, 'binary').toString('utf8').replace(/\.pdf$/i, '');
-        } catch (e) {
-          
-          originalname = file.originalname.replace(/\.pdf$/i, '');
+          originalname = decodeURIComponent(escape(filenameWithoutExt));
+        } catch (decodeError) {
+          try {
+            originalname = Buffer.from(filenameWithoutExt, 'binary').toString('utf8');
+          } catch (bufferError) {
+            originalname = filenameWithoutExt; // Fallback to original without extension
+          }
         }
+        
+        // Enhanced normalization for better matching
+        const normalizedName = originalname
+          .normalize("NFC")
+          .trim()
+          .replace(/\s+/g, ' ') // Normalize multiple spaces
+          .replace(/[^\p{L}\p{N}\s_-]/gu, '') // Keep only letters, numbers, spaces, underscores, hyphens
+          .trim();
+
+        return {
+          ...file,
+          originalname: originalname,
+          filenameForMatching: normalizedName,
+          cleanPlotNumber: normalizedName.replace(/[^\p{L}\p{N}]/gu, ''), // Remove all non-alphanumeric for fuzzy matching
+          processingError: null
+        };
+      } catch (error) {
+        // Fallback processing with basic cleaning
+        const fallbackName = file.originalname.replace(/\.pdf$/i, '').trim();
+        return {
+          ...file,
+          originalname: fallbackName,
+          filenameForMatching: fallbackName,
+          cleanPlotNumber: fallbackName.replace(/[^\w]/g, ''),
+          processingError: error.message
+        };
       }
-      
-      return {
-        ...file,
-        originalname: originalname,
-        filenameForMatching: originalname.normalize("NFC").trim()
-      };
     });
 
     const result = await importPDFs({ 
@@ -90,7 +117,7 @@ const importPDFDocuments = async (req, res) => {
       uploaderId 
     });
 
-    
+    // Enhanced response structure
     const response = {
       status: "success",
       message: result.message,
@@ -99,22 +126,28 @@ const importPDFDocuments = async (req, res) => {
       updatedDocuments: result.updatedDocuments,
       unmatchedLogs: result.unmatchedLogs,
       errorFiles: result.errorFiles || [],
+      skippedFiles: result.skippedFiles || [],
+      processingErrors: result.processingErrors || [],
       summary: {
         totalFiles: files.length,
         successful: result.updatedDocuments.length,
-        failed: result.unmatchedLogs.length + (result.errorFiles?.length || 0),
-        skipped: result.skippedFiles || 0
-      }
+        failed: result.unmatchedLogs.length,
+        skipped: result.skippedFiles.length,
+        processingErrors: result.processingErrors?.length || 0,
+        matchStatistics: result.matchStatistics || {}
+      },
+      timestamp: new Date().toISOString()
     };
 
     return res.status(200).json(response);
   } catch (error) {
-    
+    console.error('PDF import controller error:', error);
     return res.status(500).json({
       status: "error",
       message: "PDF import failed",
       error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
   }
 };

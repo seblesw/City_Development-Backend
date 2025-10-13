@@ -205,13 +205,9 @@ const createLandRecordService = async (data, files, user) => {
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
-
-const importLandRecordsFromXLSXService = async (
-  filePath,
-  user,
-  options = {}
-) => {
-  const { transaction } = options; 
+//import xlsx
+const importLandRecordsFromXLSXService = async (filePath, user, options = {}) => {
+  const { transaction } = options;
   const startTime = Date.now();
   const t = transaction || (await sequelize.transaction());
 
@@ -221,6 +217,10 @@ const importLandRecordsFromXLSXService = async (
     }
 
     const adminUnitId = user.administrative_unit_id;
+    
+    // Pre-load cache for duplicate checking
+    const cache = await buildOptimizedCache(adminUnitId, t);
+    
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -231,197 +231,250 @@ const importLandRecordsFromXLSXService = async (
       processingTime: 0,
       performance: {
         rowsPerSecond: 0,
+        batchesProcessed: 0,
+        averageBatchTime: 0
       },
     };
 
-    
-    
-    
+    // Parallel: Parse file and validate in one pass
+    const { validatedData, validationErrors } = await parseAndValidateXLSXOptimized(filePath);
+    results.totalRows = validatedData.length;
+    results.errors.push(...validationErrors);
 
+    if (validatedData.length === 0) {
+      throw new Error("ምንም የሚገባ ውሂብ አልተገኘም።");
+    }
+
+    // Optimized grouping with Map
+    const recordsGrouped = groupXLSXRowsOptimized(validatedData);
+    results.totalGroups = recordsGrouped.size;
+
+    // Process in optimized batches
+    const BATCH_SIZE = 100;
+    const batches = Array.from(recordsGrouped.entries());
     
+    let totalBatchTime = 0;
     
-    const xlsxData = await parseAndValidateXLSX(filePath);
-    results.totalRows = xlsxData.length;
-    
-
-    
-    
-    const recordsGrouped = groupXLSXRows(xlsxData);
-    const totalGroups = Object.keys(recordsGrouped).length;
-    results.totalGroups = totalGroups;
-    
-
-    
-    
-    const groupKeys = Object.keys(recordsGrouped);
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (let i = 0; i < groupKeys.length; i++) {
-      const groupKey = groupKeys[i];
-      const rows = recordsGrouped[groupKey];
-      const primaryRow = rows[0];
-      const rowNum = i + 1;
-
-      try {
-
-
-        const { owners, landRecordData, documents, payments } =
-          await transformXLSXData(rows, adminUnitId);
-
-        
-        await createLandRecordService(
-          {
-            land_record: landRecordData,
-            owners,
-            documents,
-            land_payment: payments[0] || null,
-          },
-          [],
-          user,
-          {
-            transaction: t,
-            isImport: true,
-          }
-        );
-
-        results.createdCount++;
-        successCount++;
-      } catch (error) {
-        
-        
-        
-        
-        handleImportError(error, primaryRow, rowNum, results);
-        errorCount++;
-      }
-
+    for (let i = 0; i < batches.length; i += BATCH_SIZE) {
+      const batchStartTime = Date.now();
+      const batch = batches.slice(i, i + BATCH_SIZE);
       
-      if ((i + 1) % 10 === 0 || i + 1 === totalGroups) {
-        
-        
-        
-        
-        
+      const batchResults = await processBatchOptimized(
+        batch, 
+        adminUnitId, 
+        user, 
+        cache, 
+        t
+      );
+      
+      // Aggregate results
+      results.createdCount += batchResults.createdCount;
+      results.skippedCount += batchResults.skippedCount;
+      results.errors.push(...batchResults.errors);
+      results.errorDetails.push(...batchResults.errorDetails);
+
+      const batchTime = Date.now() - batchStartTime;
+      totalBatchTime += batchTime;
+      results.performance.batchesProcessed++;
+      
+      // Progress-based transaction management
+      if (!transaction && i > 0 && i % 200 === 0) {
+        await t.commit();
+        const newTransaction = await sequelize.transaction();
+        Object.assign(t, newTransaction);
+        await updateCacheForTransaction(cache, adminUnitId, t);
       }
     }
 
-    
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
-    results.performance.rowsPerSecond =
-      results.totalRows > 0 ? results.totalRows / results.processingTime : 0;
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    results.performance.rowsPerSecond = results.totalRows > 0 ? 
+      results.totalRows / results.processingTime : 0;
+    results.performance.averageBatchTime = results.performance.batchesProcessed > 0 ?
+      totalBatchTime / results.performance.batchesProcessed : 0;
 
     if (!transaction) await t.commit();
-
-    
     return results;
   } catch (error) {
-    
-
-    if (!transaction) await t.rollback();
+    if (!transaction && t && !t.finished) await t.rollback();
     throw new Error(`XLSX import failed: ${error.message}`);
   }
 };
 
-
-
-async function parseAndValidateXLSX(filePath) {
+// OPTIMIZED: Cache builder
+async function buildOptimizedCache(adminUnitId, transaction) {
   try {
-    
+    const existingRecords = await LandRecord.findAll({
+      where: { administrative_unit_id: adminUnitId },
+      attributes: ['parcel_number'],
+      transaction,
+      raw: true
+    });
 
-    
-    const workbook = XLSX.readFile(filePath);
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
+    return new Set(existingRecords.map(record => `${record.parcel_number}`));
+  } catch (error) {
+    console.warn('Cache build warning:', error.message);
+    return new Set();
+  }
+}
 
+// OPTIMIZED: File parsing with single pass
+async function parseAndValidateXLSXOptimized(filePath) {
+  try {
+    const workbook = XLSX.readFile(filePath, {
+      cellDates: true,
+      dense: true,
+    });
     
-
-    
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
       defval: null,
+      blankrows: false,
     });
 
-    
-
-    
     const validatedData = [];
     const validationErrors = [];
 
+    // Single pass validation with early returns
     for (let i = 0; i < xlsxData.length; i++) {
       const row = xlsxData[i];
       try {
+        // Fast validation checks - KEEPING ORIGINAL VALIDATION LOGIC
         if (!row.parcel_number || !row.plot_number) {
           throw new Error(`ሮው ${i + 2} የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።`);
         }
+        if (!row.land_use || !row.ownership_type) {
+          throw new Error(`ሮው ${i + 2} የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።`);
+        }
+
+        // Data cleaning and normalization
+        row.parcel_number = row.parcel_number.toString().trim();
+        row.plot_number = row.plot_number.toString().trim();
+        row.land_use = row.land_use.toString().trim();
+        row.ownership_type = row.ownership_type.toString().trim();
+        row.ownership_category = row.ownership_category?.toString().trim() || 'የግል';
+        
+        // Numeric field processing
+        row.land_level = parseInt(row.land_level) || 1;
+        row.area = parseFloat(row.area) || 0;
+
         validatedData.push(row);
       } catch (error) {
         validationErrors.push(error.message);
       }
     }
 
-    if (validationErrors.length > 0) {
-      
-    }
-
-    
-    return validatedData;
+    return { validatedData, validationErrors };
   } catch (error) {
-    
     throw new Error(`ፋይሉን ፓርስ ማድረግ አልተቻለም: ${error.message}`);
   }
 }
 
-function groupXLSXRows(xlsxData) {
-  try {
-    
+// OPTIMIZED: Grouping with Map
+function groupXLSXRowsOptimized(xlsxData) {
+  const groups = new Map();
 
-    const groups = {};
-    let duplicateCount = 0;
-
-    for (const row of xlsxData) {
-      const key = `${row.parcel_number}_${row.plot_number}`;
-      if (!groups[key]) {
-        groups[key] = [];
-      } else {
-        duplicateCount++;
-      }
-      groups[key].push(row);
+  for (const row of xlsxData) {
+    const key = `${row.parcel_number}_${row.plot_number}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
     }
-
-    
-    
-    
-    
-    
-    return groups;
-  } catch (error) {
-    
-    throw new Error(`ሮው በቡድን መመደብ አልተቻለም: ${error.message}`);
+    groups.get(key).push(row);
   }
+
+  return groups;
 }
 
+// OPTIMIZED: Batch processing with parallel execution
+async function processBatchOptimized(batchEntries, adminUnitId, user, cache, transaction) {
+  const batchResults = {
+    createdCount: 0,
+    skippedCount: 0,
+    errors: [],
+    errorDetails: []
+  };
+
+  const processPromises = batchEntries.map(async ([groupKey, rows]) => {
+    try {
+      const primaryRow = rows[0];
+      
+      // Fast duplicate check
+      const parcelKey = `${primaryRow.parcel_number}`;
+      if (cache.has(parcelKey)) {
+        throw new Error(`ፓርሴል ቁጥር ${primaryRow.parcel_number} ከዚህ በፊት ተመዝግቧል።`);
+      }
+
+      // Transform data - USING YOUR ORIGINAL TRANSFORM LOGIC
+      const transformedData = await transformXLSXData(rows, adminUnitId);
+      
+      // USE YOUR ORIGINAL createLandRecordService - DON'T CHANGE THE LOGIC
+      await createLandRecordService(
+        {
+          land_record: transformedData.landRecordData,
+          owners: transformedData.owners,
+          documents: transformedData.documents,
+          land_payment: transformedData.payments[0] || null,
+        },
+        [],
+        user, // PASS USER TO MAINTAIN created_by
+        {
+          transaction: transaction,
+          isImport: true,
+        }
+      );
+      
+      // Update cache
+      cache.add(parcelKey);
+      
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error, 
+        primaryRow: rows[0]
+      };
+    }
+  });
+
+  const results = await Promise.allSettled(processPromises);
+
+  // Process results
+  results.forEach((result, index) => {
+    const [groupKey, rows] = batchEntries[index];
+    
+    if (result.status === 'fulfilled') {
+      if (result.value.success) {
+        batchResults.createdCount++;
+      } else {
+        batchResults.skippedCount++;
+        handleImportErrorOptimized(
+          result.value.error, 
+          result.value.primaryRow, 
+          index + 1, 
+          batchResults
+        );
+      }
+    } else {
+      batchResults.skippedCount++;
+      handleImportErrorOptimized(
+        result.reason, 
+        { parcel_number: groupKey.split('_')[0], plot_number: groupKey.split('_')[1] }, 
+        index + 1, 
+        batchResults
+      );
+    }
+  });
+
+  return batchResults;
+}
+
+// KEEP YOUR ORIGINAL transformXLSXData FUNCTION EXACTLY AS IS
 async function transformXLSXData(rows, adminUnitId) {
   try {
     const primaryRow = rows[0];
     const ownershipCategory = primaryRow.ownership_category?.trim();
 
-    
-    
-    
-
-    
     if (!primaryRow.parcel_number || !primaryRow.plot_number) {
       throw new Error("የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።");
     }
@@ -430,10 +483,8 @@ async function transformXLSXData(rows, adminUnitId) {
       throw new Error("የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።");
     }
 
-    
     let owners = [];
     if (ownershipCategory === "የጋራ") {
-      
       owners = rows.map((row, index) => {
         if (!row.first_name || !row.middle_name) {
           throw new Error(`ተጋሪ ${index + 1} ሙሉ ስም ያስፈልጋል።`);
@@ -452,7 +503,6 @@ async function transformXLSXData(rows, adminUnitId) {
         };
       });
     } else if (ownershipCategory === "የግል") {
-      
       if (!primaryRow.first_name || !primaryRow.middle_name) {
         throw new Error("ዋና ባለቤት ሙሉ ስም ያስፈልጋል።");
       }
@@ -473,7 +523,6 @@ async function transformXLSXData(rows, adminUnitId) {
       throw new Error(`የተሳሳተ የይዞታ ምድብ: ${ownershipCategory}`);
     }
 
-    
     const landRecordData = {
       parcel_number: primaryRow.parcel_number,
       land_level: parseInt(primaryRow.land_level) || 1,
@@ -494,7 +543,6 @@ async function transformXLSXData(rows, adminUnitId) {
       remark: primaryRow.remark || null,
     };
 
-    
     const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
     const documents = documentRows.map((row) => ({
       document_type: DOCUMENT_TYPES.TITLE_DEED,
@@ -507,7 +555,6 @@ async function transformXLSXData(rows, adminUnitId) {
       files: [],
     }));
 
-    
     const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
     const payments = paymentRows
       .filter((row) => row.payment_type)
@@ -520,17 +567,13 @@ async function transformXLSXData(rows, adminUnitId) {
         description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
       }));
 
-    
-    
-    
-
     return { owners, landRecordData, documents, payments };
   } catch (error) {
-    
     throw new Error(`Failed to transform XLSX data: ${error.message}`);
   }
 }
 
+// KEEP YOUR ORIGINAL calculatePaymentStatus FUNCTION
 function calculatePaymentStatus(row) {
   try {
     const total = parseFloat(row.total_amount) || 0;
@@ -544,21 +587,39 @@ function calculatePaymentStatus(row) {
   }
 }
 
-function handleImportError(error, row, rowNum, results) {
-  const errorMsg = `Row ${rowNum} (${row.parcel_number}): ${error.message}`;
+// OPTIMIZED: Error handling
+function handleImportErrorOptimized(error, row, index, results) {
+  const errorMsg = `Row ${index} (${row.parcel_number}): ${error.message}`;
   results.skippedCount++;
   results.errors.push(errorMsg);
   results.errorDetails.push({
-    row: rowNum,
+    row: index,
     parcel_number: row.parcel_number,
     plot_number: row.plot_number,
     error: error.message,
     stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
   });
-
-  
 }
 
+// OPTIMIZED: Cache update for new transactions
+async function updateCacheForTransaction(cache, adminUnitId, transaction) {
+  try {
+    const existingRecords = await LandRecord.findAll({
+      where: { administrative_unit_id: adminUnitId },
+      attributes: ['parcel_number'],
+      transaction,
+      raw: true
+    });
+
+    cache.clear();
+    existingRecords.forEach(record => {
+      cache.add(`${record.parcel_number}`);
+    });
+  } catch (error) {
+    console.warn('Cache update warning:', error.message);
+  }
+}
+//end of import xlsx
 
 const saveLandRecordAsDraftService = async (
   data,

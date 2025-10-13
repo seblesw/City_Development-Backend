@@ -306,237 +306,350 @@ const importPDFs = async ({ files, uploaderId }) => {
   const errorFiles = [];
   const processedFiles = [];
   const skippedFiles = [];
+  const processingErrors = [];
+  const matchStatistics = {
+    exact: 0,
+    case_insensitive: 0,
+    clean_special_chars: 0,
+    fuzzy: 0,
+    not_found: 0
+  };
 
-  for (const [index, file] of files.entries()) {
-    try {
-      const plotNumberToMatch = file.filenameForMatching || file.originalname;
+  try {
+    // Get all documents once for efficient matching
+    const allDocuments = await Document.findAll();
+    
+    // Create optimized lookup maps
+    const exactMatchMap = new Map();
+    const normalizedMatchMap = new Map();
+    const cleanMatchMap = new Map();
 
-      if (!plotNumberToMatch || plotNumberToMatch.trim() === "") {
-        unmatchedLogs.push(
-          `Invalid filename: '${file.originalname}' - cannot extract plot number`
-        );
-        errorFiles.push({
-          filename: file.originalname,
-          error: "Invalid filename format",
-        });
-        continue;
-      }
+    allDocuments.forEach(doc => {
+      if (!doc.plot_number) return;
 
+      const plotNumber = doc.plot_number.trim();
       
-      let document = await Document.findOne({
-        where: { plot_number: plotNumberToMatch },
-      });
-
+      // Exact match
+      exactMatchMap.set(plotNumber, doc);
       
-      if (!document) {
-        const allDocuments = await Document.findAll();
-        document = allDocuments.find(
-          (doc) =>
-            doc.plot_number &&
-            doc.plot_number.toLowerCase().trim() ===
-              plotNumberToMatch.toLowerCase().trim()
-        );
+      // Case-insensitive normalized match
+      const normalized = plotNumber.toLowerCase().trim();
+      if (!normalizedMatchMap.has(normalized)) {
+        normalizedMatchMap.set(normalized, doc);
       }
-
       
-      if (!document) {
-        const cleanPlotNumber = plotNumberToMatch
-          .replace(/[^\w\s]/gi, "")
-          .trim();
-        const allDocuments = await Document.findAll();
-        document = allDocuments.find(
-          (doc) =>
-            doc.plot_number &&
-            doc.plot_number.replace(/[^\w\s]/gi, "").trim() === cleanPlotNumber
-        );
+      // Clean alphanumeric only match (for fuzzy matching)
+      const cleanPlot = plotNumber.replace(/[^\p{L}\p{N}]/gu, "");
+      if (cleanPlot && !cleanMatchMap.has(cleanPlot)) {
+        cleanMatchMap.set(cleanPlot, doc);
       }
+    });
 
-      if (!document) {
-        const logMsg = `No document found with plot_number matching: '${plotNumberToMatch}'. File: '${file.originalname}'`;
-        unmatchedLogs.push(logMsg);
-        errorFiles.push({
-          filename: file.originalname,
-          plotNumberAttempted: plotNumberToMatch,
-          error: "No matching document found",
-        });
-
-        
-        try {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (err) {
-          unmatchedLogs.push(
-            `Failed to delete file: ${file.path} - ${err.message}`
-          );
+    for (const [index, file] of files.entries()) {
+      try {
+        // Skip files with processing errors from controller
+        if (file.processingError) {
+          processingErrors.push(`File processing error for ${file.originalname}: ${file.processingError}`);
+          continue;
         }
-        continue;
-      }
 
-      const serverRelativePath = file.serverRelativePath || file.path;
+        const plotNumberToMatch = file.filenameForMatching;
+        const cleanPlotNumber = file.cleanPlotNumber;
 
-      
-      const filesArray = Array.isArray(document.files)
-        ? document.files.map((f) =>
-            typeof f === "string"
-              ? {
-                  file_path: f,
-                  file_name: path.basename(f),
-                  mime_type: "application/pdf",
-                  file_size: 0,
-                  uploaded_at: new Date(),
-                  uploaded_by: null,
-                }
-              : f
-          )
-        : [];
+        // Enhanced filename validation
+        if (!plotNumberToMatch || plotNumberToMatch.trim() === "") {
+          const errorMsg = `Invalid filename: '${file.originalname}' - cannot extract valid plot number`;
+          unmatchedLogs.push(errorMsg);
+          errorFiles.push({
+            filename: file.originalname,
+            error: "Invalid filename format - empty or malformed",
+            plotNumberAttempted: plotNumberToMatch,
+            type: "validation_error"
+          });
+          matchStatistics.not_found++;
+          await safeFileDelete(file.path, file.originalname);
+          continue;
+        }
 
-      
-      const fileNameExists = filesArray.some(
-        (f) =>
-          f.file_name &&
-          f.file_name.toLowerCase() === file.originalname.toLowerCase()
-      );
+        // Enhanced matching strategy with priority
+        let document = null;
+        let matchType = "not_found";
 
-      if (fileNameExists) {
-        const skipMsg = `File '${file.originalname}' already exists for plot ${document.plot_number}. Skipping duplicate.`;
-        unmatchedLogs.push(skipMsg);
-        skippedFiles.push({
+        // 1. Exact match (highest priority)
+        if (exactMatchMap.has(plotNumberToMatch)) {
+          document = exactMatchMap.get(plotNumberToMatch);
+          matchType = "exact";
+          matchStatistics.exact++;
+        }
+        
+        // 2. Case-insensitive match
+        else if (normalizedMatchMap.has(plotNumberToMatch.toLowerCase())) {
+          document = normalizedMatchMap.get(plotNumberToMatch.toLowerCase());
+          matchType = "case_insensitive";
+          matchStatistics.case_insensitive++;
+        }
+        
+        // 3. Clean alphanumeric match
+        else if (cleanPlotNumber && cleanMatchMap.has(cleanPlotNumber)) {
+          document = cleanMatchMap.get(cleanPlotNumber);
+          matchType = "clean_special_chars";
+          matchStatistics.clean_special_chars++;
+        }
+
+        // 4. Enhanced fuzzy matching for Ethiopian characters and common issues
+        if (!document) {
+          const fuzzyMatch = allDocuments.find(doc => {
+            if (!doc.plot_number) return false;
+            
+            const docPlot = doc.plot_number.trim();
+            const filePlot = plotNumberToMatch.trim();
+            
+            // Generate common variations for fuzzy matching
+            const variations = [
+              docPlot,
+              docPlot.replace(/[_-]/g, ' '), // underscores/hyphens to spaces
+              docPlot.replace(/\s+/g, '_'), // spaces to underscores
+              docPlot.replace(/\s+/g, '-'), // spaces to hyphens
+              docPlot.replace(/[^\p{L}\p{N}]/gu, ''), // alphanumeric only
+            ];
+            
+            return variations.some(variant => 
+              variant.toLowerCase() === filePlot.toLowerCase() ||
+              variant.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase() === 
+                filePlot.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase()
+            );
+          });
+          
+          if (fuzzyMatch) {
+            document = fuzzyMatch;
+            matchType = "fuzzy";
+            matchStatistics.fuzzy++;
+          }
+        }
+
+        if (!document) {
+          const logMsg = `No document found matching: '${plotNumberToMatch}'. File: '${file.originalname}'. Tried exact, case-insensitive, clean, and fuzzy matching.`;
+          unmatchedLogs.push(logMsg);
+          errorFiles.push({
+            filename: file.originalname,
+            plotNumberAttempted: plotNumberToMatch,
+            cleanPlotNumber: cleanPlotNumber,
+            error: "No matching document found after multiple matching strategies",
+            matchAttempts: ["exact", "case_insensitive", "clean_special_chars", "fuzzy"],
+            type: "no_match"
+          });
+          matchStatistics.not_found++;
+
+          await safeFileDelete(file.path, file.originalname);
+          continue;
+        }
+
+        // Enhanced duplicate checking
+        const filesArray = Array.isArray(document.files)
+          ? document.files.map(f => 
+              typeof f === "string"
+                ? {
+                    file_path: f,
+                    file_name: path.basename(f),
+                    mime_type: "application/pdf",
+                    file_size: 0,
+                    uploaded_at: new Date(),
+                    uploaded_by: null,
+                  }
+                : f
+            )
+          : [];
+
+        // Check for duplicate filename (case-insensitive)
+        const fileNameExists = filesArray.some(f => 
+          f.file_name && f.file_name.toLowerCase() === file.originalname.toLowerCase()
+        );
+
+        if (fileNameExists) {
+          const skipMsg = `File '${file.originalname}' already exists for plot ${document.plot_number}. Skipping duplicate filename.`;
+          unmatchedLogs.push(skipMsg);
+          skippedFiles.push({
+            filename: file.originalname,
+            plotNumber: document.plot_number,
+            documentId: document.id,
+            reason: "Duplicate filename",
+            matchType: matchType,
+            type: "duplicate_filename"
+          });
+
+          await safeFileDelete(file.path, file.originalname);
+          continue;
+        }
+
+        // Check for duplicate file path
+        const serverRelativePath = file.serverRelativePath || file.path;
+        const filePathExists = filesArray.some(f => f.file_path === serverRelativePath);
+
+        if (filePathExists) {
+          const skipMsg = `File path already exists in document: '${serverRelativePath}' for plot ${document.plot_number}`;
+          unmatchedLogs.push(skipMsg);
+          skippedFiles.push({
+            filename: file.originalname,
+            plotNumber: document.plot_number,
+            documentId: document.id,
+            reason: "Duplicate file path",
+            matchType: matchType,
+            type: "duplicate_file_path"
+          });
+
+          await safeFileDelete(file.path, file.originalname);
+          continue;
+        }
+
+        // Add new file to document with enhanced metadata
+        const newFileMetadata = {
+          file_path: serverRelativePath,
+          file_name: file.originalname,
+          mime_type: file.mimetype || "application/pdf",
+          file_size: file.size,
+          uploaded_at: new Date(),
+          uploaded_by: uploaderId,
+          import_timestamp: new Date().toISOString(),
+          match_type: matchType
+        };
+
+        filesArray.push(newFileMetadata);
+
+        // Update document
+        await document.update({
+          files: filesArray,
+          updated_at: new Date(),
+          uploaded_by: uploaderId,
+        });
+
+        // Track successful updates
+        updatedDocuments.push({
+          id: document.id,
+          plot_number: document.plot_number,
+          document_type: document.document_type,
+          files_count: filesArray.length,
+          new_file: newFileMetadata,
+          match_type: matchType
+        });
+
+        processedFiles.push({
           filename: file.originalname,
           plotNumber: document.plot_number,
-          reason: "Duplicate file",
+          documentId: document.id,
+          status: "success",
+          matchType: matchType
         });
 
-        try {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (err) {
-          unmatchedLogs.push(`Failed to delete duplicate file: ${err.message}`);
-        }
-        continue;
+        // Update land record with enhanced logging
+        await updateLandRecordActionLog(document, uploaderId, file, matchType);
+
+      } catch (error) {
+        const errorMsg = `Error processing file '${file.originalname}': ${error.message}`;
+        console.error(`File processing error for ${file.originalname}:`, error);
+        unmatchedLogs.push(errorMsg);
+        errorFiles.push({
+          filename: file.originalname,
+          plotNumberAttempted: file.filenameForMatching,
+          error: error.message,
+          stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+          type: "processing_error"
+        });
+        processingErrors.push(errorMsg);
+        
+        await safeFileDelete(file.path, file.originalname);
       }
-
-      
-      const filePathExists = filesArray.some(
-        (f) => f.file_path === serverRelativePath
-      );
-
-      if (filePathExists) {
-        unmatchedLogs.push(`File path already exists: '${serverRelativePath}'`);
-        try {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (err) {
-          unmatchedLogs.push(`Failed to delete file: ${err.message}`);
-        }
-        continue;
-      }
-
-      
-      const newFileMetadata = {
-        file_path: serverRelativePath,
-        file_name: file.originalname,
-        mime_type: file.mimetype || "application/pdf",
-        file_size: file.size,
-        uploaded_at: new Date(),
-        uploaded_by: uploaderId,
-      };
-
-      filesArray.push(newFileMetadata);
-
-      
-      await document.update({
-        files: filesArray,
-        updated_at: new Date(),
-        uploaded_by: uploaderId,
-      });
-
-      
-      updatedDocuments.push({
-        id: document.id,
-        plot_number: document.plot_number,
-        document_type: document.document_type,
-        files_count: filesArray.length,
-        new_file: newFileMetadata,
-      });
-
-      processedFiles.push({
-        filename: file.originalname,
-        plotNumber: document.plot_number,
-        documentId: document.id,
-        status: "success",
-      });
-
-      
-      try {
-        const landRecord = await LandRecord.findByPk(document.land_record_id);
-        if (landRecord) {
-          const actionLog = Array.isArray(landRecord.action_log)
-            ? landRecord.action_log
-            : [];
-
-          let uploader = null;
-          try {
-            uploader = await User.findByPk(uploaderId, {
-              attributes: ["id", "first_name", "middle_name", "last_name"],
-            });
-          } catch (e) {}
-
-          actionLog.push({
-            action: `DOCUMENT_UPLOAD_${document.document_type || "PDF"}`,
-            document_id: document.id,
-            changed_by: uploader
-              ? {
-                  id: uploader.id,
-                  first_name: uploader.first_name,
-                  middle_name: uploader.middle_name,
-                  last_name: uploader.last_name,
-                }
-              : { id: uploaderId },
-            changed_at: new Date().toISOString(),
-            details: {
-              file_name: file.originalname,
-              file_path: serverRelativePath,
-              file_size: file.size,
-              plot_number: document.plot_number,
-            },
-          });
-
-          await landRecord.update({
-            action_log: actionLog,
-            updated_at: new Date(),
-          });
-        }
-      } catch (logError) {}
-    } catch (error) {
-      const errorMsg = `Error processing ${file.originalname}: ${error.message}`;
-      unmatchedLogs.push(errorMsg);
-      errorFiles.push({
-        filename: file.originalname,
-        error: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-      });
     }
+  } catch (error) {
+    console.error('PDF import service error:', error);
+    throw error; // Re-throw to be handled by controller
   }
 
   return {
-    message: `${updatedDocuments.length} document(s) successfully updated with new PDF files. ${unmatchedLogs.length} files could not be matched.`,
+    message: generateSummaryMessage(updatedDocuments.length, unmatchedLogs.length, skippedFiles.length),
     updatedDocuments,
     unmatchedLogs,
     errorFiles,
     processedFiles,
     skippedFiles,
+    processingErrors,
+    matchStatistics,
     summary: {
       total: files.length,
       successful: updatedDocuments.length,
-      failed: unmatchedLogs.length + errorFiles.length,
+      failed: unmatchedLogs.length,
       skipped: skippedFiles.length,
+      processingErrors: processingErrors.length
     },
   };
 };
 
+// Helper function for safe file deletion
+const safeFileDelete = async (filePath, filename) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (deleteError) {
+    console.warn(`Failed to delete file ${filename} at ${filePath}:`, deleteError.message);
+    // Don't throw, just log the warning
+  }
+};
+
+// Helper function to update land record action log
+const updateLandRecordActionLog = async (document, uploaderId, file, matchType) => {
+  try {
+    const landRecord = await LandRecord.findByPk(document.land_record_id);
+    if (!landRecord) return;
+
+    const actionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+
+    let uploader = null;
+    try {
+      uploader = await User.findByPk(uploaderId, {
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+      });
+    } catch (userError) {
+      console.warn('Could not fetch uploader details:', userError.message);
+    }
+
+    actionLog.push({
+      action: `DOCUMENT_UPLOAD_${document.document_type || "PDF"}`,
+      document_id: document.id,
+      changed_by: uploader ? {
+        id: uploader.id,
+        first_name: uploader.first_name,
+        middle_name: uploader.middle_name,
+        last_name: uploader.last_name,
+      } : { id: uploaderId },
+      changed_at: new Date().toISOString(),
+      details: {
+        file_name: file.originalname,
+        file_path: file.serverRelativePath || file.path,
+        file_size: file.size,
+        plot_number: document.plot_number,
+        match_type: matchType,
+        upload_method: "bulk_pdf_import"
+      },
+    });
+
+    await landRecord.update({
+      action_log: actionLog,
+      updated_at: new Date(),
+    });
+  } catch (logError) {
+    console.warn('Failed to update land record action log:', logError.message);
+  }
+};
+
+// Helper function for summary message
+const generateSummaryMessage = (successful, unmatched, skipped) => {
+  const parts = [];
+  if (successful > 0) parts.push(`${successful} document(s) successfully updated`);
+  if (unmatched > 0) parts.push(`${unmatched} file(s) could not be matched`);
+  if (skipped > 0) parts.push(`${skipped} file(s) skipped (duplicates)`);
+  
+  return parts.length > 0 ? parts.join(', ') : 'No files processed';
+};
 const getDocumentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
