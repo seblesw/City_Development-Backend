@@ -8,6 +8,7 @@ router.post(  "/:land_record_id/owners",
   upload.single("profile_picture"),
   authMiddleware.protect, userController.addNewLandOwnerController);
 router.get("/",  userController.getAllUsersController);
+router.get("/creator", authMiddleware.protect, userController.getUsersByCreatorIdController);
 router.get("/admin-unit", authMiddleware.protect, userController.getAllUserByAdminUnitController);
 router.post("/deactivate/:id", authMiddleware.protect, userController.deactivateUserController);
 router.post("/activate/:id", authMiddleware.protect, userController.activateUserController);

@@ -8,6 +8,7 @@ const {
   activateUserService,
   addNewLandOwnerService,
   removeLandOwnerFromLandService,
+  getUsersByCreatorIdService,
 } = require("../services/userService");
 const fs = require("fs");
 
@@ -92,6 +93,38 @@ const getUserByIdController = async (req, res) => {
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
+  }
+};
+const getUsersByCreatorIdController = async (req, res) => {
+  try {
+    const creatorId = req.user.id;
+    if (!creatorId) {
+      return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
+    }
+    
+    const { page = 1, limit = 10, is_active } = req.query;
+    
+    const users = await getUsersByCreatorIdService(creatorId, {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      is_active: is_active !== undefined ? is_active === 'true' : undefined
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: "ሁሉም ተጠቃሚዎች በተሳካ ሁኔታ ተገኝተዋል።",
+      data: users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        count: users.length
+      }
+    });
+  } catch (error) {
+    return res.status(400).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
 
@@ -190,6 +223,7 @@ module.exports = {
   removeOwnerController,
   activateUserController,
   getUserByIdController,
+  getUsersByCreatorIdController,
   updateUserController,
   getAllUsersController,
   getAllUserByAdminUnitController,

@@ -330,6 +330,68 @@ const getUserById = async (id, options = {}) => {
     throw new Error(`ተጠቃሚ መልሶ ማግኘት ስህተት: ${error.message}`);
   }
 };
+const getUsersByCreatorIdService = async (creatorId, options = {}) => {
+  const { transaction, page, limit, is_active } = options;
+  
+  try {
+    const whereClause = {
+      created_by: creatorId,
+      deletedAt: { [Op.eq]: null },
+    };
+    
+    // Add optional active filter
+    if (is_active !== undefined) {
+      whereClause.is_active = is_active;
+    }
+    
+    const queryOptions = {
+      where: whereClause,
+      include: [
+        { model: Role, as: "role", attributes: ["id", "name"] },
+        {
+          model: AdministrativeUnit,
+          as: "administrativeUnit",
+          attributes: ["id", "name"],
+        },
+        {
+          model: OversightOffice,
+          as: "oversightOffice",
+          attributes: ["id", "name"],
+        },
+      ],
+      attributes: [
+        "id",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "email",
+        "phone_number",
+        "role_id",
+        "administrative_unit_id",
+        "oversight_office_id",
+        "national_id",
+        "address",
+        "is_active",
+        "last_login",
+        "createdAt",
+        "updatedAt"
+      ],
+      order: [["createdAt", "DESC"]],
+      transaction,
+    };
+    
+    // Add pagination if provided
+    if (page && limit) {
+      queryOptions.offset = (page - 1) * limit;
+      queryOptions.limit = limit;
+    }
+    
+    const users = await User.findAll(queryOptions);
+    return users;
+  } catch (error) {
+    throw new Error(`ተጠቃሚዎችን ማግኘት ስህተት: ${error.message}`);
+  }
+};
 const deleteUser = async (id, deleterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
@@ -830,7 +892,7 @@ module.exports = {
   createLandOwner,
   updateLandOwnersService,
   getUserById,
-  
+  getUsersByCreatorIdService,
   addNewLandOwnerService,
   deactivateUserService,
   activateUserService,

@@ -10,9 +10,8 @@ exports.getRoleByIdService = async (id) => {
   return role;
 };
 
-exports.getAllRolesService = async (filters = {}) => {
+exports.getAllRolesService = async () => {
   return await Role.findAll({
-    where: filters,
     order: [["createdAt", "DESC"]],
   });
 };

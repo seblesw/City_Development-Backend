@@ -24,7 +24,7 @@ const createRole = async (req, res) => {
 
 const getAllRoles = async (req, res) => {
   try {
-    const roles = await getAllRolesService(req.query);
+    const roles = await getAllRolesService();
     const numberOfRoles = roles.length;
     res.status(200).json({
       status: "success",
