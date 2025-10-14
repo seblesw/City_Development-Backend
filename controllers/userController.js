@@ -102,12 +102,11 @@ const getUsersByCreatorIdController = async (req, res) => {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
     }
     
-    const { page = 1, limit = 10, is_active } = req.query;
+    const { page = 1, limit = 10, } = req.query;
     
     const users = await getUsersByCreatorIdService(creatorId, {
       page: parseInt(page),
       limit: parseInt(limit),
-      is_active: is_active !== undefined ? is_active === 'true' : undefined
     });
     
     res.status(200).json({

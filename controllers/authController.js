@@ -9,10 +9,26 @@ const {
   registerOfficialByManagerService,
 } = require("../services/authServices");
 const fs= require("fs")
+
 const registerOfficialController = async (req, res) => {
+  let fileToDelete = null;
+  
   try {
     const { body } = req;
+    const creatorId = req.user.id;
+    
+    if (!creatorId) {
+      return res.status(401).json({ 
+        error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" 
+      });
+    }
+
+    // Store the file path immediately for cleanup
+    fileToDelete = req.file ? req.file.path : null;
+    
+    // Use the filename for the database, but keep the actual path for cleanup
     const profilePicture = req.file ? `uploads/pictures/${req.file.filename}` : null;
+
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
@@ -26,16 +42,13 @@ const registerOfficialController = async (req, res) => {
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
-      profile_picture:profilePicture,
+      profile_picture: profilePicture,
       relationship_type: null,
       marital_status: body.marital_status || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
+      created_by: creatorId,
     };
 
-
-
-    
- 
     const official = await registerOfficial(data);
 
     return res.status(201).json({
@@ -43,11 +56,29 @@ const registerOfficialController = async (req, res) => {
       data: official,
     });
   } catch (error) {
-     if (req.file) fs.unlinkSync(req.file.path);
+    // Safe file deletion with proper error handling
+    if (fileToDelete) {
+      safeFileDelete(fileToDelete);
+    }
     
     return res.status(400).json({ error: error.message });
   }
 };
+
+// Helper function for safe file deletion
+const safeFileDelete = (filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log('Successfully deleted file:', filePath);
+    } else {
+      console.log('File not found, skipping deletion:', filePath);
+    }
+  } catch (fileError) {
+    console.error('Error deleting file:', fileError.message);
+  }
+};
+
 const registerOfficialByManagerController = async (req, res) => {
   try {
     const { body } = req;

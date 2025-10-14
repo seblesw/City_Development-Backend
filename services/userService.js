@@ -331,7 +331,7 @@ const getUserById = async (id, options = {}) => {
   }
 };
 const getUsersByCreatorIdService = async (creatorId, options = {}) => {
-  const { transaction, page, limit, is_active } = options;
+  const { transaction, page, limit} = options;
   
   try {
     const whereClause = {
@@ -339,10 +339,6 @@ const getUsersByCreatorIdService = async (creatorId, options = {}) => {
       deletedAt: { [Op.eq]: null },
     };
     
-    // Add optional active filter
-    if (is_active !== undefined) {
-      whereClause.is_active = is_active;
-    }
     
     const queryOptions = {
       where: whereClause,

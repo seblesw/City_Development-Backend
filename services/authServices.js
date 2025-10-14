@@ -22,13 +22,12 @@ const registerOfficial = async (data, options = {}) => {
     if (
       !data.first_name ||
       !data.last_name ||
-      !data.middle_name ||
       !data.phone_number ||
       !data.national_id ||
       !data.role_id
     ) {
       throw new Error(
-        "ስም፣ የአባት ስም፣ የአያት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር፣ ኢሜል መግለጽ አለባቸው።"
+        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
       );
     }
 
