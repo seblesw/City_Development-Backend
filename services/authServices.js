@@ -111,7 +111,6 @@ const registerOfficial = async (data, options = {}) => {
 };
 const registerOfficialByManagerService = async (data, user, options = {}) => {
   const { transaction } = options;
-  let t = transaction;
 
   try {
     if (
@@ -126,26 +125,16 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
       );
     }
 
-    t = t || (await sequelize.transaction());
-        
     // Verify that the manager has an administrative unit
     if (!user.administrative_unit_id) {
       throw new Error("ማኔጅሩ አስተዳደራዊ ክፍል የለውም።");
     }
-    
-    // Verify the administrative unit exists
-    const administrativeUnit = await AdministrativeUnit.findByPk(user.administrative_unit_id, {
-      transaction: t,
-    });
-    if (!administrativeUnit) {
-      throw new Error("የማኔጅር አስተዳደራዊ ክፍል አልተገኘም።");
-    }
-
+      const administrativeUnitId = user.administrative_unit_id;
     // Email validation (optional field)
     if (data.email) {
       const existingEmail = await User.findOne({
         where: { email: data.email, deletedAt: { [Op.eq]: null } },
-        transaction: t,
+        transaction,
       });
       if (existingEmail) {
         throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
@@ -159,7 +148,7 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
           phone_number: data.phone_number,
           deletedAt: { [Op.eq]: null },
         },
-        transaction: t,
+        transaction,
       });
       if (existingPhone) {
         throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
@@ -169,7 +158,7 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
     // National ID validation
     const existingNationalId = await User.findOne({
       where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
-      transaction: t,
+      transaction,
     });
     if (existingNationalId) {
       throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
@@ -179,21 +168,17 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
     const rawPassword = data.password || "12345678";
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    // Create official
-    const official = await User.create(
-      {
-        ...data,
-        password: hashedPassword,
-        administrative_unit_id: user.administrative_unit_id,
-      },
-      { transaction: t }
-    );
+    // Create official with explicit administrative_unit_id
+    const officialData = {
+      ...data,
+      password: hashedPassword,
+      administrative_unit_id: administrativeUnitId,
+    };
 
-    if (!transaction) await t.commit();
+    const official = await User.create(officialData, { transaction });
 
     return official;
   } catch (error) {
-    if (!transaction && t) await t.rollback();
     throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
   }
 };
