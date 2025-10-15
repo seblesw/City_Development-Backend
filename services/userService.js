@@ -821,7 +821,6 @@ const addNewLandOwnerService = async ({
     throw error;
   }
 };
-
 const removeLandOwnerFromLandService = async (
   land_record_id,
   owner_id,
