@@ -9,6 +9,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
+const e = require("express");
 
 const createLandOwner = async (
   ownersData,
@@ -29,6 +30,9 @@ const createLandOwner = async (
         const phoneNumber = ownerData.phone_number
           ? String(ownerData.phone_number)
           : null;
+        const email = ownerData.email
+          ? String(ownerData.email).toLowerCase()
+          : null;
         const profilePicture = ownerData.profile_picture || null;
 
         
@@ -44,6 +48,7 @@ const createLandOwner = async (
 
         if (nationalId) whereClause[Op.or].push({ national_id: nationalId });
         if (phoneNumber) whereClause[Op.or].push({ phone_number: phoneNumber });
+        if (email) whereClause[Op.or].push({ email: email });
 
         const existingUser =
           whereClause[Op.or].length > 0
@@ -57,6 +62,7 @@ const createLandOwner = async (
               ...ownerData,
               national_id: nationalId,
               phone_number: phoneNumber,
+              email:email,
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
               profile_picture: profilePicture || existingUser.profile_picture,
@@ -72,6 +78,7 @@ const createLandOwner = async (
             ...ownerData,
             national_id: nationalId,
             phone_number: phoneNumber,
+            email: email,
             administrative_unit_id: administrativeUnitId,
             password,
             profile_picture: profilePicture,
