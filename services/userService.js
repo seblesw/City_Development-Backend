@@ -21,6 +21,16 @@ const createLandOwner = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // Find the default role - use the actual default name from your Role model
+    const defaultRole = await Role.findOne({ 
+      where: { name: 'ተጠቃሚ' }, // This matches your Role model's default
+      transaction: t 
+    });
+
+    if (!defaultRole) {
+      throw new Error('Default role "ተጠቃሚ" not found');
+    }
+
     const createdOwners = await Promise.all(
       ownersData.map(async (ownerData) => {
         
@@ -35,7 +45,9 @@ const createLandOwner = async (
           : null;
         const profilePicture = ownerData.profile_picture || null;
 
-        
+        // Use the default role_id for all owners
+        const roleId = ownerData.role_id || defaultRole.id;
+
         const password = ownerData.password
           ? await bcrypt.hash(ownerData.password, 10)
           : await bcrypt.hash("12345678", 10);
@@ -56,23 +68,24 @@ const createLandOwner = async (
             : null;
 
         if (existingUser) {
-          
+          // Update existing user - preserve existing role_id unless explicitly provided
           await existingUser.update(
             {
               ...ownerData,
               national_id: nationalId,
               phone_number: phoneNumber,
-              email:email,
+              email: email,
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
               profile_picture: profilePicture || existingUser.profile_picture,
+              role_id: ownerData.role_id || existingUser.role_id, // Keep existing role_id if not provided
             },
             { transaction: t }
           );
           return existingUser;
         }
 
-        
+        // Create new user with default role_id
         return await User.create(
           {
             ...ownerData,
@@ -82,6 +95,7 @@ const createLandOwner = async (
             administrative_unit_id: administrativeUnitId,
             password,
             profile_picture: profilePicture,
+            role_id: roleId, // This is the crucial fix - setting role_id
             created_by: creatorId,
             is_active: true,
           },

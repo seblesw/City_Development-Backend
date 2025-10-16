@@ -71,7 +71,8 @@ router.post(
   // postLimiter,
   upload.fields([
     { name: 'documents', maxCount: 20 },
-    { name: 'profile_picture', maxCount: 10 }
+    { name: 'profile_picture', maxCount: 10 },
+    { name: 'profile_picture_0', maxCount: 10 }
   ]),  landRecordController.createLandRecord
 );
 router.post(
@@ -96,7 +97,7 @@ router.get(
 );
 router.get('/filter-options', landRecordController.getFilterOptions);
 
-router.get('/stats', landRecordController.getLandRecordsStats);
+router.get('/stat', landRecordController.getLandRecordsStats);
 //this helps to filter land records geographically by admin unit
 router.get(
   "/admin-unit-records",
