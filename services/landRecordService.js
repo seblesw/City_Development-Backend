@@ -3650,10 +3650,10 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       administrative_unit: {
         by_status,
         by_zoning,
-        by_ownership, // This is ownership_type
+        by_ownership, 
         by_land_use,
-        by_lease_ownership_type, // NEW: Added this
-        by_lease_transfer_reason, // NEW: Added this
+        by_lease_ownership_type, 
+        by_lease_transfer_reason, 
         area_stats: {
           total_area,
           by_zoning: area_by_zoning,
