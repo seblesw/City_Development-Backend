@@ -63,68 +63,68 @@ const startServer = async () => {
     await db.authenticate();
     console.log('Database connected successfully at', new Date().toISOString());
     //sync the database tables
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
-    console.log('Starting cron job for overdue schedules at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { 
-      try {
-        console.log('Running overdue schedule check at', new Date().toISOString());
-        const penaltySchedules = await checkOverdueSchedules();
-        console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
-      }
-    });
+    // console.log('Starting cron job for overdue schedules at', new Date().toISOString());
+    // cron.schedule('* * * * *', async () => { 
+    //   try {
+    //     console.log('Running overdue schedule check at', new Date().toISOString());
+    //     const penaltySchedules = await checkOverdueSchedules();
+    //     console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
+    //   } catch (error) {
+    //     console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
+    //   }
+    // });
 
     // Cron job for reminder notifications
-    console.log('Starting cron job for reminder notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { 
-      try {
-        console.log('Running reminder notification creation at', new Date().toISOString());
-        const notifications = await createReminderNotifications();
-        console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-      }
-    });
+    // console.log('Starting cron job for reminder notifications at', new Date().toISOString());
+    // cron.schedule('* * * * *', async () => { 
+    //   try {
+    //     console.log('Running reminder notification creation at', new Date().toISOString());
+    //     const notifications = await createReminderNotifications();
+    //     console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    //   } catch (error) {
+    //     console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    //   }
+    // });
 
     // Cron job for overdue notifications
-    console.log('Starting cron job for overdue notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { 
-      try {
-        console.log('Running overdue notification creation at', new Date().toISOString());
-        const notifications = await createOverdueNotifications();
-        // console.log(`${notifications.length} ያለፈበት ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error(`ያለፈበት ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-      }
-    });
+    // console.log('Starting cron job for overdue notifications at', new Date().toISOString());
+    // cron.schedule('* * * * *', async () => { 
+    //   try {
+    //     console.log('Running overdue notification creation at', new Date().toISOString());
+    //     const notifications = await createOverdueNotifications();
+    //     // console.log(`${notifications.length} ያለፈበት ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    //   } catch (error) {
+    //     console.error(`ያለፈበት ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    //   }
+    // });
 
     // Cron job for global notice notifications
-    console.log('Starting cron job for global notice notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { 
-      try {
-        console.log('Running global notice notification creation at', new Date().toISOString());
-        const notifications = await createGlobalNoticeNotifications();
-        console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-      }
-    });
+    // console.log('Starting cron job for global notice notifications at', new Date().toISOString());
+    // cron.schedule('* * * * *', async () => { 
+    //   try {
+    //     console.log('Running global notice notification creation at', new Date().toISOString());
+    //     const notifications = await createGlobalNoticeNotifications();
+    //     console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    //   } catch (error) {
+    //     console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    //   }
+    // });
 
     // Cron job for sending notifications 
-    console.log('Starting cron job for sending notifications at', new Date().toISOString());
-    cron.schedule('* * * * *', async () => { 
-      try {
-        console.log('Running notification sending at', new Date().toISOString());
-        const sentCount = await sendPendingNotifications();
-        // console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
-      } catch (error) {
-        console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
-      }
-    });
+    // console.log('Starting cron job for sending notifications at', new Date().toISOString());
+    // cron.schedule('* * * * *', async () => { 
+    //   try {
+    //     console.log('Running notification sending at', new Date().toISOString());
+    //     const sentCount = await sendPendingNotifications();
+    //     // console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
+    //   } catch (error) {
+    //     console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
+    //   }
+    // });
 
     app.listen(port, () => {
       console.log(`Server running on port ${port} at ${new Date().toISOString()}`);
