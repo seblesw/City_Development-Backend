@@ -28,7 +28,7 @@ const createLandRecordService = async (data, files, user) => {
   try {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
-    
+
     const existingRecord = await LandRecord.findOne({
       where: {
         parcel_number: land_record.parcel_number,
@@ -42,11 +42,11 @@ const createLandRecordService = async (data, files, user) => {
       throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
     }
 
-    
     const processOwnerPhotos = () => {
-      
       const profilePictures = Array.isArray(files?.profile_picture)
-        ? files.profile_picture.filter(file => file && file.serverRelativePath)
+        ? files.profile_picture.filter(
+            (file) => file && file.serverRelativePath
+          )
         : files?.profile_picture && files.profile_picture.serverRelativePath
         ? [files.profile_picture]
         : [];
@@ -59,7 +59,6 @@ const createLandRecordService = async (data, files, user) => {
 
     const ownersWithPhotos = processOwnerPhotos();
 
-    
     const landRecord = await LandRecord.create(
       {
         ...land_record,
@@ -97,7 +96,6 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -128,12 +126,11 @@ const createLandRecordService = async (data, files, user) => {
       )
     );
 
-    
     const processDocuments = async () => {
       if (!documents.length) return [];
 
-      const filesArr = Array.isArray(files?.documents) 
-        ? files.documents.filter(file => file && file.serverRelativePath)
+      const filesArr = Array.isArray(files?.documents)
+        ? files.documents.filter((file) => file && file.serverRelativePath)
         : [];
 
       return Promise.all(
@@ -155,13 +152,11 @@ const createLandRecordService = async (data, files, user) => {
 
     const documentResults = await processDocuments();
 
-    
     let landPayment = null;
     if (
       land_payment &&
       (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
     ) {
-      
       if (!land_payment.payment_type) {
         throw new Error("የክፍያ አይነት መግለጽ አለበት።");
       }
@@ -188,7 +183,6 @@ const createLandRecordService = async (data, files, user) => {
   } catch (error) {
     await t.rollback();
 
-    
     if (files) {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach((file) => {
@@ -206,7 +200,11 @@ const createLandRecordService = async (data, files, user) => {
   }
 };
 //import xlsx
-const importLandRecordsFromXLSXService = async (filePath, user, options = {}) => {
+const importLandRecordsFromXLSXService = async (
+  filePath,
+  user,
+  options = {}
+) => {
   const { transaction } = options;
   const startTime = Date.now();
   const t = transaction || (await sequelize.transaction());
@@ -217,10 +215,10 @@ const importLandRecordsFromXLSXService = async (filePath, user, options = {}) =>
     }
 
     const adminUnitId = user.administrative_unit_id;
-    
+
     // Pre-load cache for duplicate checking
     const cache = await buildOptimizedCache(adminUnitId, t);
-    
+
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -232,12 +230,13 @@ const importLandRecordsFromXLSXService = async (filePath, user, options = {}) =>
       performance: {
         rowsPerSecond: 0,
         batchesProcessed: 0,
-        averageBatchTime: 0
+        averageBatchTime: 0,
       },
     };
 
     // Parallel: Parse file and validate in one pass
-    const { validatedData, validationErrors } = await parseAndValidateXLSXOptimized(filePath);
+    const { validatedData, validationErrors } =
+      await parseAndValidateXLSXOptimized(filePath);
     results.totalRows = validatedData.length;
     results.errors.push(...validationErrors);
 
@@ -252,21 +251,21 @@ const importLandRecordsFromXLSXService = async (filePath, user, options = {}) =>
     // Process in optimized batches
     const BATCH_SIZE = 100;
     const batches = Array.from(recordsGrouped.entries());
-    
+
     let totalBatchTime = 0;
-    
+
     for (let i = 0; i < batches.length; i += BATCH_SIZE) {
       const batchStartTime = Date.now();
       const batch = batches.slice(i, i + BATCH_SIZE);
-      
+
       const batchResults = await processBatchOptimized(
-        batch, 
-        adminUnitId, 
-        user, 
-        cache, 
+        batch,
+        adminUnitId,
+        user,
+        cache,
         t
       );
-      
+
       // Aggregate results
       results.createdCount += batchResults.createdCount;
       results.skippedCount += batchResults.skippedCount;
@@ -276,7 +275,7 @@ const importLandRecordsFromXLSXService = async (filePath, user, options = {}) =>
       const batchTime = Date.now() - batchStartTime;
       totalBatchTime += batchTime;
       results.performance.batchesProcessed++;
-      
+
       // Progress-based transaction management
       if (!transaction && i > 0 && i % 200 === 0) {
         await t.commit();
@@ -288,10 +287,12 @@ const importLandRecordsFromXLSXService = async (filePath, user, options = {}) =>
 
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
-    results.performance.rowsPerSecond = results.totalRows > 0 ? 
-      results.totalRows / results.processingTime : 0;
-    results.performance.averageBatchTime = results.performance.batchesProcessed > 0 ?
-      totalBatchTime / results.performance.batchesProcessed : 0;
+    results.performance.rowsPerSecond =
+      results.totalRows > 0 ? results.totalRows / results.processingTime : 0;
+    results.performance.averageBatchTime =
+      results.performance.batchesProcessed > 0
+        ? totalBatchTime / results.performance.batchesProcessed
+        : 0;
 
     if (!transaction) await t.commit();
     return results;
@@ -306,14 +307,14 @@ async function buildOptimizedCache(adminUnitId, transaction) {
   try {
     const existingRecords = await LandRecord.findAll({
       where: { administrative_unit_id: adminUnitId },
-      attributes: ['parcel_number'],
+      attributes: ["parcel_number"],
       transaction,
-      raw: true
+      raw: true,
     });
 
-    return new Set(existingRecords.map(record => `${record.parcel_number}`));
+    return new Set(existingRecords.map((record) => `${record.parcel_number}`));
   } catch (error) {
-    console.warn('Cache build warning:', error.message);
+    console.warn("Cache build warning:", error.message);
     return new Set();
   }
 }
@@ -325,7 +326,7 @@ async function parseAndValidateXLSXOptimized(filePath) {
       cellDates: true,
       dense: true,
     });
-    
+
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
@@ -353,8 +354,9 @@ async function parseAndValidateXLSXOptimized(filePath) {
         row.plot_number = row.plot_number.toString().trim();
         row.land_use = row.land_use.toString().trim();
         row.ownership_type = row.ownership_type.toString().trim();
-        row.ownership_category = row.ownership_category?.toString().trim() || 'የግል';
-        
+        row.ownership_category =
+          row.ownership_category?.toString().trim() || "የግል";
+
         // Numeric field processing
         row.land_level = parseInt(row.land_level) || 1;
         row.area = parseFloat(row.area) || 0;
@@ -387,18 +389,24 @@ function groupXLSXRowsOptimized(xlsxData) {
 }
 
 // OPTIMIZED: Batch processing with parallel execution
-async function processBatchOptimized(batchEntries, adminUnitId, user, cache, transaction) {
+async function processBatchOptimized(
+  batchEntries,
+  adminUnitId,
+  user,
+  cache,
+  transaction
+) {
   const batchResults = {
     createdCount: 0,
     skippedCount: 0,
     errors: [],
-    errorDetails: []
+    errorDetails: [],
   };
 
   const processPromises = batchEntries.map(async ([groupKey, rows]) => {
     try {
       const primaryRow = rows[0];
-      
+
       // Fast duplicate check
       const parcelKey = `${primaryRow.parcel_number}`;
       if (cache.has(parcelKey)) {
@@ -407,7 +415,7 @@ async function processBatchOptimized(batchEntries, adminUnitId, user, cache, tra
 
       // Transform data - USING YOUR ORIGINAL TRANSFORM LOGIC
       const transformedData = await transformXLSXData(rows, adminUnitId);
-      
+
       // USE YOUR ORIGINAL createLandRecordService - DON'T CHANGE THE LOGIC
       await createLandRecordService(
         {
@@ -423,16 +431,16 @@ async function processBatchOptimized(batchEntries, adminUnitId, user, cache, tra
           isImport: true,
         }
       );
-      
+
       // Update cache
       cache.add(parcelKey);
-      
+
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error, 
-        primaryRow: rows[0]
+      return {
+        success: false,
+        error,
+        primaryRow: rows[0],
       };
     }
   });
@@ -442,25 +450,28 @@ async function processBatchOptimized(batchEntries, adminUnitId, user, cache, tra
   // Process results
   results.forEach((result, index) => {
     const [groupKey, rows] = batchEntries[index];
-    
-    if (result.status === 'fulfilled') {
+
+    if (result.status === "fulfilled") {
       if (result.value.success) {
         batchResults.createdCount++;
       } else {
         batchResults.skippedCount++;
         handleImportErrorOptimized(
-          result.value.error, 
-          result.value.primaryRow, 
-          index + 1, 
+          result.value.error,
+          result.value.primaryRow,
+          index + 1,
           batchResults
         );
       }
     } else {
       batchResults.skippedCount++;
       handleImportErrorOptimized(
-        result.reason, 
-        { parcel_number: groupKey.split('_')[0], plot_number: groupKey.split('_')[1] }, 
-        index + 1, 
+        result.reason,
+        {
+          parcel_number: groupKey.split("_")[0],
+          plot_number: groupKey.split("_")[1],
+        },
+        index + 1,
         batchResults
       );
     }
@@ -606,17 +617,17 @@ async function updateCacheForTransaction(cache, adminUnitId, transaction) {
   try {
     const existingRecords = await LandRecord.findAll({
       where: { administrative_unit_id: adminUnitId },
-      attributes: ['parcel_number'],
+      attributes: ["parcel_number"],
       transaction,
-      raw: true
+      raw: true,
     });
 
     cache.clear();
-    existingRecords.forEach(record => {
+    existingRecords.forEach((record) => {
       cache.add(`${record.parcel_number}`);
     });
   } catch (error) {
-    console.warn('Cache update warning:', error.message);
+    console.warn("Cache update warning:", error.message);
   }
 }
 //end of import xlsx
@@ -648,7 +659,6 @@ const saveLandRecordAsDraftService = async (
     let documentResults = [];
     let landPayment = null;
 
-    
     if (draft_id) {
       landRecord = await LandRecord.findOne({
         where: {
@@ -677,10 +687,8 @@ const saveLandRecordAsDraftService = async (
         throw new Error("Draft record not found or already submitted");
       }
 
-      
       primaryOwner = landRecord.user;
 
-      
       await landRecord.update(
         {
           ...land_record,
@@ -700,10 +708,7 @@ const saveLandRecordAsDraftService = async (
       });
 
       await landRecord.save({ transaction: t });
-    }
-
-    
-    else {
+    } else {
       if (primary_user) {
         primary_user.administrative_unit_id = administrative_unit_id;
       }
@@ -726,7 +731,6 @@ const saveLandRecordAsDraftService = async (
         },
       ];
 
-      
       if (primary_user && Object.keys(primary_user).length > 0) {
         const ownerResult = await userService.createLandOwner(
           primary_user,
@@ -760,7 +764,6 @@ const saveLandRecordAsDraftService = async (
       );
     }
 
-    
     if (Array.isArray(files) && files.length > 0 && documents.length > 0) {
       documentResults = await Promise.all(
         documents
@@ -797,7 +800,6 @@ const saveLandRecordAsDraftService = async (
       }
     }
 
-    
     if (
       land_payment &&
       (land_payment.payment_type ||
@@ -853,12 +855,12 @@ const getDraftLandRecordService = async (draftId, userId, options = {}) => {
       include: [
         {
           model: User,
-          as: "user", 
+          as: "user",
           attributes: { exclude: ["password"] },
           include: [
             {
               model: User,
-              as: "coOwners", 
+              as: "coOwners",
               attributes: { exclude: ["password"] },
             },
           ],
@@ -883,7 +885,6 @@ const getDraftLandRecordService = async (draftId, userId, options = {}) => {
       throw new Error("Draft record not found or already submitted");
     }
 
-    
     if (draftRecord.coordinates) {
       draftRecord.coordinates = JSON.parse(draftRecord.coordinates);
     }
@@ -922,7 +923,6 @@ const updateDraftLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const existingDraft = await LandRecord.findOne({
       where: {
         id: draftId,
@@ -952,7 +952,6 @@ const updateDraftLandRecordService = async (
       throw new Error("Draft record not found or already submitted");
     }
 
-    
     const {
       primary_user,
       co_owners = [],
@@ -961,7 +960,6 @@ const updateDraftLandRecordService = async (
       land_payment,
     } = data;
 
-    
     let primaryOwnerId = existingDraft.user?.id;
     if (primary_user) {
       const { primaryOwner, coOwners } = await userService.createLandOwner(
@@ -977,7 +975,6 @@ const updateDraftLandRecordService = async (
       land_record.user_id = primaryOwnerId;
     }
 
-    
     await existingDraft.update(
       {
         ...land_record,
@@ -991,7 +988,6 @@ const updateDraftLandRecordService = async (
       { transaction: t }
     );
 
-    
     const documentResults = await Promise.all(
       documents.map(async (doc, index) => {
         const file = files[index];
@@ -1010,7 +1006,6 @@ const updateDraftLandRecordService = async (
           updated_by: user.id,
         };
         if (doc.id) {
-          
           const existingDoc = await Document.findOne({
             where: {
               id: doc.id,
@@ -1033,14 +1028,13 @@ const updateDraftLandRecordService = async (
             return existingDoc;
           }
         }
-        
+
         return documentService.createDocumentService(docData, [file], user.id, {
           transaction: t,
         });
       })
     );
 
-    
     let landPayment;
     if (land_payment) {
       if (!land_payment.payer_id) {
@@ -1051,7 +1045,6 @@ const updateDraftLandRecordService = async (
       }
       const existingPayment = existingDraft.payments?.[0];
       if (existingPayment) {
-        
         await existingPayment.update(
           {
             ...land_payment,
@@ -1065,7 +1058,6 @@ const updateDraftLandRecordService = async (
         );
         landPayment = existingPayment;
       } else {
-        
         landPayment = await landPaymentService.createLandPaymentService(
           {
             ...land_payment,
@@ -1079,7 +1071,6 @@ const updateDraftLandRecordService = async (
       }
     }
 
-    
     await existingDraft.update(
       {
         action_log: [
@@ -1234,7 +1225,7 @@ const submitDraftLandRecordService = async (draftId, user, options = {}) => {
     await draftRecord.update(
       {
         is_draft: false,
-        record_status: RECORD_STATUSES.SUBMITTED, 
+        record_status: RECORD_STATUSES.SUBMITTED,
         submitted_at: new Date(),
         action_log: [
           ...(draftRecord.action_log || []),
@@ -1276,83 +1267,67 @@ const getAllLandRecordService = async (options = {}) => {
   const { page = 1, pageSize = 10, queryParams = {} } = options;
 
   try {
-    
     const offset = (page - 1) * pageSize;
 
-    
     const whereClause = {
       deletedAt: null,
     };
 
-    
     if (queryParams.parcelNumber) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcelNumber}%`,
       };
     }
 
-    
     if (queryParams.blockNumber) {
       whereClause.block_number = { [Op.iLike]: `%${queryParams.blockNumber}%` };
     }
 
-    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    
     if (queryParams.ownership_category) {
       whereClause.ownership_category = queryParams.ownership_category;
     }
 
-    
     if (queryParams.zoning_type) {
       whereClause.zoning_type = queryParams.zoning_type;
     }
 
-    
     if (queryParams.infrastructure_status) {
       whereClause.infrastructure_status = queryParams.infrastructure_status;
     }
 
-    
     if (queryParams.land_history) {
       whereClause.land_history = queryParams.land_history;
     }
 
-    
     if (queryParams.priority) {
       whereClause.priority = queryParams.priority;
     }
 
-    
     if (queryParams.notification_status) {
       whereClause.notification_status = queryParams.notification_status;
     }
 
-    
     if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
       whereClause.has_debt =
         queryParams.has_debt === "true" || queryParams.has_debt === true;
     }
 
-    
     if (queryParams.land_level && !isNaN(queryParams.land_level)) {
       whereClause.land_level = parseInt(queryParams.land_level);
     }
 
-    
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
       (queryParams.area_max !== undefined && queryParams.area_max !== "")
@@ -1366,7 +1341,6 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -1385,12 +1359,10 @@ const getAllLandRecordService = async (options = {}) => {
       ];
     }
 
-    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    
     const includeConditions = [
       {
         model: User,
@@ -1449,7 +1421,6 @@ const getAllLandRecordService = async (options = {}) => {
       },
     ];
 
-    
     if (queryParams.plotNumber) {
       const documentInclude = includeConditions.find(
         (inc) => inc.as === "documents"
@@ -1461,7 +1432,6 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    
     if (
       queryParams.ownerName ||
       queryParams.nationalId ||
@@ -1491,7 +1461,6 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    
     let order = [["createdAt", "DESC"]];
     if (queryParams.sort_by && queryParams.sort_order) {
       const validSortFields = [
@@ -1522,7 +1491,6 @@ const getAllLandRecordService = async (options = {}) => {
       }
     }
 
-    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -1568,21 +1536,17 @@ const getAllLandRecordService = async (options = {}) => {
       subQuery: false,
     });
 
-    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -1595,11 +1559,9 @@ const getAllLandRecordService = async (options = {}) => {
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
-      
       recordData.creator_name = recordData.creator
         ? `${recordData.creator.first_name || ""} ${
             recordData.creator.middle_name || ""
@@ -1612,7 +1574,6 @@ const getAllLandRecordService = async (options = {}) => {
           } ${recordData.approver.last_name || ""}`.trim()
         : "";
 
-      
       recordData.owner_details =
         recordData.owners?.map((owner) => ({
           name: `${owner.first_name || ""} ${owner.middle_name || ""} ${
@@ -1673,7 +1634,6 @@ const getFilterOptionsService = async () => {
       raw: true,
     });
 
-    
     const adminUnits = await AdministrativeUnit.findAll({
       attributes: ["id", "name"],
       raw: true,
@@ -1733,7 +1693,6 @@ const getFilterOptionsService = async () => {
   }
 };
 
-
 const getLandRecordsStatsService = async () => {
   try {
     const stats = await LandRecord.findAll({
@@ -1770,11 +1729,9 @@ const getLandRecordByIdService = async (id, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const landRecord = await LandRecord.findOne({
       where: { id },
       include: [
-        
         {
           model: User,
           as: "owners",
@@ -1795,19 +1752,19 @@ const getLandRecordByIdService = async (id, options = {}) => {
           ],
           paranoid: !includeDeleted,
         },
-        
+
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
           attributes: ["id", "name", "type", "unit_level", "max_land_levels"],
         },
-        
+
         {
           model: User,
           as: "creator",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        
+
         {
           model: User,
           as: "approver",
@@ -1835,7 +1792,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
           required: false,
           paranoid: !includeDeleted,
         },
-        
+
         {
           model: LandPayment,
           as: "payments",
@@ -1863,22 +1820,18 @@ const getLandRecordByIdService = async (id, options = {}) => {
       throw new Error(`Land record with ID ${id} not found`);
     }
 
-    
     const result = landRecord.toJSON();
 
-    
     result.total_payments =
       result.payments?.reduce(
         (sum, payment) => sum + parseFloat(payment.paid_amount),
         0
       ) || 0;
 
-    
     if (!transaction) await t.commit();
 
     return result;
   } catch (error) {
-    
     if (!transaction && t) await t.rollback();
 
     throw new Error(
@@ -1891,21 +1844,16 @@ const getLandRecordByIdService = async (id, options = {}) => {
 const getLandRecordByUserIdService = async (userId) => {
   const transaction = await sequelize.transaction();
   try {
-    
     const landRecords = await LandRecord.findAll({
       where: {
-        [Op.or]: [
-          { created_by: userId },
-          { "$owners.id$": userId }, 
-        ],
+        [Op.or]: [{ created_by: userId }, { "$owners.id$": userId }],
         deletedAt: null,
       },
       include: [
-        
         {
           model: User,
           as: "owners",
-          through: { attributes: [] }, 
+          through: { attributes: [] },
           attributes: [
             "id",
             "first_name",
@@ -1917,25 +1865,25 @@ const getLandRecordByUserIdService = async (userId) => {
             "address",
           ],
         },
-        
+
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
           attributes: ["id", "name", "max_land_levels"],
         },
-        
+
         {
           model: User,
           as: "creator",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        
+
         {
           model: User,
           as: "approver",
           attributes: ["id", "first_name", "middle_name", "last_name"],
         },
-        
+
         {
           model: Document,
           as: "documents",
@@ -1951,7 +1899,7 @@ const getLandRecordByUserIdService = async (userId) => {
           where: { isActive: true },
           required: false,
         },
-        
+
         {
           model: LandPayment,
           as: "payments",
@@ -1999,23 +1947,18 @@ const getLandRecordByUserIdService = async (userId) => {
       return [];
     }
 
-    
     const processedRecords = landRecords.map((record) => {
       const recordJson = record.toJSON();
 
-      
       if (recordJson.documents) {
         recordJson.documents = recordJson.documents.map((doc) => ({
           ...doc,
-          
         }));
       }
 
-      
       if (recordJson.payments) {
         recordJson.payments = recordJson.payments.map((payment) => ({
           ...payment,
-          
         }));
       }
 
@@ -2037,43 +1980,35 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
   const { page = 1, pageSize = 10, queryParams = {} } = options;
 
   try {
-    
     const offset = (page - 1) * pageSize;
 
-    
     const whereClause = {
       created_by: userId,
       deletedAt: null,
     };
 
-    
     if (queryParams.parcelNumber) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcelNumber}%`,
       };
     }
 
-    
     if (queryParams.blockNumber) {
       whereClause.block_number = { [Op.iLike]: `%${queryParams.blockNumber}%` };
     }
 
-    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -2082,12 +2017,10 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       ];
     }
 
-    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    
     const includeConditions = [
       {
         model: User,
@@ -2125,7 +2058,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       },
     ];
 
-    
     if (queryParams.plotNumber) {
       const documentInclude = includeConditions.find(
         (inc) => inc.as === "documents"
@@ -2137,7 +2069,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       }
     }
 
-    
     if (
       queryParams.ownerName ||
       queryParams.nationalId ||
@@ -2167,7 +2098,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       }
     }
 
-    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -2213,21 +2143,17 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       subQuery: false,
     });
 
-    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2240,7 +2166,6 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
@@ -2273,7 +2198,6 @@ const getMyLandRecordsService = async (userId, options = {}) => {
   const offset = (page - 1) * pageSize;
 
   try {
-    
     const userLandRecords = await LandRecord.findAll({
       attributes: ["id"],
       include: [
@@ -2301,7 +2225,6 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       };
     }
 
-    
     const { count, rows } = await LandRecord.findAndCountAll({
       where: {
         id: { [Op.in]: landRecordIds },
@@ -2368,19 +2291,15 @@ const getMyLandRecordsService = async (userId, options = {}) => {
       paranoid: !includeDeleted,
       transaction: t,
     });
-    
 
-    
     const processedRecords = rows.map((record) => {
       const recordData = record.toJSON();
 
-      
       const owners = (recordData.owners || []).map((owner) => ({
         ...owner,
         is_current_user: owner.id === userId,
       }));
 
-      
       try {
         recordData.coordinates = recordData.coordinates
           ? JSON.parse(recordData.coordinates)
@@ -2389,7 +2308,6 @@ const getMyLandRecordsService = async (userId, options = {}) => {
         recordData.coordinates = null;
       }
 
-      
       const paymentSummary = recordData.payments?.reduce(
         (acc, payment) => {
           acc.total += parseFloat(payment.total_amount || 0);
@@ -2432,60 +2350,56 @@ const getLandRecordsByUserAdminUnitService = async (
   adminUnitId,
   options = {}
 ) => {
-  const { page = 1, pageSize = 10, includeDeleted = false, queryParams = {} } = options;
+  const {
+    page = 1,
+    pageSize = 10,
+    includeDeleted = false,
+    queryParams = {},
+  } = options;
 
   try {
-    
     const offset = (page - 1) * pageSize;
 
-    
     const whereClause = {
       administrative_unit_id: adminUnitId,
     };
 
-    
     if (!includeDeleted) {
       whereClause.deletedAt = null;
     }
 
-    
     if (queryParams.parcel_number) {
       whereClause.parcel_number = {
         [Op.iLike]: `%${queryParams.parcel_number}%`,
       };
     }
 
-    
     if (queryParams.block_number) {
-      whereClause.block_number = { [Op.iLike]: `%${queryParams.block_number}%` };
+      whereClause.block_number = {
+        [Op.iLike]: `%${queryParams.block_number}%`,
+      };
     }
 
-    
     if (queryParams.record_status) {
       whereClause.record_status = queryParams.record_status;
     }
 
-    
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
-    
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    
     if (queryParams.ownership_category) {
       whereClause.ownership_category = queryParams.ownership_category;
     }
 
-    
     if (queryParams.priority) {
       whereClause.priority = queryParams.priority;
     }
 
-    
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
       (queryParams.area_max !== undefined && queryParams.area_max !== "")
@@ -2499,7 +2413,6 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    
     if (queryParams.search) {
       whereClause[Op.or] = [
         { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
@@ -2507,7 +2420,6 @@ const getLandRecordsByUserAdminUnitService = async (
       ];
     }
 
-    
     if (queryParams.startDate || queryParams.endDate) {
       whereClause.createdAt = {};
       if (queryParams.startDate) {
@@ -2518,12 +2430,10 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    
     const totalCount = await LandRecord.count({
       where: whereClause,
     });
 
-    
     const includeConditions = [
       {
         model: User,
@@ -2570,8 +2480,11 @@ const getLandRecordsByUserAdminUnitService = async (
       },
     ];
 
-    
-    if (queryParams.owner_name || queryParams.national_id || queryParams.phone_number) {
+    if (
+      queryParams.owner_name ||
+      queryParams.national_id ||
+      queryParams.phone_number
+    ) {
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
       if (ownerInclude) {
         ownerInclude.where = { [Op.or]: [] };
@@ -2596,7 +2509,6 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    
     let order = [["createdAt", "DESC"]];
     if (queryParams.sortBy && queryParams.sortOrder) {
       const validSortFields = [
@@ -2608,16 +2520,16 @@ const getLandRecordsByUserAdminUnitService = async (
         "record_status",
         "priority",
         "createdAt",
-        "updatedAt"
+        "updatedAt",
       ];
 
       if (validSortFields.includes(queryParams.sortBy)) {
-        const sortDirection = queryParams.sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
+        const sortDirection =
+          queryParams.sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
         order = [[queryParams.sortBy, sortDirection]];
       }
     }
 
-    
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -2641,14 +2553,11 @@ const getLandRecordsByUserAdminUnitService = async (
       distinct: true,
     });
 
-    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
-      
       recordData.owners = recordData.owners
         ? recordData.owners.map((owner) => ({
             ...owner,
@@ -2657,14 +2566,12 @@ const getLandRecordsByUserAdminUnitService = async (
           }))
         : [];
 
-      
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
-      
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2677,7 +2584,6 @@ const getLandRecordsByUserAdminUnitService = async (
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
-      
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
@@ -2820,7 +2726,6 @@ const updateLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
@@ -2851,12 +2756,10 @@ const updateLandRecordService = async (
       throw new Error("Land record not found");
     }
 
-    
     if (data.land_record && Object.keys(data.land_record).length > 0) {
       const previousStatus = existingRecord.record_status;
       const newStatus = RECORD_STATUSES.SUBMITTED;
 
-      
       const changes = {};
       Object.keys(data.land_record).forEach((key) => {
         if (
@@ -2871,14 +2774,12 @@ const updateLandRecordService = async (
         }
       });
 
-      
       const updatePayload = {
         ...data.land_record,
         updated_by: updater.id,
         record_status: newStatus,
       };
 
-      
       if (newStatus !== previousStatus) {
         const currentStatusHistory = Array.isArray(
           existingRecord.status_history
@@ -2899,7 +2800,6 @@ const updateLandRecordService = async (
 
       await existingRecord.update(updatePayload, { transaction: t });
 
-      
       const currentLog = Array.isArray(existingRecord.action_log)
         ? existingRecord.action_log
         : [];
@@ -2934,7 +2834,6 @@ const updateLandRecordService = async (
       );
     }
 
-    
     if (data.owners && data.owners.length > 0) {
       await userService.updateLandOwnersService(
         recordId,
@@ -2945,7 +2844,6 @@ const updateLandRecordService = async (
       );
     }
 
-    
     if (data.documents && data.documents.length > 0) {
       await documentService.updateDocumentsService(
         recordId,
@@ -2957,7 +2855,6 @@ const updateLandRecordService = async (
       );
     }
 
-    
     if (data.payments && data.payments.length > 0) {
       await landPaymentService.updateLandPaymentsService(
         recordId,
@@ -2970,7 +2867,6 @@ const updateLandRecordService = async (
 
     if (!transaction) await t.commit();
 
-    
     return await getLandRecordByIdService(recordId, {
       transaction: t,
       includeAll: true,
@@ -2990,7 +2886,6 @@ const changeRecordStatusService = async (
   const t = await sequelize.transaction();
 
   try {
-    
     const record = await LandRecord.findByPk(recordId, {
       transaction: t,
       include: [
@@ -3013,7 +2908,6 @@ const changeRecordStatusService = async (
       throw new Error("Land record not found");
     }
 
-    
     const allowedTransitions = {
       [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
       [RECORD_STATUSES.SUBMITTED]: [
@@ -3035,11 +2929,10 @@ const changeRecordStatusService = async (
       );
     }
 
-    
     const currentHistory = Array.isArray(record.status_history)
       ? record.status_history
       : [];
-    
+
     const statusChanger = await User.findByPk(userId, {
       attributes: ["id", "first_name", "middle_name", "last_name", "email"],
       transaction: t,
@@ -3081,10 +2974,8 @@ const changeRecordStatusService = async (
       updateData.approved_by = userId;
     }
 
-    
     await record.update(updateData, { transaction: t });
 
-    
     const updaterWithAdminUnit = await User.findByPk(userId, {
       attributes: ["first_name", "middle_name", "last_name"],
       include: [
@@ -3104,10 +2995,8 @@ const changeRecordStatusService = async (
 
     const emailSubject = `የመሬት ሁኔታ ማሻሻል ${record.parcel_number}`;
 
-    
     const emailPromises = record.owners.map(async (owner) => {
       if (owner.email) {
-        
         const updaterWithAdminUnit = await User.findByPk(userId, {
           attributes: [
             "id",
@@ -3195,15 +3084,10 @@ const changeRecordStatusService = async (
       }
     });
 
-    
     await t.commit();
 
-    
-    Promise.allSettled(emailPromises).catch(() => {
-      
-    });
+    Promise.allSettled(emailPromises).catch(() => {});
 
-    
     return await LandRecord.findByPk(recordId, {
       include: [
         {
@@ -3236,12 +3120,10 @@ const moveToTrashService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     if (!deletion_reason || deletion_reason.trim().length < 5) {
       throw new Error("የመሰረዝ ምክንያት ቢያንስ 5 ቁምፊ መሆን አለበት።");
     }
 
-    
     const record = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
@@ -3261,7 +3143,6 @@ const moveToTrashService = async (
       throw new Error("መዝገብ አልተገኘም ወይም አስቀድሞ ተሰርዟል።");
     }
 
-    
     record.action_log = [
       ...(record.action_log || []),
       {
@@ -3280,24 +3161,20 @@ const moveToTrashService = async (
     record.deletion_reason = deletion_reason;
     await record.save({ transaction: t });
 
-    
     await record.destroy({ transaction: t });
 
-    
     if (record.documents?.length) {
       for (const doc of record.documents) {
         await doc.destroy({ transaction: t });
       }
     }
 
-    
     if (record.payments?.length) {
       for (const payment of record.payments) {
         await payment.destroy({ transaction: t });
       }
     }
 
-    
     await LandOwner.destroy({
       where: { land_record_id: record.id },
       transaction: t,
@@ -3305,7 +3182,6 @@ const moveToTrashService = async (
 
     if (!transaction) await t.commit();
 
-    
     const trashedRecord = await LandRecord.findOne({
       where: { id: record.id },
       paranoid: false,
@@ -3313,7 +3189,7 @@ const moveToTrashService = async (
         {
           model: User,
           as: "owners",
-          through: { attributes: [], paranoid: false }, 
+          through: { attributes: [], paranoid: false },
           attributes: ["id", "first_name", "last_name", "email"],
         },
         { model: Document, as: "documents", paranoid: false },
@@ -3347,7 +3223,6 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const record = await LandRecord.findOne({
       where: { id: recordId },
       paranoid: false,
@@ -3363,24 +3238,20 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
       throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም።");
     }
 
-    
     await Promise.all([
       record.restore({ transaction: t }),
 
-      
       Document.restore({
         where: { land_record_id: recordId },
         transaction: t,
       }),
 
-      
       LandPayment.restore({
         where: { land_record_id: recordId },
         transaction: t,
       }),
     ]);
 
-    
     record.action_log = [
       ...(record.action_log || []),
       {
@@ -3400,12 +3271,10 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
 
     if (!transaction) await t.commit();
 
-    
     return await getLandRecordByIdService(recordId, { transaction: t });
   } catch (error) {
     if (!transaction && t) await t.rollback();
 
-    
     if (error.name.includes("Sequelize")) {
       throw new Error("የዳታቤዝ ስህተት፡ መልሶ ማስጀመር አልተቻለም።");
     }
@@ -3423,7 +3292,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const record = await LandRecord.findOne({
       where: { id: recordId },
       paranoid: false,
@@ -3433,7 +3301,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
     if (!record) throw new Error("መዝገብ አልተገኘም።");
     if (!record.deletedAt) throw new Error("መዝገብ በመጥፎ ቅርጫት ውስጥ አይደለም።");
 
-    
     const newActionEntry = {
       action: "PERMANENT_DELETION",
       changed_at: new Date(),
@@ -3445,7 +3312,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       },
     };
 
-    
     await record.update(
       {
         action_log: [...(record.action_log || []), newActionEntry],
@@ -3455,7 +3321,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       }
     );
 
-    
     await Promise.all([
       Document.destroy({
         where: { land_record_id: recordId },
@@ -3474,7 +3339,6 @@ const permanentlyDeleteService = async (recordId, user, options = {}) => {
       }),
     ]);
 
-    
     await record.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
@@ -3562,27 +3426,30 @@ const getTrashItemsService = async (user, options = {}) => {
   }
 };
 
-
 const getLandRecordStats = async (adminUnitId, options = {}) => {
   try {
     const pLimit = (await import("p-limit")).default;
 
-    const limit = pLimit(8); // Increased from 6 to 8 for new queries
+    const limit = pLimit(8); 
 
     const baseWhere = { deletedAt: null };
     if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
 
-    
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const last7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    
     const sysTasks = [
       limit(() => LandRecord.count({ where: baseWhere })),
-      limit(() => Document.count({ where: { deletedAt: null } })), 
-      limit(() => User.count()),
+      limit(() => Document.count({ where: { deletedAt: null } })),
+      limit(() =>
+      User.count({
+        where: adminUnitId
+        ? { administrative_unit_id: adminUnitId }
+        : { administrative_unit_id: { [Op.ne]: null } },
+      })
+      ),
       limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
     ];
     const [all_records, all_documents, all_system_users, all_land_owners] =
@@ -3594,61 +3461,65 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
 
     if (!adminUnitId) return result;
 
-    
     const bind = { adminUnitId };
 
-    
-    // ADDED: New queries for lease_ownership_type and lease_transfer_reason
-    const [by_status, by_zoning, by_ownership, by_land_use, by_lease_ownership_type, by_lease_transfer_reason] = await Promise.all(
-      [
-        limit(() =>
-          sequelize.query(
-            `
+    // queries for land record stats within the specified administrative unit
+    const [
+      by_status,
+      by_zoning,
+      by_ownership,
+      by_land_use,
+      by_lease_ownership_type,
+      by_lease_transfer_reason,
+    ] = await Promise.all([
+      limit(() =>
+        sequelize.query(
+          `
       SELECT record_status AS status, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY record_status
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-        limit(() =>
-          sequelize.query(
-            `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      limit(() =>
+        sequelize.query(
+          `
       SELECT zoning_type, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY zoning_type
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-        limit(() =>
-          sequelize.query(
-            `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      limit(() =>
+        sequelize.query(
+          `
       SELECT ownership_type, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY ownership_type
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-        limit(() =>
-          sequelize.query(
-            `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      limit(() =>
+        sequelize.query(
+          `
       SELECT land_use, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY land_use
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-        // NEW: Lease ownership type query
-        limit(() =>
-          sequelize.query(
-            `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      // NEW: Lease ownership type query
+      limit(() =>
+        sequelize.query(
+          `
       SELECT lease_ownership_type, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL 
@@ -3656,13 +3527,13 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
         AND lease_ownership_type IS NOT NULL
       GROUP BY lease_ownership_type
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-        // NEW: Lease transfer reason query
-        limit(() =>
-          sequelize.query(
-            `
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+      // NEW: Lease transfer reason query
+      limit(() =>
+        sequelize.query(
+          `
       SELECT lease_transfer_reason, COUNT(*)::int AS count
       FROM "land_records"
       WHERE "deletedAt" IS NULL 
@@ -3670,13 +3541,11 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
         AND lease_transfer_reason IS NOT NULL
       GROUP BY lease_transfer_reason
       `,
-            { type: sequelize.QueryTypes.SELECT, bind }
-          )
-        ),
-      ]
-    );
+          { type: sequelize.QueryTypes.SELECT, bind }
+        )
+      ),
+    ]);
 
-    
     const [area_total_row, area_by_zoning, area_by_land_use] =
       await Promise.all([
         limit(() =>
@@ -3718,7 +3587,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       ]);
     const total_area = Number(area_total_row?.[0]?.total_area || 0);
 
-    
     const [{ owners_count }] = await limit(() =>
       sequelize.query(
         `
@@ -3735,7 +3603,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       )
     );
 
-    
     const [{ documents_count }] = await limit(() =>
       sequelize.query(
         `
@@ -3750,7 +3617,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       )
     );
 
-    
     const [by_ownership_category, by_land_level] = await Promise.all([
       limit(() =>
         sequelize.query(
@@ -3806,10 +3672,8 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
 
 const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
   try {
-    
     const offset = (page - 1) * pageSize;
 
-    
     const totalCount = await LandRecord.count({
       where: {
         ownership_type: OWNERSHIP_TYPES.MERET_BANK,
@@ -3818,7 +3682,6 @@ const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
       },
     });
 
-    
     const landRecords = await LandRecord.findAll({
       where: {
         ownership_type: OWNERSHIP_TYPES.MERET_BANK,
@@ -3833,13 +3696,11 @@ const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
       ],
       limit: pageSize,
       offset: offset,
-      order: [["createdAt", "DESC"]], 
+      order: [["createdAt", "DESC"]],
     });
 
-    
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    
     const data = landRecords.map((record) => ({
       landRecord: record.toJSON(),
       documents: record.documents || [],
