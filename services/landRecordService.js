@@ -3567,7 +3567,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
   try {
     const pLimit = (await import("p-limit")).default;
 
-    const limit = pLimit(6);
+    const limit = pLimit(8); // Increased from 6 to 8 for new queries
 
     const baseWhere = { deletedAt: null };
     if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
@@ -3598,7 +3598,8 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
     const bind = { adminUnitId };
 
     
-    const [by_status, by_zoning, by_ownership, by_land_use] = await Promise.all(
+    // ADDED: New queries for lease_ownership_type and lease_transfer_reason
+    const [by_status, by_zoning, by_ownership, by_land_use, by_lease_ownership_type, by_lease_transfer_reason] = await Promise.all(
       [
         limit(() =>
           sequelize.query(
@@ -3640,6 +3641,34 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       FROM "land_records"
       WHERE "deletedAt" IS NULL AND administrative_unit_id = $adminUnitId
       GROUP BY land_use
+      `,
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        // NEW: Lease ownership type query
+        limit(() =>
+          sequelize.query(
+            `
+      SELECT lease_ownership_type, COUNT(*)::int AS count
+      FROM "land_records"
+      WHERE "deletedAt" IS NULL 
+        AND administrative_unit_id = $adminUnitId
+        AND lease_ownership_type IS NOT NULL
+      GROUP BY lease_ownership_type
+      `,
+            { type: sequelize.QueryTypes.SELECT, bind }
+          )
+        ),
+        // NEW: Lease transfer reason query
+        limit(() =>
+          sequelize.query(
+            `
+      SELECT lease_transfer_reason, COUNT(*)::int AS count
+      FROM "land_records"
+      WHERE "deletedAt" IS NULL 
+        AND administrative_unit_id = $adminUnitId
+        AND lease_transfer_reason IS NOT NULL
+      GROUP BY lease_transfer_reason
       `,
             { type: sequelize.QueryTypes.SELECT, bind }
           )
@@ -3707,20 +3736,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
     );
 
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
-    
     const [{ documents_count }] = await limit(() =>
       sequelize.query(
         `
@@ -3769,19 +3784,16 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       administrative_unit: {
         by_status,
         by_zoning,
-        by_ownership,
+        by_ownership, // This is ownership_type
         by_land_use,
+        by_lease_ownership_type, // NEW: Added this
+        by_lease_transfer_reason, // NEW: Added this
         area_stats: {
           total_area,
           by_zoning: area_by_zoning,
           by_land_use: area_by_land_use,
         },
         owners_count,
-        
-        
-        
-        
-        
         documents: documents_count,
         by_ownership_category,
         by_land_level,

@@ -12,7 +12,7 @@ module.exports = (db, DataTypes) => {
       },
       name: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         defaultValue: "ተጠቃሚ",
         unique: { msg: "ይህ ሚና ስም ቀደም ሲል ተመዝግቧል።" },
         validate: {
