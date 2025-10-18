@@ -103,28 +103,28 @@ const startServer = async () => {
     // });
 
     // Cron job for global notice notifications
-    // console.log('Starting cron job for global notice notifications at', new Date().toISOString());
-    // cron.schedule('* * * * *', async () => { 
-    //   try {
-    //     console.log('Running global notice notification creation at', new Date().toISOString());
-    //     const notifications = await createGlobalNoticeNotifications();
-    //     console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-    //   } catch (error) {
-    //     console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-    //   }
-    // });
+    console.log('Starting cron job for global notice notifications at', new Date().toISOString());
+    cron.schedule('* * * * *', async () => { 
+      try {
+        console.log('Running global notice notification creation at', new Date().toISOString());
+        const notifications = await createGlobalNoticeNotifications();
+        console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+      } catch (error) {
+        console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+      }
+    });
 
     // Cron job for sending notifications 
-    // console.log('Starting cron job for sending notifications at', new Date().toISOString());
-    // cron.schedule('* * * * *', async () => { 
-    //   try {
-    //     console.log('Running notification sending at', new Date().toISOString());
-    //     const sentCount = await sendPendingNotifications();
-    //     // console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
-    //   } catch (error) {
-    //     console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
-    //   }
-    // });
+    console.log('Starting cron job for sending notifications at', new Date().toISOString());
+    cron.schedule('* * * * *', async () => { 
+      try {
+        console.log('Running notification sending at', new Date().toISOString());
+        const sentCount = await sendPendingNotifications();
+        // console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
+      } catch (error) {
+        console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
+      }
+    });
 
     app.listen(port, () => {
       console.log(`Server running on port ${port} at ${new Date().toISOString()}`);
