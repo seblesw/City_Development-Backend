@@ -2663,53 +2663,11 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
           ],
         },
       ],
-      attributes: [
-        "id",
-        "parcel_number",
-        "block_number",
-        "land_use",
-        "ownership_type",
-        "area",
-        "record_status",
-        "priority",
-        "ownership_category",
-        "administrative_unit_id",
-        "createdAt",
-        "updatedAt",
-      ],
       order: [["createdAt", "DESC"]],
       transaction,
     });
 
-    return records.map((record) => ({
-      id: record.id,
-      parcel_number: record.parcel_number,
-      block_number: record.block_number,
-      land_use: record.land_use,
-      ownership_type: record.ownership_type,
-      area: record.area,
-      record_status: record.record_status,
-      priority: record.priority,
-      ownership_category: record.ownership_category,
-      administrative_unit: record.administrativeUnit
-        ? {
-            id: record.administrativeUnit.id,
-            name: record.administrativeUnit.name,
-            max_land_levels: record.administrativeUnit.max_land_levels,
-          }
-        : null,
-      owners: record.owners
-        ? record.owners.map((owner) => ({
-            ...owner.get({ plain: true }),
-            ownership_percentage: owner.LandOwner.ownership_percentage,
-            verified: owner.LandOwner.verified,
-          }))
-        : [],
-      documents: record.documents || [],
-      payments: record.payments || [],
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-    }));
+    return records
   } catch (error) {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
