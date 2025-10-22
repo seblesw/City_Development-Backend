@@ -8,6 +8,8 @@ const Zone = require("./Zone")(db, DataTypes);
 const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
+const PushNotification = require("./PushNotification")(db, DataTypes);
+
 const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
   db,
   DataTypes
@@ -138,6 +140,10 @@ User.hasMany(LeaseAgreement, {
 User.hasMany(LeaseAgreement, {
   foreignKey: "updated_by",
   as: "updatedLeases",
+});
+User.hasMany(PushNotification, {
+  foreignKey: "user_id",
+  as: "pushNotifications",
 });
 // Region associations
 Region.hasMany(Zone, {
@@ -333,6 +339,12 @@ LandRecord.hasMany(LeaseAgreement, {
   foreignKey: "land_record_id",
   as: "leasedlands",
 });
+LandRecord.hasMany(PushNotification, {
+  foreignKey: "land_record_id",
+  as: "pushnotifications",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -462,6 +474,16 @@ LeaseUser.belongsTo(LeaseAgreement, {
   foreignKey: "lease_agreement_id",
   as: "leaseAgreement",
 });
+
+//push notification associations
+PushNotification.belongsTo(User, {
+  foreignKey: "user_id",
+  as: "user",
+});
+PushNotification.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -498,4 +520,5 @@ module.exports = {
   LeaseUser,
   LEASE_USER_TYPES,
   LEASE_TRANSFER_REASONS,
+  PushNotification,
 };
