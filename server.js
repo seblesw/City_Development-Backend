@@ -31,6 +31,7 @@ const { createReminderNotifications, createOverdueNotifications, sendPendingNoti
 // Import socket handlers and notification utils
 const { setupSocketHandlers } = require('./utils/socketHandlers');
 const { notifyNewAction, userSessionUtils } = require('./utils/notificationUtils');
+const { AdministrativeUnit, User } = require('./models');
 
 // Initialize express app
 const app = express();
@@ -81,89 +82,6 @@ app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
 
-// Health check endpoint
-app.get('/api/v1/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    connectedUsers: userSessionUtils.getConnectedUsersCount(),
-    socketConnections: io.engine.clientsCount,
-    message: 'Server with Socket.IO is running'
-  });
-});
-
-// Test notification endpoint
-app.get('/api/v1/test-notification', async (req, res) => {
-  try {
-    // Send a test notification to all connected clients
-    io.emit('test_notification', {
-      message: 'This is a test notification from the server!',
-      timestamp: new Date().toISOString(),
-      type: 'TEST'
-    });
-    
-    res.json({
-      success: true,
-      message: 'Test notification sent to all connected clients',
-      connectedClients: io.engine.clientsCount,
-      connectedUsers: userSessionUtils.getConnectedUsersCount()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: `Error sending test notification: ${error.message}`
-    });
-  }
-});
-
-// Test action endpoint (for development)
-app.post('/api/v1/test-action', async (req, res) => {
-  try {
-    const { userId, actionType, parcelNumber } = req.body;
-    
-    const notifyNewAction = req.app.get('notifyNewAction');
-    if (notifyNewAction) {
-      await notifyNewAction({
-        landRecordId: Date.now(), // Mock ID
-        parcelNumber: parcelNumber || 'TEST-001',
-        action: actionType || 'TEST_ACTION',
-        changed_by: userId || 1,
-        changed_at: new Date().toISOString(),
-        administrative_unit_id: 1 // Mock admin unit
-      });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Test action triggered',
-      action: actionType || 'TEST_ACTION'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: `Error triggering test action: ${error.message}`
-    });
-  }
-});
-
-// Get connected users (admin endpoint)
-app.get('/api/v1/connected-users', (req, res) => {
-  try {
-    const connectedUsers = userSessionUtils.getConnectedUsers();
-    
-    res.json({
-      success: true,
-      connectedUsers: connectedUsers,
-      totalConnected: connectedUsers.length,
-      socketConnections: io.engine.clientsCount
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: `Error getting connected users: ${error.message}`
-    });
-  }
-});
 
 // app.use(express.static(path.join(__dirname, 'dist')));
 // app.get('/', (req, res) => {
@@ -268,5 +186,4 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
-
 startServer();

@@ -78,7 +78,6 @@ router.post(
 router.post(
   "/:id/status",
   authMiddleware.protect,
-  postLimiter,
   landRecordController.changeRecordStatus
 );
 //get the land records the primary owner

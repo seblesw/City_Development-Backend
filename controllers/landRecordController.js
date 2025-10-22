@@ -712,7 +712,6 @@ const changeRecordStatus = async (req, res) => {
     const { id: recordId } = req.params;
     const user = req.user;
 
-    
     if (!record_status) {
       return res
         .status(400)
@@ -726,6 +725,63 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
+    // ✅ ENHANCED: Also add to action_log for tracking
+    try {
+      const landRecord = await LandRecord.findByPk(recordId);
+      if (landRecord) {
+        const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+        const newAction = {
+          action: `STATUS_CHANGED_TO_${record_status}`,
+          changed_by: user.id,
+          changed_by_name: `${user.first_name} ${user.last_name}`,
+          changed_at: new Date().toISOString(),
+          additional_data: {
+            previous_status: landRecord._previousDataValues?.record_status,
+            new_status: record_status,
+            notes: notes,
+            rejection_reason: rejection_reason
+          }
+        };
+        
+        currentActionLog.push(newAction);
+        
+        await landRecord.update({
+          action_log: currentActionLog
+        });
+        
+        console.log(`✅ Action logged to database: ${landRecord.parcel_number} -> ${record_status}`);
+      }
+    } catch (logError) {
+      console.error('Error logging action:', logError);
+    }
+
+    // ✅ Trigger notification
+    try {
+      const io = req.app.get('io');
+      const notifyNewAction = req.app.get('notifyNewAction');
+      
+      if (io && notifyNewAction) {
+        await notifyNewAction({
+          landRecordId: updatedRecord.id,
+          parcelNumber: updatedRecord.parcel_number,
+          action: `STATUS_${record_status}`,
+          changed_by: user.id,
+          changed_at: new Date().toISOString(),
+          administrative_unit_id: updatedRecord.administrative_unit_id,
+          additional_data: {
+            status: record_status,
+            notes: notes,
+            rejection_reason: rejection_reason,
+            changed_by_name: `${user.first_name} ${user.last_name}`
+          }
+        });
+        
+        console.log(`✅ Status change notification sent: ${updatedRecord.parcel_number} -> ${record_status}`);
+      }
+    } catch (notificationError) {
+      console.error('Notification error (non-critical):', notificationError);
+    }
+
     res.status(200).json({
       status: "success",
       message: `Record status updated to ${record_status}`,
@@ -738,7 +794,6 @@ const changeRecordStatus = async (req, res) => {
     });
   }
 };
-
 const moveToTrash = async (req, res) => {
   const t = await sequelize.transaction();
   try {

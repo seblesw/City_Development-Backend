@@ -18,7 +18,7 @@ const setupSocketHandlers = (io, socket) => {
       
       console.log(`User ${userId} authenticated with socket ${socket.id}`);
       
-      // Send initial new actions count
+      // ✅ Send initial new actions count (now uses last_action_seen logic)
       await notificationUtils.sendUserNewActionsCount(io, userId);
       
     } catch (error) {
@@ -26,7 +26,7 @@ const setupSocketHandlers = (io, socket) => {
     }
   });
 
-  // Get new actions count based on last login
+  // Get new actions count based on last_action_seen
   socket.on('get_new_actions_count', async (userId) => {
     try {
       await notificationUtils.sendUserNewActionsCount(io, userId);
@@ -36,18 +36,13 @@ const setupSocketHandlers = (io, socket) => {
     }
   });
 
-  // Get new actions list (actions after last login)
+  // Get new actions list (actions after last_action_seen)
   socket.on('get_new_actions', async (data) => {
     try {
       const { userId, limit = 20 } = data;
-      const user = await User.findByPk(userId);
       
-      if (!user || !user.last_login) {
-        socket.emit('new_actions_list', []);
-        return;
-      }
-
-      const newActions = await notificationUtils.getNewActionsSince(userId, user.last_login, limit);
+      // ✅ Use the enhanced getNewActionsSince that uses last_action_seen
+      const newActions = await notificationUtils.getNewActionsSince(userId, limit);
       console.log(`Sending ${newActions.length} new actions to user ${userId}`);
       socket.emit('new_actions_list', newActions);
       
@@ -57,12 +52,13 @@ const setupSocketHandlers = (io, socket) => {
     }
   });
 
-  // Mark actions as seen (reset badge count)
+  // Mark actions as seen (reset badge count by updating last_action_seen)
   socket.on('mark_actions_seen', async (userId) => {
     try {
+      // ✅ This now updates last_action_seen instead of last_login
       await notificationUtils.markActionsAsSeen(userId);
       socket.emit('new_actions_count', { count: 0 });
-      console.log(`User ${userId} marked actions as seen`);
+      console.log(`User ${userId} marked actions as seen (last_action_seen updated)`);
     } catch (error) {
       console.error('Error marking actions as seen:', error);
     }

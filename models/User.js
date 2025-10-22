@@ -47,9 +47,9 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         unique: { msg: "ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።" },
       },
-      profile_picture:{
-        type:DataTypes.STRING,
-        allowNull:true,
+      profile_picture: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       password: {
         type: DataTypes.STRING,
@@ -149,6 +149,11 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      last_action_seen: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null,
+      },
       otp: {
         type: DataTypes.STRING,
       }, // Stores the OTP
@@ -158,7 +163,7 @@ module.exports = (db, DataTypes) => {
       isFirstLogin: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
-      }, 
+      },
     },
     {
       tableName: "users",

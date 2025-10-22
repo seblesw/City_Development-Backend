@@ -1,24 +1,44 @@
 const { Op } = require('sequelize');
 const{ LandRecord,User} = require('../models');
 
-
 // Store user sessions (in production, use Redis)
 const userSockets = new Map(); // userId -> socketId
 
 /**
- * Get new actions since user's last login
+ * Get new actions since user's last_action_seen (or last_login if not set)
  */
-const getNewActionsSince = async (userId, sinceDate, limit = 20) => {
+const getNewActionsSince = async (userId, limit = 20) => {
   try {
-    // Get user's administrative unit to filter relevant actions
-    const user = await User.findByPk(userId);
+    console.log('=== GET NEW ACTIONS DEBUG ===');
+    console.log('User ID:', userId);
+    
+    // Get user with last_action_seen
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'administrative_unit_id', 'last_action_seen', 'last_login']
+    });
     
     if (!user) {
       console.log(`User ${userId} not found`);
       return [];
     }
 
+    console.log('User admin unit:', user.administrative_unit_id);
+    console.log('User last_action_seen:', user.last_action_seen);
+    console.log('User last_login:', user.last_login);
+
     const adminUnitId = user.administrative_unit_id;
+    
+    // ✅ Use last_action_seen if available, otherwise use last_login
+    const sinceDate = user.last_action_seen || user.last_login;
+    
+    console.log('Using since date:', sinceDate);
+    console.log('Current time:', new Date());
+
+    // If no since date (first time user), return empty (all actions are "old")
+    if (!sinceDate) {
+      console.log('No since date available - returning empty actions');
+      return [];
+    }
 
     // Get land records with action logs from the user's administrative unit
     let landRecords;
@@ -44,14 +64,22 @@ const getNewActionsSince = async (userId, sinceDate, limit = 20) => {
       });
     }
 
+    console.log('Found land records:', landRecords.length);
+
     let allActions = [];
+    const sinceDateObj = new Date(sinceDate);
     
     landRecords.forEach(record => {
       const actions = Array.isArray(record.action_log) ? record.action_log : [];
+      console.log(`Record ${record.id} has ${actions.length} actions`);
+      
       actions.forEach(action => {
         const actionDate = new Date(action.changed_at);
+        
+        console.log(`Action: ${action.action}, Date: ${actionDate}, Since: ${sinceDateObj}, Is New: ${actionDate > sinceDateObj}`);
+        
         // Only include actions after the sinceDate
-        if (actionDate > new Date(sinceDate)) {
+        if (actionDate > sinceDateObj) {
           allActions.push({
             land_record_id: record.id,
             parcel_number: record.parcel_number,
@@ -63,14 +91,19 @@ const getNewActionsSince = async (userId, sinceDate, limit = 20) => {
       });
     });
 
+    console.log('Total new actions found:', allActions.length);
+
     // Sort by date (newest first)
     allActions.sort((a, b) => b.changed_at - a.changed_at);
     
     // Limit results
-    return allActions.slice(0, limit).map(action => ({
+    const result = allActions.slice(0, limit).map(action => ({
       ...action,
       changed_at: action.changed_at.toISOString()
     }));
+    
+    console.log('Returning actions:', result.length);
+    return result;
     
   } catch (error) {
     console.error('Error getting new actions:', error);
@@ -79,16 +112,12 @@ const getNewActionsSince = async (userId, sinceDate, limit = 20) => {
 };
 
 /**
- * Get user's new actions count based on last login
+ * Get user's new actions count based on last_action_seen
  */
 const getUserNewActionsCount = async (userId) => {
   try {
-    const user = await User.findByPk(userId);
-    if (user && user.last_login) {
-      const newActions = await getNewActionsSince(userId, user.last_login);
-      return newActions.length;
-    }
-    return 0;
+    const newActions = await getNewActionsSince(userId);
+    return newActions.length;
   } catch (error) {
     console.error('Error getting user new actions count:', error);
     return 0;
@@ -132,9 +161,14 @@ const notifyNewAction = async (io, actionData) => {
   try {
     const { landRecordId, parcelNumber, action, changed_by, changed_at, administrative_unit_id } = actionData;
     
+    console.log('=== NOTIFY NEW ACTION DEBUG ===');
+    console.log('Action Data:', actionData);
+    console.log('Admin Unit ID from action:', administrative_unit_id);
+    
     // Add action to land record's action_log
     const landRecord = await LandRecord.findByPk(landRecordId);
     if (landRecord) {
+      console.log('Land record found:', landRecord.id);
       const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
       const newAction = {
         action,
@@ -150,30 +184,47 @@ const notifyNewAction = async (io, actionData) => {
       });
       
       console.log(`Action logged for record ${landRecordId}: ${action}`);
+    } else {
+      console.log('Land record NOT found for ID:', landRecordId);
     }
     
     // Get all users who should be notified about this action
     let usersToNotify;
     if (administrative_unit_id) {
+      console.log('Looking for users in admin unit:', administrative_unit_id);
       // Notify users in the same administrative unit
       usersToNotify = await User.findAll({
         where: { 
           administrative_unit_id: administrative_unit_id,
-          status: 'active'
+          is_active: true
         },
-        attributes: ['id', 'last_login']
+        attributes: ['id', 'last_action_seen', 'last_login', 'first_name', 'last_name']
       });
     } else {
+      console.log('No admin unit specified, looking for all active users');
       // Notify all active users (for system-wide actions)
       usersToNotify = await User.findAll({
-        where: { status: 'active' },
-        attributes: ['id', 'last_login']
+        where: { is_active: true },
+        attributes: ['id', 'last_action_seen', 'last_login', 'first_name', 'last_name']
       });
     }
     
+    console.log('Found users to notify:', usersToNotify.length);
+    console.log('Users details:', usersToNotify.map(u => ({ 
+      id: u.id, 
+      name: `${u.first_name} ${u.last_name}`,
+      last_action_seen: u.last_action_seen,
+      last_login: u.last_login
+    })));
+    
+    // Check connected users
+    console.log('Currently connected users:', Array.from(userSockets.entries()));
+    
     // Notify each user
+    let notifiedCount = 0;
     usersToNotify.forEach(user => {
       const socketId = userSockets.get(user.id);
+      console.log(`User ${user.id} - Socket: ${socketId}, Last Action Seen: ${user.last_action_seen}`);
       if (socketId) {
         // Send the real-time notification
         io.to(socketId).emit('new_action_occurred', {
@@ -187,11 +238,13 @@ const notifyNewAction = async (io, actionData) => {
         
         // Update their new actions count
         sendUserNewActionsCount(io, user.id);
+        notifiedCount++;
+        console.log(`Notified user ${user.id}`);
       }
     });
     
-    console.log(`Notified ${usersToNotify.length} users about action: ${action}`);
-    return usersToNotify.length;
+    console.log(`Notified ${notifiedCount} users about action: ${action}`);
+    return notifiedCount;
     
   } catch (error) {
     console.error('Error notifying new action:', error);
@@ -200,21 +253,42 @@ const notifyNewAction = async (io, actionData) => {
 };
 
 /**
- * Mark user's actions as seen (update last_login)
+ * Mark user's actions as seen (update last_action_seen, NOT last_login)
  */
 const markActionsAsSeen = async (userId) => {
   try {
-    // Update user's last_login to now (so no more "new" actions)
+    // ✅ Update user's last_action_seen to now (so no more "new" actions)
     await User.update(
-      { last_login: new Date() },
+      { last_action_seen: new Date() },
       { where: { id: userId } }
     );
     
-    console.log(`User ${userId} marked actions as seen`);
+    console.log(`User ${userId} marked actions as seen - last_action_seen updated`);
     return true;
   } catch (error) {
     console.error('Error marking actions as seen:', error);
     throw error;
+  }
+};
+
+/**
+ * Initialize last_action_seen for existing users (optional - run once)
+ */
+const initializeLastActionSeen = async () => {
+  try {
+    // For users who don't have last_action_seen set, set it to their last_login
+    await User.update(
+      { last_action_seen: sequelize.col('last_login') },
+      { 
+        where: { 
+          last_action_seen: null,
+          last_login: { [Op.ne]: null }
+        } 
+      }
+    );
+    console.log('Initialized last_action_seen for existing users');
+  } catch (error) {
+    console.error('Error initializing last_action_seen:', error);
   }
 };
 
@@ -272,5 +346,6 @@ module.exports = {
   sendNewActionsCountToAllUsers,
   notifyNewAction,
   markActionsAsSeen,
+  initializeLastActionSeen,
   userSessionUtils
 };
