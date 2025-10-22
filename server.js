@@ -3,8 +3,12 @@ const dotenv = require('dotenv').config();
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const db = require('./config/database');
-const http = require('http'); // Added
-const { Server } = require('socket.io'); // Added
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const cron = require('node-cron');
+
+// Import your routes
 const regionRoutes = require('./routes/regionRoutes');
 const ZoneRoutes = require('./routes/zoneRoutes');
 const WoredaRoutes = require('./routes/woredaRoutes');
@@ -18,18 +22,22 @@ const documentRoutes = require('./routes/documentRoutes');
 const landPaymentRoutes = require('./routes/landPaymentRoutes');
 const paymentSchedulesRoutes = require('./routes/paymentScheduleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
-const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes')
-const path = require('path');
-const cron = require('node-cron');
+const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes');
+
+// Import services
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');
 
+// Import socket handlers and notification utils
+const { setupSocketHandlers } = require('./utils/socketHandlers');
+const { notifyNewAction, userSessionUtils } = require('./utils/notificationUtils');
+
 // Initialize express app
 const app = express();
-const server = http.createServer(app); 
+const server = http.createServer(app);
 const port = process.env.PORT;
 
-// Socket.IO setup 
+// Socket.IO setup
 const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
@@ -37,9 +45,6 @@ const io = new Server(server, {
     credentials: true
   }
 });
-
-// Store user sessions for real-time notifications
-const userSockets = new Map(); // userId -> socketId
 
 // Middleware
 app.use(cors({
@@ -50,100 +55,15 @@ app.use(bodyParser.json());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
 
-// Make io accessible to routes 
+// Make io and notification utils accessible to routes
 app.set('io', io);
+app.set('notifyNewAction', (actionData) => notifyNewAction(io, actionData));
+app.set('userSessionUtils', userSessionUtils);
 
-// Socket.IO connection handling 
+// Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  // User authentication and session setup
-  socket.on('user_authenticated', (userData) => {
-    const { userId, userRole } = userData;
-    
-    userSockets.set(userId, socket.id);
-    socket.join(`user_${userId}`);
-    
-    console.log(`User ${userId} authenticated with socket ${socket.id}`);
-  });
-
-  // Get new actions count based on last login
-  socket.on('get_new_actions_count', async (userId) => {
-    try {
-      // We'll implement this logic in the next step
-      console.log(`Getting new actions count for user ${userId}`);
-      // For now, send a dummy count
-      socket.emit('new_actions_count', { count: 0 });
-    } catch (error) {
-      console.error('Error getting new actions count:', error);
-    }
-  });
-
-  // Get new actions list
-  socket.on('get_new_actions', async (data) => {
-    try {
-      const { userId, limit = 20 } = data;
-      console.log(`Getting new actions for user ${userId}`);
-      // We'll implement this in the next step
-      socket.emit('new_actions_list', []);
-    } catch (error) {
-      console.error('Error getting new actions:', error);
-      socket.emit('new_actions_list', []);
-    }
-  });
-
-  // Mark actions as seen
-  socket.on('mark_actions_seen', async (userId) => {
-    try {
-      console.log(`Marking actions as seen for user ${userId}`);
-      socket.emit('new_actions_count', { count: 0 });
-    } catch (error) {
-      console.error('Error marking actions as seen:', error);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    // Remove user from tracking
-    for (const [userId, socketId] of userSockets.entries()) {
-      if (socketId === socket.id) {
-        userSockets.delete(userId);
-        console.log(`User ${userId} disconnected`);
-        break;
-      }
-    }
-    console.log('User disconnected:', socket.id);
-  });
+  setupSocketHandlers(io, socket);
 });
-
-// Helper function to notify about new action 
-async function notifyNewAction(actionData) {
-  try {
-    const { landRecordId, parcelNumber, action, changed_by, changed_at } = actionData;
-    
-    // Notify all connected users about new action
-    io.emit('new_action_occurred', {
-      land_record_id: landRecordId,
-      parcel_number: parcelNumber,
-      action: action,
-      changed_by: changed_by,
-      changed_at: changed_at || new Date().toISOString()
-    });
-    
-    // Update new actions count for all connected users
-    userSockets.forEach((socketId, userId) => {
-      // We'll implement the count logic in the next step
-      io.to(`user_${userId}`).emit('action_refresh_needed');
-    });
-    
-    console.log(`New action notified: ${action} for record ${landRecordId}`);
-  } catch (error) {
-    console.error('Error notifying new action:', error);
-  }
-}
-
-// Make notify function available globally - Added this
-global.notifyNewAction = notifyNewAction;
-global.getIO = () => io;
 
 // Your existing endpoints
 app.use('/api/v1/regions', regionRoutes);
@@ -159,37 +79,88 @@ app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
-app.use('/api/v1/lease-agreements', leaseAgreementRoutes)
+app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
 
-// Add health check endpoint with socket status - Added this
+// Health check endpoint
 app.get('/api/v1/health', (req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    connectedUsers: userSockets.size,
+    connectedUsers: userSessionUtils.getConnectedUsersCount(),
     socketConnections: io.engine.clientsCount,
     message: 'Server with Socket.IO is running'
   });
 });
 
-// Test Socket.IO endpoint - Added this
-app.get('/api/v1/test-notification', (req, res) => {
+// Test notification endpoint
+app.get('/api/v1/test-notification', async (req, res) => {
   try {
     // Send a test notification to all connected clients
     io.emit('test_notification', {
       message: 'This is a test notification from the server!',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      type: 'TEST'
     });
     
     res.json({
       success: true,
       message: 'Test notification sent to all connected clients',
-      connectedClients: io.engine.clientsCount
+      connectedClients: io.engine.clientsCount,
+      connectedUsers: userSessionUtils.getConnectedUsersCount()
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: `Error sending test notification: ${error.message}`
+    });
+  }
+});
+
+// Test action endpoint (for development)
+app.post('/api/v1/test-action', async (req, res) => {
+  try {
+    const { userId, actionType, parcelNumber } = req.body;
+    
+    const notifyNewAction = req.app.get('notifyNewAction');
+    if (notifyNewAction) {
+      await notifyNewAction({
+        landRecordId: Date.now(), // Mock ID
+        parcelNumber: parcelNumber || 'TEST-001',
+        action: actionType || 'TEST_ACTION',
+        changed_by: userId || 1,
+        changed_at: new Date().toISOString(),
+        administrative_unit_id: 1 // Mock admin unit
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Test action triggered',
+      action: actionType || 'TEST_ACTION'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `Error triggering test action: ${error.message}`
+    });
+  }
+});
+
+// Get connected users (admin endpoint)
+app.get('/api/v1/connected-users', (req, res) => {
+  try {
+    const connectedUsers = userSessionUtils.getConnectedUsers();
+    
+    res.json({
+      success: true,
+      connectedUsers: connectedUsers,
+      totalConnected: connectedUsers.length,
+      socketConnections: io.engine.clientsCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `Error getting connected users: ${error.message}`
     });
   }
 });
@@ -205,9 +176,10 @@ const startServer = async () => {
   try {
     await db.authenticate();
     console.log('Database connected successfully at', new Date().toISOString());
-    //sync the database tables
+    
+    // Sync database tables (uncomment if needed)
     // await db.sync({ alter: true });
-    console.log('Database synchronized successfully at', new Date().toISOString());
+    // console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
     // console.log('Starting cron job for overdue schedules at', new Date().toISOString());
@@ -269,15 +241,32 @@ const startServer = async () => {
     //   }
     // });
 
-    // Changed from app.listen to server.listen
     server.listen(port, () => {
       console.log(`Server running on port ${port} at ${new Date().toISOString()}`);
       console.log(`Socket.IO is ready for connections`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (err) {
     console.error(`Failed to start server at ${new Date().toISOString()}:`, err);
     process.exit(1);
   }
 };
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 
 startServer();
