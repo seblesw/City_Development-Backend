@@ -2,10 +2,9 @@ const { User } = require('../models');
 const notificationUtils = require('./notificationUtils');
 
 /**
- * Setup Socket.IO event handlers
+ * Setup Socket.IO event handlers for push notifications
  */
 const setupSocketHandlers = (io, socket) => {
-  console.log('User connected:', socket.id);
 
   // User authentication and session setup
   socket.on('user_authenticated', async (userData) => {
@@ -16,61 +15,59 @@ const setupSocketHandlers = (io, socket) => {
       notificationUtils.userSessionUtils.addUserSession(userId, socket.id);
       socket.join(`user_${userId}`);
       
-      console.log(`User ${userId} authenticated with socket ${socket.id}`);
       
-      // ✅ Send initial new actions count (now uses last_action_seen logic)
-      await notificationUtils.sendUserNewActionsCount(io, userId);
+      // ✅ Send initial unseen count from push_notifications table
+      await notificationUtils.sendUserUnseenCount(io, userId);
       
     } catch (error) {
-      console.error('Error in user authentication:', error);
     }
   });
 
-  // Get new actions count based on last_action_seen
-  socket.on('get_new_actions_count', async (userId) => {
+  // Get unseen notifications count
+  socket.on('get_unseen_count', async (userId) => {
     try {
-      await notificationUtils.sendUserNewActionsCount(io, userId);
+      await notificationUtils.sendUserUnseenCount(io, userId);
     } catch (error) {
-      console.error('Error getting new actions count:', error);
-      socket.emit('new_actions_count', { count: 0 });
+      socket.emit('unseen_count_update', { count: 0 });
     }
   });
 
-  // Get new actions list (actions after last_action_seen)
-  socket.on('get_new_actions', async (data) => {
+  // Get notifications list from push_notifications table
+  socket.on('get_notifications', async (data) => {
     try {
-      const { userId, limit = 20 } = data;
+      const { userId, limit = 20, offset = 0 } = data;
       
-      // ✅ Use the enhanced getNewActionsSince that uses last_action_seen
-      const newActions = await notificationUtils.getNewActionsSince(userId, limit);
-      console.log(`Sending ${newActions.length} new actions to user ${userId}`);
-      socket.emit('new_actions_list', newActions);
+      const notifications = await notificationUtils.getUserNotifications(userId, limit, offset);
+      socket.emit('notifications_list', notifications);
       
     } catch (error) {
-      console.error('Error getting new actions:', error);
-      socket.emit('new_actions_list', []);
+      socket.emit('notifications_list', []);
     }
   });
 
-  // Mark actions as seen (reset badge count by updating last_action_seen)
-  socket.on('mark_actions_seen', async (userId) => {
-    try {
-      // ✅ This now updates last_action_seen instead of last_login
-      await notificationUtils.markActionsAsSeen(userId);
-      socket.emit('new_actions_count', { count: 0 });
-      console.log(`User ${userId} marked actions as seen (last_action_seen updated)`);
-    } catch (error) {
-      console.error('Error marking actions as seen:', error);
-    }
-  });
+  // Mark notifications as seen in push_notifications table
+// In your socketHandlers.js - update the mark_notifications_seen handler
+socket.on('mark_notifications_seen', async (data) => {
+  try {
+    const { userId, notificationIds } = data;
+    
+    // If notificationIds is provided, mark only those as seen
+    // If notificationIds is null/empty, mark all as seen
+    await notificationUtils.markNotificationsAsSeen(userId, notificationIds);
+    
+    // Send updated unseen count
+    await notificationUtils.sendUserUnseenCount(io, userId);
+    
+    
+  } catch (error) {
+  }
+});
 
   // Handle disconnection
   socket.on('disconnect', () => {
     const userId = notificationUtils.userSessionUtils.removeUserSessionBySocketId(socket.id);
     if (userId) {
-      console.log(`User ${userId} disconnected`);
     }
-    console.log('User disconnected:', socket.id);
   });
 };
 

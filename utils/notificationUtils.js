@@ -1,326 +1,219 @@
 const { Op } = require('sequelize');
-const{ LandRecord,User} = require('../models');
+const { LandRecord, User, PushNotification } = require('../models');
 
-// Store user sessions (in production, use Redis)
-const userSockets = new Map(); // userId -> socketId
-
-/**
- * Get new actions since user's last_action_seen (or last_login if not set)
- */
-const getNewActionsSince = async (userId, limit = 20) => {
-  try {
-    console.log('=== GET NEW ACTIONS DEBUG ===');
-    console.log('User ID:', userId);
-    
-    // Get user with last_action_seen
-    const user = await User.findByPk(userId, {
-      attributes: ['id', 'administrative_unit_id', 'last_action_seen', 'last_login']
-    });
-    
-    if (!user) {
-      console.log(`User ${userId} not found`);
-      return [];
-    }
-
-    console.log('User admin unit:', user.administrative_unit_id);
-    console.log('User last_action_seen:', user.last_action_seen);
-    console.log('User last_login:', user.last_login);
-
-    const adminUnitId = user.administrative_unit_id;
-    
-    // ✅ Use last_action_seen if available, otherwise use last_login
-    const sinceDate = user.last_action_seen || user.last_login;
-    
-    console.log('Using since date:', sinceDate);
-    console.log('Current time:', new Date());
-
-    // If no since date (first time user), return empty (all actions are "old")
-    if (!sinceDate) {
-      console.log('No since date available - returning empty actions');
-      return [];
-    }
-
-    // Get land records with action logs from the user's administrative unit
-    let landRecords;
-    if (adminUnitId) {
-      landRecords = await LandRecord.findAll({
-        attributes: ['id', 'parcel_number', 'action_log', 'administrative_unit_id'],
-        where: {
-          administrative_unit_id: adminUnitId,
-          action_log: {
-            [Op.ne]: null
-          }
-        }
-      });
-    } else {
-      // If no admin unit, get all records (for admin users)
-      landRecords = await LandRecord.findAll({
-        attributes: ['id', 'parcel_number', 'action_log'],
-        where: {
-          action_log: {
-            [Op.ne]: null
-          }
-        }
-      });
-    }
-
-    console.log('Found land records:', landRecords.length);
-
-    let allActions = [];
-    const sinceDateObj = new Date(sinceDate);
-    
-    landRecords.forEach(record => {
-      const actions = Array.isArray(record.action_log) ? record.action_log : [];
-      console.log(`Record ${record.id} has ${actions.length} actions`);
-      
-      actions.forEach(action => {
-        const actionDate = new Date(action.changed_at);
-        
-        console.log(`Action: ${action.action}, Date: ${actionDate}, Since: ${sinceDateObj}, Is New: ${actionDate > sinceDateObj}`);
-        
-        // Only include actions after the sinceDate
-        if (actionDate > sinceDateObj) {
-          allActions.push({
-            land_record_id: record.id,
-            parcel_number: record.parcel_number,
-            administrative_unit_id: record.administrative_unit_id,
-            ...action,
-            changed_at: actionDate
-          });
-        }
-      });
-    });
-
-    console.log('Total new actions found:', allActions.length);
-
-    // Sort by date (newest first)
-    allActions.sort((a, b) => b.changed_at - a.changed_at);
-    
-    // Limit results
-    const result = allActions.slice(0, limit).map(action => ({
-      ...action,
-      changed_at: action.changed_at.toISOString()
-    }));
-    
-    console.log('Returning actions:', result.length);
-    return result;
-    
-  } catch (error) {
-    console.error('Error getting new actions:', error);
-    return [];
-  }
-};
+// Store user sessions
+const userSockets = new Map();
 
 /**
- * Get user's new actions count based on last_action_seen
- */
-const getUserNewActionsCount = async (userId) => {
-  try {
-    const newActions = await getNewActionsSince(userId);
-    return newActions.length;
-  } catch (error) {
-    console.error('Error getting user new actions count:', error);
-    return 0;
-  }
-};
-
-/**
- * Send new actions count to a specific user
- */
-const sendUserNewActionsCount = async (io, userId) => {
-  try {
-    const count = await getUserNewActionsCount(userId);
-    io.to(`user_${userId}`).emit('new_actions_count', { count });
-    console.log(`Sent new actions count ${count} to user ${userId}`);
-    return count;
-  } catch (error) {
-    console.error('Error sending new actions count:', error);
-    io.to(`user_${userId}`).emit('new_actions_count', { count: 0 });
-    return 0;
-  }
-};
-
-/**
- * Send new actions count to all connected users
- */
-const sendNewActionsCountToAllUsers = async (io) => {
-  try {
-    for (const [userId, socketId] of userSockets.entries()) {
-      await sendUserNewActionsCount(io, userId);
-    }
-    console.log('Updated actions count for all connected users');
-  } catch (error) {
-    console.error('Error sending actions count to all users:', error);
-  }
-};
-
-/**
- * Notify about a new action to relevant users
+ * Create notifications for relevant users when an action occurs
  */
 const notifyNewAction = async (io, actionData) => {
   try {
-    const { landRecordId, parcelNumber, action, changed_by, changed_at, administrative_unit_id } = actionData;
+    const { landRecordId, parcelNumber, action, changed_by, changed_at, administrative_unit_id, additional_data } = actionData;
     
-    console.log('=== NOTIFY NEW ACTION DEBUG ===');
-    console.log('Action Data:', actionData);
-    console.log('Admin Unit ID from action:', administrative_unit_id);
-    
-    // Add action to land record's action_log
-    const landRecord = await LandRecord.findByPk(landRecordId);
-    if (landRecord) {
-      console.log('Land record found:', landRecord.id);
-      const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-      const newAction = {
-        action,
-        changed_by,
-        changed_at: changed_at || new Date().toISOString(),
-        timestamp: new Date().toISOString()
-      };
-      
-      currentActionLog.push(newAction);
-      
-      await landRecord.update({
-        action_log: currentActionLog
-      });
-      
-      console.log(`Action logged for record ${landRecordId}: ${action}`);
-    } else {
-      console.log('Land record NOT found for ID:', landRecordId);
-    }
-    
-    // Get all users who should be notified about this action
+    // Determine which users should receive this notification
     let usersToNotify;
     if (administrative_unit_id) {
-      console.log('Looking for users in admin unit:', administrative_unit_id);
-      // Notify users in the same administrative unit
       usersToNotify = await User.findAll({
         where: { 
           administrative_unit_id: administrative_unit_id,
           is_active: true
         },
-        attributes: ['id', 'last_action_seen', 'last_login', 'first_name', 'last_name']
+        attributes: ['id', 'first_name', 'last_name']
       });
     } else {
-      console.log('No admin unit specified, looking for all active users');
-      // Notify all active users (for system-wide actions)
       usersToNotify = await User.findAll({
         where: { is_active: true },
-        attributes: ['id', 'last_action_seen', 'last_login', 'first_name', 'last_name']
+        attributes: ['id', 'first_name', 'last_name']
       });
     }
-    
-    console.log('Found users to notify:', usersToNotify.length);
-    console.log('Users details:', usersToNotify.map(u => ({ 
-      id: u.id, 
-      name: `${u.first_name} ${u.last_name}`,
-      last_action_seen: u.last_action_seen,
-      last_login: u.last_login
-    })));
-    
-    // Check connected users
-    console.log('Currently connected users:', Array.from(userSockets.entries()));
-    
-    // Notify each user
+
+
+    // Create push notification records for each user
+    const notificationPromises = usersToNotify.map(async (user) => {
+      const title = getNotificationTitle(action, parcelNumber);
+      const message = getNotificationMessage(action, parcelNumber, additional_data);
+      
+      return await PushNotification.create({
+        user_id: user.id,
+        land_record_id: landRecordId,
+        title: title,
+        message: message,
+        action_type: action,
+        is_seen: false,
+        additional_data: additional_data
+      });
+    });
+
+    const createdNotifications = await Promise.all(notificationPromises);
+
+    // Send real-time updates to connected users
     let notifiedCount = 0;
     usersToNotify.forEach(user => {
       const socketId = userSockets.get(user.id);
-      console.log(`User ${user.id} - Socket: ${socketId}, Last Action Seen: ${user.last_action_seen}`);
       if (socketId) {
-        // Send the real-time notification
-        io.to(socketId).emit('new_action_occurred', {
-          land_record_id: landRecordId,
-          parcel_number: parcelNumber,
-          action: action,
-          changed_by: changed_by,
-          changed_at: changed_at || new Date().toISOString(),
-          timestamp: new Date().toISOString()
-        });
+        // Find the notification for this user
+        const userNotification = createdNotifications.find(n => n.user_id === user.id);
         
-        // Update their new actions count
-        sendUserNewActionsCount(io, user.id);
-        notifiedCount++;
-        console.log(`Notified user ${user.id}`);
+        if (userNotification) {
+          // Send real-time notification
+          io.to(socketId).emit('new_action_occurred', {
+            id: userNotification.id,
+            title: userNotification.title,
+            message: userNotification.message,
+            action_type: userNotification.action_type,
+            parcel_number: parcelNumber,
+            land_record_id: landRecordId,
+            is_seen: userNotification.is_seen,
+            created_at: userNotification.created_at,
+            additional_data: userNotification.additional_data
+          });
+          
+          // Update their unseen count
+          sendUserUnseenCount(io, user.id);
+          notifiedCount++;
+        }
       }
     });
-    
-    console.log(`Notified ${notifiedCount} users about action: ${action}`);
+
     return notifiedCount;
     
   } catch (error) {
-    console.error('Error notifying new action:', error);
     throw error;
   }
 };
 
 /**
- * Mark user's actions as seen (update last_action_seen, NOT last_login)
+ * Get user's unseen notifications count
  */
-const markActionsAsSeen = async (userId) => {
+const getUserUnseenCount = async (userId) => {
   try {
-    // ✅ Update user's last_action_seen to now (so no more "new" actions)
-    await User.update(
-      { last_action_seen: new Date() },
-      { where: { id: userId } }
-    );
-    
-    console.log(`User ${userId} marked actions as seen - last_action_seen updated`);
-    return true;
-  } catch (error) {
-    console.error('Error marking actions as seen:', error);
-    throw error;
-  }
-};
-
-/**
- * Initialize last_action_seen for existing users (optional - run once)
- */
-const initializeLastActionSeen = async () => {
-  try {
-    // For users who don't have last_action_seen set, set it to their last_login
-    await User.update(
-      { last_action_seen: sequelize.col('last_login') },
-      { 
-        where: { 
-          last_action_seen: null,
-          last_login: { [Op.ne]: null }
-        } 
+    const count = await PushNotification.count({
+      where: {
+        user_id: userId,
+        is_seen: false
       }
-    );
-    console.log('Initialized last_action_seen for existing users');
+    });
+    return count;
   } catch (error) {
-    console.error('Error initializing last_action_seen:', error);
+    return 0;
   }
+};
+
+/**
+ * Get user's notifications (with pagination)
+ */
+const getUserNotifications = async (userId, limit = 20, offset = 0) => {
+  try {
+    const notifications = await PushNotification.findAll({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+      limit: limit,
+      offset: offset,
+      include: [{
+        model: LandRecord,
+        as: 'landRecord',
+        attributes: ['id', 'parcel_number']
+      }]
+    });
+    return notifications;
+  } catch (error) {
+    return [];
+  }
+};
+
+/**
+ * Mark notifications as seen
+ */
+const markNotificationsAsSeen = async (userId, notificationIds = null) => {
+  try {
+    const whereClause = { user_id: userId, is_seen: false };
+    
+    if (notificationIds && notificationIds.length > 0) {
+      whereClause.id = { [Op.in]: notificationIds };
+    }
+
+    const result = await PushNotification.update(
+      { is_seen: true },
+      { where: whereClause }
+    );
+
+    return result[0];
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Send unseen count to a specific user
+ */
+const sendUserUnseenCount = async (io, userId) => {
+  try {
+    const count = await getUserUnseenCount(userId);
+    io.to(`user_${userId}`).emit('unseen_count_update', { count });
+    return count;
+  } catch (error) {
+    io.to(`user_${userId}`).emit('unseen_count_update', { count: 0 });
+    return 0;
+  }
+};
+
+/**
+ * Helper function to generate notification title
+ */
+const getNotificationTitle = (action, parcelNumber) => {
+  const titles = {
+    'RECORD_CREATED': `New Land Record Created - ${parcelNumber}`,
+    'STATUS_APPROVED': `Record Approved - ${parcelNumber}`,
+    'STATUS_REJECTED': `Record Rejected - ${parcelNumber}`,
+    'STATUS_UNDER_REVIEW': `Record Under Review - ${parcelNumber}`,
+    'STATUS_SUBMITTED': `Record Submitted - ${parcelNumber}`,
+    'STATUS_በግምገማ ላይ': `Record Under Review - ${parcelNumber}`,
+    'STATUS_ጸድቋል': `Record Approved - ${parcelNumber}`,
+    'STATUS_ውድቅ ተደርጓል': `Record Rejected - ${parcelNumber}`
+  };
+  return titles[action] || `System Update - ${parcelNumber}`;
+};
+
+/**
+ * Helper function to generate notification message
+ */
+const getNotificationMessage = (action, parcelNumber, additionalData) => {
+  const messages = {
+    'RECORD_CREATED': `A new land record ${parcelNumber} has been created in the system.`,
+    'STATUS_APPROVED': `Land record ${parcelNumber} has been approved.`,
+    'STATUS_REJECTED': `Land record ${parcelNumber} has been rejected. ${additionalData?.rejection_reason ? `Reason: ${additionalData.rejection_reason}` : ''}`,
+    'STATUS_UNDER_REVIEW': `Land record ${parcelNumber} is now under review.`,
+    'STATUS_SUBMITTED': `Land record ${parcelNumber} has been submitted for review.`,
+    'STATUS_በግምገማ ላይ': `Land record ${parcelNumber} is now under review.`,
+    'STATUS_ጸድቋል': `Land record ${parcelNumber} has been approved.`,
+    'STATUS_ውድቅ ተደርጓል': `Land record ${parcelNumber} has been rejected. ${additionalData?.rejection_reason ? `Reason: ${additionalData.rejection_reason}` : ''}`
+  };
+  return messages[action] || `Action performed on land record ${parcelNumber}`;
 };
 
 /**
  * User session management
  */
 const userSessionUtils = {
-  // Add user to session tracking
   addUserSession: (userId, socketId) => {
     userSockets.set(userId, socketId);
-    console.log(`User ${userId} added to sessions with socket ${socketId}`);
   },
 
-  // Remove user from session tracking
   removeUserSession: (userId) => {
     userSockets.delete(userId);
-    console.log(`User ${userId} removed from sessions`);
   },
 
-  // Remove user by socket ID
   removeUserSessionBySocketId: (socketId) => {
     for (const [userId, userSocketId] of userSockets.entries()) {
       if (userSocketId === socketId) {
         userSockets.delete(userId);
-        console.log(`User ${userId} removed from sessions by socket ID`);
         return userId;
       }
     }
     return null;
   },
 
-  // Get all connected users
   getConnectedUsers: () => {
     return Array.from(userSockets.entries()).map(([userId, socketId]) => ({
       userId,
@@ -328,24 +221,20 @@ const userSessionUtils = {
     }));
   },
 
-  // Get user socket ID
   getUserSocket: (userId) => {
     return userSockets.get(userId);
   },
 
-  // Get connected users count
   getConnectedUsersCount: () => {
     return userSockets.size;
   }
 };
 
 module.exports = {
-  getNewActionsSince,
-  getUserNewActionsCount,
-  sendUserNewActionsCount,
-  sendNewActionsCountToAllUsers,
   notifyNewAction,
-  markActionsAsSeen,
-  initializeLastActionSeen,
+  getUserUnseenCount,
+  getUserNotifications,
+  markNotificationsAsSeen,
+  sendUserUnseenCount,
   userSessionUtils
 };

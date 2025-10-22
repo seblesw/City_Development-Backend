@@ -141,7 +141,6 @@ const importPDFDocuments = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error('PDF import controller error:', error);
     return res.status(500).json({
       status: "error",
       message: "PDF import failed",

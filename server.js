@@ -161,11 +161,8 @@ const startServer = async () => {
 
     server.listen(port, () => {
       console.log(`Server running on port ${port} at ${new Date().toISOString()}`);
-      console.log(`Socket.IO is ready for connections`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (err) {
-    console.error(`Failed to start server at ${new Date().toISOString()}:`, err);
     process.exit(1);
   }
 };

@@ -749,10 +749,8 @@ const changeRecordStatus = async (req, res) => {
           action_log: currentActionLog
         });
         
-        console.log(`✅ Action logged to database: ${landRecord.parcel_number} -> ${record_status}`);
       }
     } catch (logError) {
-      console.error('Error logging action:', logError);
     }
 
     // ✅ Trigger notification
@@ -776,10 +774,8 @@ const changeRecordStatus = async (req, res) => {
           }
         });
         
-        console.log(`✅ Status change notification sent: ${updatedRecord.parcel_number} -> ${record_status}`);
       }
     } catch (notificationError) {
-      console.error('Notification error (non-critical):', notificationError);
     }
 
     res.status(200).json({

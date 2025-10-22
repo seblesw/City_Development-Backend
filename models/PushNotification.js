@@ -43,7 +43,7 @@ module.exports = (db, DataTypes) => {
       allowNull: true
     }
   }, {
-    tableName: 'notifications',
+    tableName: 'push_notifications',
     timestamps: true,
     underscored: true
   });

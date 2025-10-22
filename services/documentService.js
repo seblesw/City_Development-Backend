@@ -545,7 +545,6 @@ const importPDFs = async ({ files, uploaderId }) => {
 
       } catch (error) {
         const errorMsg = `Error processing file '${file.originalname}': ${error.message}`;
-        console.error(`File processing error for ${file.originalname}:`, error);
         unmatchedLogs.push(errorMsg);
         errorFiles.push({
           filename: file.originalname,
@@ -560,7 +559,6 @@ const importPDFs = async ({ files, uploaderId }) => {
       }
     }
   } catch (error) {
-    console.error('PDF import service error:', error);
     throw error; // Re-throw to be handled by controller
   }
 
@@ -590,7 +588,6 @@ const safeFileDelete = async (filePath, filename) => {
       fs.unlinkSync(filePath);
     }
   } catch (deleteError) {
-    console.warn(`Failed to delete file ${filename} at ${filePath}:`, deleteError.message);
     // Don't throw, just log the warning
   }
 };
@@ -609,7 +606,6 @@ const updateLandRecordActionLog = async (document, uploaderId, file, matchType) 
         attributes: ["id", "first_name", "middle_name", "last_name"],
       });
     } catch (userError) {
-      console.warn('Could not fetch uploader details:', userError.message);
     }
 
     actionLog.push({
@@ -637,7 +633,6 @@ const updateLandRecordActionLog = async (document, uploaderId, file, matchType) 
       updated_at: new Date(),
     });
   } catch (logError) {
-    console.warn('Failed to update land record action log:', logError.message);
   }
 };
 

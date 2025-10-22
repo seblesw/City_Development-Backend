@@ -427,7 +427,6 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
     return response;
 
   } catch (error) {
-    console.error("Error in getOversightOfficeStatsService:", error);
     throw new Error(error.message || "Failed to get oversight office statistics");
   }
 };
