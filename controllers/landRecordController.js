@@ -33,7 +33,6 @@ const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
 
-    
     const owners = JSON.parse(req.body.owners || "[]");
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
@@ -49,6 +48,33 @@ const createLandRecord = async (req, res) => {
       req.files,
       user
     );
+
+    // ✅ Trigger notification for new record creation
+    try {
+      const io = req.app.get('io');
+      const notifyNewAction = req.app.get('notifyNewAction');
+      
+      if (io && notifyNewAction) {
+        await notifyNewAction({
+          landRecordId: result.landRecord.id,
+          parcelNumber: result.landRecord.parcel_number,
+          action: 'RECORD_CREATED',
+          changed_by: user.id,
+          changed_at: new Date().toISOString(),
+          additional_data: {
+            parcel_number: result.landRecord.parcel_number,
+            owners_count: result.owners.length,
+            documents_count: result.documents.length,
+            status: result.landRecord.record_status,
+            changed_by_name: `${user.first_name} ${user.last_name}`,
+            action_description: "የመሬት መዝገብ ተፈጥሯል" // From service action_log
+          }
+        });
+      }
+    } catch (notificationError) {
+      console.error('Notification error:', notificationError);
+      // Don't fail the request if notification fails
+    }
 
     return res.status(201).json({
       status: "success",
