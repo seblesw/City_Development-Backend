@@ -48,9 +48,7 @@ const createLandRecord = async (req, res) => {
       req.files,
       user
     );
-
-    // ✅ Trigger notification for new record creation
-    try {
+ try {
       const io = req.app.get('io');
       const notifyNewAction = req.app.get('notifyNewAction');
       
@@ -67,7 +65,7 @@ const createLandRecord = async (req, res) => {
             documents_count: result.documents.length,
             status: result.landRecord.record_status,
             changed_by_name: `${user.first_name} ${user.last_name}`,
-            action_description: "የመሬት መዝገብ ተፈጥሯል" // From service action_log
+            action_description: "የመሬት መዝገብ ተፈጥሯል" 
           }
         });
       }
@@ -751,7 +749,7 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
-    // ✅ ENHANCED: Also add to action_log for tracking
+    
     try {
       const landRecord = await LandRecord.findByPk(recordId);
       if (landRecord) {

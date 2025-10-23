@@ -16,7 +16,7 @@ const setupSocketHandlers = (io, socket) => {
       socket.join(`user_${userId}`);
       
       
-      // ✅ Send initial unseen count from push_notifications table
+      // Send initial unseen count from push_notifications table
       await notificationUtils.sendUserUnseenCount(io, userId);
       
     } catch (error) {
