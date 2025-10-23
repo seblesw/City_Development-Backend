@@ -24,7 +24,7 @@ const notifyNewAction = async (io, actionData) => {
     } else {
       usersToNotify = await User.findAll({
         where: { is_active: true },
-        attributes: ['id', 'first_name', 'last_name']
+        attributes: ['id', 'first_name', 'middle_name',' last_name']
       });
     }
 

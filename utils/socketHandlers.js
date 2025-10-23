@@ -51,7 +51,6 @@ socket.on('mark_notifications_seen', async (data) => {
   try {
     const { userId, notificationIds } = data;
     
-    // If notificationIds is provided, mark only those as seen
     // If notificationIds is null/empty, mark all as seen
     await notificationUtils.markNotificationsAsSeen(userId, notificationIds);
     
