@@ -1,4 +1,4 @@
-const { sequelize, RECORD_STATUSES,LandRecord } = require("../models");
+const { sequelize, RECORD_STATUSES,LandRecord, Document } = require("../models");
 const fs = require("fs");
 const { Op } = require("sequelize");
 
@@ -749,15 +749,22 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
-    
+    // Get the full land record with documents for plot_number and action log
     try {
-      const landRecord = await LandRecord.findByPk(recordId);
+      const landRecord = await LandRecord.findByPk(recordId, {
+        include: [{
+          model: Document,
+          as: 'documents',
+          attributes: ['plot_number']
+        }]
+      });
+      
       if (landRecord) {
         const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
         const newAction = {
-          action: `STATUS_CHANGED_TO_${record_status}`,
+          action: `STATUS_CHANGED_TO_${record_status}`, 
           changed_by: user.id,
-          changed_by_name: `${user.first_name} ${user.last_name}`,
+          changed_by_name: `${user.first_name} ${user.middle_name}`,
           changed_at: new Date().toISOString(),
           additional_data: {
             previous_status: landRecord._previousDataValues?.record_status,
@@ -772,34 +779,37 @@ const changeRecordStatus = async (req, res) => {
         await landRecord.update({
           action_log: currentActionLog
         });
-        
+
+        //  Trigger notification (moved inside to use landRecord with documents)
+        try {
+          const io = req.app.get('io');
+          const notifyNewAction = req.app.get('notifyNewAction');
+          
+          if (io && notifyNewAction) {
+            const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
+            
+            await notifyNewAction({
+              landRecordId: landRecord.id,
+              parcelNumber: landRecord.parcel_number,
+              action: `STATUS_CHANGED_TO_${record_status}`,
+              changed_by: user.id,
+              changed_at: new Date().toISOString(),
+              administrative_unit_id: landRecord.administrative_unit_id,
+              additional_data: {
+                status: record_status,
+                notes: notes,
+                rejection_reason: rejection_reason,
+                changed_by_name: `${user.first_name} ${user.middle_name}`,
+                plot_number: plotNumber 
+              }
+            });
+          }
+        } catch (notificationError) {
+          console.error('Notification error:', notificationError);
+        }
       }
     } catch (logError) {
-    }
-
-    // ✅ Trigger notification
-    try {
-      const io = req.app.get('io');
-      const notifyNewAction = req.app.get('notifyNewAction');
-      
-      if (io && notifyNewAction) {
-        await notifyNewAction({
-          landRecordId: updatedRecord.id,
-          parcelNumber: updatedRecord.parcel_number,
-          action: `STATUS_${record_status}`,
-          changed_by: user.id,
-          changed_at: new Date().toISOString(),
-          administrative_unit_id: updatedRecord.administrative_unit_id,
-          additional_data: {
-            status: record_status,
-            notes: notes,
-            rejection_reason: rejection_reason,
-            changed_by_name: `${user.first_name} ${user.last_name}`
-          }
-        });
-        
-      }
-    } catch (notificationError) {
+      console.error('Action log error:', logError);
     }
 
     res.status(200).json({
