@@ -219,11 +219,9 @@ const getNotificationMessage = (action, parcelNumber, additionalData, plotNumber
   // Handle different action types
   if (action === 'RECORD_CREATED') {
     const ownersCount = additionalData?.owners_count || 0;
-    const documentsCount = additionalData?.documents_count || 0;
     
     let message = `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
     message += `\nየባለቤቶች ብዛት: ${ownersCount}`;
-    message += `\nየሰነዶች ብዛት: ${documentsCount}`;
     message += `\nየመጀመሪያ ሁኔታ: ${additionalData?.status || 'ረቂቅ'}`;
     message += `\n(በ${changedByName} ተፈጥሯል)`;
     
@@ -233,7 +231,7 @@ const getNotificationMessage = (action, parcelNumber, additionalData, plotNumber
   // Handle status changes
   if (action.startsWith('STATUS_CHANGED_TO_')) {
     const status = action.replace('STATUS_CHANGED_TO_', '');
-    const previousStatus = additionalData?.previous_status || 'ያልታወቀ';
+    const previousStatus = additionalData?.previous_status || '';
     
     let message = `የ${identifier} መሬት መዝገብ ሁኔታ ከ "${previousStatus}" ወደ "${status}" ተቀይሯል።`;
     
@@ -242,6 +240,8 @@ const getNotificationMessage = (action, parcelNumber, additionalData, plotNumber
       message += `\nምክንያት: ${additionalData.rejection_reason}`;
     } else if (additionalData?.notes) {
       message += `\nማስታወሻ: ${additionalData.notes}`;
+    } else if (additionalData.filelength){
+      message +=`\nማስታወሻ: ${additionalData.filelength}`;
     }
     
     message += `\n(በ${changedByName} ተቀይሯል)`;

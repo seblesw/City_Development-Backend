@@ -786,6 +786,26 @@ const changeRecordStatus = async (req, res) => {
         .json({ status: "error", message: "Record status is required" });
     }
 
+    //Get the land record with current status BEFORE updating
+    const landRecordBeforeUpdate = await LandRecord.findByPk(recordId, {
+      include: [{
+        model: Document,
+        as: 'documents',
+        attributes: ['plot_number']
+      }]
+    });
+
+    if (!landRecordBeforeUpdate) {
+      return res.status(404).json({
+        status: "error",
+        message: "Land record not found"
+      });
+    }
+
+    const previousStatus = landRecordBeforeUpdate.record_status;
+    const plotNumber = landRecordBeforeUpdate?.documents?.[0]?.plot_number || null;
+
+    // Update the record status
     const updatedRecord = await changeRecordStatusService(
       recordId,
       record_status,
@@ -793,67 +813,31 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
-    // Get the full land record with documents for plot_number and action log
+    //Trigger notification with the correct previous_status
     try {
-      const landRecord = await LandRecord.findByPk(recordId, {
-        include: [{
-          model: Document,
-          as: 'documents',
-          attributes: ['plot_number']
-        }]
-      });
+      const io = req.app.get('io');
+      const notifyNewAction = req.app.get('notifyNewAction');
       
-      if (landRecord) {
-        const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-        const newAction = {
-          action: `STATUS_CHANGED_TO_${record_status}`, 
+      if (io && notifyNewAction) {
+        await notifyNewAction({
+          landRecordId: landRecordBeforeUpdate.id,
+          parcelNumber: landRecordBeforeUpdate.parcel_number,
+          action: `STATUS_CHANGED_TO_${record_status}`,
           changed_by: user.id,
-          changed_by_name: `${user.first_name} ${user.middle_name}`,
           changed_at: new Date().toISOString(),
+          administrative_unit_id: landRecordBeforeUpdate.administrative_unit_id,
           additional_data: {
-            previous_status: landRecord._previousDataValues?.record_status,
-            new_status: record_status,
+            status: record_status,
+            previous_status: previousStatus, 
             notes: notes,
-            rejection_reason: rejection_reason
+            rejection_reason: rejection_reason,
+            changed_by_name: `${user.first_name} ${user.middle_name}`,
+            plot_number: plotNumber 
           }
-        };
-        
-        currentActionLog.push(newAction);
-        
-        await landRecord.update({
-          action_log: currentActionLog
         });
-
-        //  Trigger notification (moved inside to use landRecord with documents)
-        try {
-          const io = req.app.get('io');
-          const notifyNewAction = req.app.get('notifyNewAction');
-          
-          if (io && notifyNewAction) {
-            const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
-            
-            await notifyNewAction({
-              landRecordId: landRecord.id,
-              parcelNumber: landRecord.parcel_number,
-              action: `STATUS_CHANGED_TO_${record_status}`,
-              changed_by: user.id,
-              changed_at: new Date().toISOString(),
-              administrative_unit_id: landRecord.administrative_unit_id,
-              additional_data: {
-                status: record_status,
-                notes: notes,
-                rejection_reason: rejection_reason,
-                changed_by_name: `${user.first_name} ${user.middle_name}`,
-                plot_number: plotNumber 
-              }
-            });
-          }
-        } catch (notificationError) {
-          console.error('Notification error:', notificationError);
-        }
       }
-    } catch (logError) {
-      console.error('Action log error:', logError);
+    } catch (notificationError) {
+      console.error('Notification error:', notificationError);
     }
 
     res.status(200).json({
