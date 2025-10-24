@@ -60,30 +60,8 @@ const createLandRecord = async (req, res) => {
       });
       
       if (landRecord) {
-        // ✅ Add to action_log (same as status change)
-        const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-        const newAction = {
-          action: 'RECORD_CREATED',
-          changed_by: user.id,
-          changed_by_name: `${user.first_name} ${user.middle_name || ''}`.trim(),
-          changed_at: new Date().toISOString(),
-          additional_data: {
-            parcel_number: landRecord.parcel_number,
-            owners_count: owners.length,
-            documents_count: documents.length,
-            status: landRecord.record_status,
-            plot_number: landRecord?.documents?.[0]?.plot_number || null,
-            action_description: "የመሬት መዝገብ ተፈጥሯል"
-          }
-        };
-        
-        currentActionLog.push(newAction);
-        
-        await landRecord.update({
-          action_log: currentActionLog
-        });
 
-        // ✅ Enhanced notification (same structure as status change)
+        // trigger notification for creation of land record
         try {
           const io = req.app.get('io');
           const notifyNewAction = req.app.get('notifyNewAction');
@@ -94,10 +72,10 @@ const createLandRecord = async (req, res) => {
             await notifyNewAction({
               landRecordId: landRecord.id,
               parcelNumber: landRecord.parcel_number,
-              action: 'RECORD_CREATED', // This will trigger the appropriate notification
+              action: 'RECORD_CREATED',
               changed_by: user.id,
               changed_at: new Date().toISOString(),
-              administrative_unit_id: landRecord.administrative_unit_id, // ✅ Important for targeting notifications
+              administrative_unit_id: landRecord.administrative_unit_id,
               additional_data: {
                 status: landRecord.record_status,
                 owners_count: owners.length,

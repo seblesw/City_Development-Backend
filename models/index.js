@@ -342,8 +342,6 @@ LandRecord.hasMany(LeaseAgreement, {
 LandRecord.hasMany(PushNotification, {
   foreignKey: "land_record_id",
   as: "pushnotifications",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
 });
 
 // LandPayment associations
