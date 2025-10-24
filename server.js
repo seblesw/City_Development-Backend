@@ -96,7 +96,7 @@ const startServer = async () => {
     console.log('Database connected successfully at', new Date().toISOString());
     
     // Sync database tables (uncomment if needed)
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     // console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)

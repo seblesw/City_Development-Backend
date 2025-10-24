@@ -48,30 +48,74 @@ const createLandRecord = async (req, res) => {
       req.files,
       user
     );
- try {
-      const io = req.app.get('io');
-      const notifyNewAction = req.app.get('notifyNewAction');
+
+    // ✅ ENHANCED: Add action log entry and comprehensive notification
+    try {
+      const landRecord = await LandRecord.findByPk(result.landRecord.id, {
+        include: [{
+          model: Document,
+          as: 'documents',
+          attributes: ['plot_number']
+        }]
+      });
       
-      if (io && notifyNewAction) {
-        await notifyNewAction({
-          landRecordId: result.landRecord.id,
-          parcelNumber: result.landRecord.parcel_number,
+      if (landRecord) {
+        // ✅ Add to action_log (same as status change)
+        const currentActionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
+        const newAction = {
           action: 'RECORD_CREATED',
           changed_by: user.id,
+          changed_by_name: `${user.first_name} ${user.middle_name || ''}`.trim(),
           changed_at: new Date().toISOString(),
           additional_data: {
-            parcel_number: result.landRecord.parcel_number,
-            owners_count: result.owners.length,
-            documents_count: result.documents.length,
-            status: result.landRecord.record_status,
-            changed_by_name: `${user.first_name} ${user.last_name}`,
-            action_description: "የመሬት መዝገብ ተፈጥሯል" 
+            parcel_number: landRecord.parcel_number,
+            owners_count: owners.length,
+            documents_count: documents.length,
+            status: landRecord.record_status,
+            plot_number: landRecord?.documents?.[0]?.plot_number || null,
+            action_description: "የመሬት መዝገብ ተፈጥሯል"
           }
+        };
+        
+        currentActionLog.push(newAction);
+        
+        await landRecord.update({
+          action_log: currentActionLog
         });
+
+        // ✅ Enhanced notification (same structure as status change)
+        try {
+          const io = req.app.get('io');
+          const notifyNewAction = req.app.get('notifyNewAction');
+          
+          if (io && notifyNewAction) {
+            const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
+            
+            await notifyNewAction({
+              landRecordId: landRecord.id,
+              parcelNumber: landRecord.parcel_number,
+              action: 'RECORD_CREATED', // This will trigger the appropriate notification
+              changed_by: user.id,
+              changed_at: new Date().toISOString(),
+              administrative_unit_id: landRecord.administrative_unit_id, // ✅ Important for targeting notifications
+              additional_data: {
+                status: landRecord.record_status,
+                owners_count: owners.length,
+                documents_count: documents.length,
+                changed_by_name: `${user.first_name} ${user.middle_name || ''}`.trim(),
+                plot_number: plotNumber,
+                action_description: "የመሬት መዝገብ ተፈጥሯል"
+              }
+            });
+          }
+        } catch (notificationError) {
+          console.error('Notification error:', notificationError);
+          // Don't fail the request if notification fails
+        }
       }
-    } catch (notificationError) {
-      console.error('Notification error:', notificationError);
-      // Don't fail the request if notification fails
+    } catch (logError) {
+      console.error('Action log error:', logError);
+      // Don't fail the request if action logging fails
     }
 
     return res.status(201).json({

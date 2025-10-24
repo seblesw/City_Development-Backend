@@ -192,34 +192,65 @@ const sendUserUnseenCount = async (io, userId) => {
  * Helper function to generate notification title
  */
 const getNotificationTitle = (action, parcelNumber, plotNumber = null) => {
-  const identifier = plotNumber ? `Plot ${plotNumber}` : `Parcel ${parcelNumber}`;
+  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `Parcel ${parcelNumber}`;
   
-  // Use the actual record_status value directly (already in Amharic)
-  const status = action.replace('STATUS_CHANGED_TO_', '');
+  // Handle different action types
+  if (action === 'RECORD_CREATED') {
+    return `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
+  }
   
-  return `የመሬት መዝገብ ሁኔታ ተቀይሯል :`;
+  // Handle status changes
+  if (action.startsWith('STATUS_CHANGED_TO_')) {
+    const status = action.replace('STATUS_CHANGED_TO_', '');
+    return `የመሬት መዝገብ ሁኔታ ተቀይሯል - ${identifier} | ${status}`;
+  }
+  
+  // Default fallback
+  return `የስርአት ማሳወቂያ - ${identifier}`;
 };
 
 /**
  * Helper function to generate notification message
  */
 const getNotificationMessage = (action, parcelNumber, additionalData, plotNumber = null) => {
-  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `የፓርሴል ${parcelNumber}`;
-  const status = action.replace('STATUS_CHANGED_TO_', '');
+  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `ፓርሰል ${parcelNumber}`;
   const changedByName = additionalData?.changed_by_name || 'ያልታወቀ ተጠቃሚ';
   
-  let baseMessage = `${identifier} መሬት መዝገብ ሁኔታ ወደ "${status}" ተቀይሯል።`;
+  // Handle different action types
+  if (action === 'RECORD_CREATED') {
+    const ownersCount = additionalData?.owners_count || 0;
+    const documentsCount = additionalData?.documents_count || 0;
+    
+    let message = `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
+    message += `\nየባለቤቶች ብዛት: ${ownersCount}`;
+    message += `\nየሰነዶች ብዛት: ${documentsCount}`;
+    message += `\nየመጀመሪያ ሁኔታ: ${additionalData?.status || 'ረቂቅ'}`;
+    message += `\n(በ${changedByName} ተፈጥሯል)`;
+    
+    return message;
+  }
   
-  // Add additional context if available
-  // if (additionalData?.rejection_reason) {
-  //   baseMessage += ` ምክንያት: ${additionalData.rejection_reason}`;
-  // } else if (additionalData?.notes) {
-  //   baseMessage += ` ማስታወሻ: ${additionalData.notes}`;
-  // }
+  // Handle status changes
+  if (action.startsWith('STATUS_CHANGED_TO_')) {
+    const status = action.replace('STATUS_CHANGED_TO_', '');
+    const previousStatus = additionalData?.previous_status || 'ያልታወቀ';
+    
+    let message = `የ${identifier} መሬት መዝገብ ሁኔታ ከ "${previousStatus}" ወደ "${status}" ተቀይሯል።`;
+    
+    // Add additional context if available
+    if (additionalData?.rejection_reason) {
+      message += `\nምክንያት: ${additionalData.rejection_reason}`;
+    } else if (additionalData?.notes) {
+      message += `\nማስታወሻ: ${additionalData.notes}`;
+    }
+    
+    message += `\n(በ${changedByName} ተቀይሯል)`;
+    
+    return message;
+  }
   
-  // baseMessage += ` (በ${changedByName} ተቀይሯል)`;
-  
-  return baseMessage;
+  // Default fallback
+  return `በ${identifier} መሬት መዝገብ ላይ እንቅስቃሴ ተካሂዷል። (በ${changedByName})`;
 };
 
 /**
