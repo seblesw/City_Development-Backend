@@ -3,9 +3,6 @@ const {
   User,
   Role,
   AdministrativeUnit,
-  Region,
-  Zone,
-  Woreda,
   OversightOffice,
 } = require("../models");
 const { Op } = require("sequelize");
