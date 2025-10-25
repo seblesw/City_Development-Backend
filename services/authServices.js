@@ -284,7 +284,7 @@ const sendOTP = async (email, options = {}) => {
 
     
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    // console.log(`Generated OTP for ${email}: ${otp}`);
+    console.log(`Generated OTP for ${email}: ${otp}`);
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
     await user.update({ otp, otpExpiry }, { transaction: t });
 
