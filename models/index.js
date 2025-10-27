@@ -9,7 +9,13 @@ const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const PushNotification = require("./PushNotification")(db, DataTypes);
-const OwnershipTransfer = require("./OwnershipTransfer")(db, DataTypes);
+const {
+  OwnershipTransfer,
+  SALE_OR_GIFT_SUB,
+  PROPERTY_USE,
+  INHERITANCE_RELATION,
+  TRANSFER_TYPE,
+} = require("./OwnershipTransfer")(db, DataTypes);
 const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
   db,
   DataTypes
@@ -519,5 +525,9 @@ module.exports = {
   LEASE_USER_TYPES,
   LEASE_TRANSFER_REASONS,
   PushNotification,
-  OwnershipTransfer
+  OwnershipTransfer,
+  SALE_OR_GIFT_SUB,
+  PROPERTY_USE,
+  INHERITANCE_RELATION,
+  TRANSFER_TYPE,
 };

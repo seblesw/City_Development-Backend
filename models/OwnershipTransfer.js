@@ -83,19 +83,34 @@ module.exports = (db, DataTypes) => {
       type: DataTypes.DECIMAL,
       allowNull: true,
     },
+    land_value: {
+      type: DataTypes.DECIMAL,
+      allowNull: true,
+    },
+    building_value: {
+      type: DataTypes.DECIMAL,
+      allowNull: true,
+    },
     service_fee: {
       type: DataTypes.DECIMAL,
+      allowNull: true,
+    },
+    service_rate: {
+      type: DataTypes.INTEGER,
       allowNull: true,
     },
     tax_amount: {
       type: DataTypes.DECIMAL,
       allowNull: true,
     },
+    tax_rate: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     total_payable: {
       type: DataTypes.DECIMAL,
       allowNull: true,
     },
-
     // Personal Information Fields
     //transciever
     transceiver_full_name: {
@@ -119,6 +134,11 @@ module.exports = (db, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false,
     },
+    administrative_unit_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: { model: "administrative_units", key: "id" },
+    },
     recipient_phone: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -133,5 +153,11 @@ module.exports = (db, DataTypes) => {
     },
   });
 
-  return OwnershipTransfer;
+  return {
+    OwnershipTransfer,
+    SALE_OR_GIFT_SUB,
+    PROPERTY_USE,
+    INHERITANCE_RELATION,
+    TRANSFER_TYPE,
+  };
 };
