@@ -1,6 +1,6 @@
 // controllers/ownershipTransferController.js
 
-const { CreateTransferService, previewFeeCalculation } = require("../services/ownershipTransferService");
+const { CreateTransferService, previewFeeCalculation, GetTransfersService, GetTransferByIdService, UpdateTransferStatusService, GetTransferStatsService } = require("../services/ownershipTransferService");
 
 /**
  * Create ownership transfer

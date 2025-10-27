@@ -1,5 +1,7 @@
 // services/OwnershipTransferService.js
 
+const { OwnershipTransfer, Sequelize } = require("../models");
+
 /**
  * Calculate fees based on user-provided rates and property values
  */
@@ -9,9 +11,7 @@ const calculateFees = (data) => {
     land_value,
     building_value,
     service_rate,
-    tax_rate,
-    transfer_type,
-    inheritance_relation
+    tax_rate
   } = data;
 
   // Convert rates from percentage to decimal
@@ -53,7 +53,6 @@ const isFreeInheritance = (transferType, inheritanceRelation) => {
  */
 const prepareTransferData = (data, adminUnitId, feeCalculation) => {
   const {
-    // Property Information
     property_use,
     transfer_type,
     inheritance_relation,
@@ -63,8 +62,6 @@ const prepareTransferData = (data, adminUnitId, feeCalculation) => {
     land_value,
     building_value,
     property_location,
-    
-    // Personal Information
     transceiver_full_name,
     transceiver_phone,
     transceiver_email,
@@ -73,13 +70,10 @@ const prepareTransferData = (data, adminUnitId, feeCalculation) => {
     recipient_phone,
     recipient_email,
     recipient_nationalid,
-    
-    // Files
     files = []
   } = data;
 
   return {
-    // Property Information
     property_use,
     transfer_type,
     inheritance_relation,
@@ -89,16 +83,12 @@ const prepareTransferData = (data, adminUnitId, feeCalculation) => {
     land_value: parseFloat(land_value) || null,
     building_value: parseFloat(building_value) || null,
     property_location,
-    
-    // Fee Calculation
     base_value: feeCalculation.baseValue,
     service_fee: feeCalculation.serviceFee,
     service_rate: feeCalculation.serviceRate,
     tax_amount: feeCalculation.taxAmount,
     tax_rate: feeCalculation.taxRate,
     total_payable: feeCalculation.totalPayable,
-    
-    // Personal Information
     transceiver_full_name,
     transceiver_phone: parseInt(transceiver_phone),
     transceiver_email,
@@ -108,8 +98,6 @@ const prepareTransferData = (data, adminUnitId, feeCalculation) => {
     recipient_email,
     recipient_nationalid,
     administrative_unit_id: adminUnitId,
-    
-    // Files
     file: files
   };
 };
@@ -166,30 +154,22 @@ const validateRates = (data) => {
  */
 const CreateTransferService = async (data, adminUnitId) => {
   try {
-    // Step 1: Validate input data
     validateRequiredFields(data);
     validateRates(data);
 
-    // Step 2: Prepare rates for calculation
     const { transfer_type, inheritance_relation } = data;
     let calculationData = { ...data };
 
-    // For free inheritance, set rates to 0
     if (isFreeInheritance(transfer_type, inheritance_relation)) {
       calculationData.service_rate = 0;
       calculationData.tax_rate = 0;
     }
 
-    // Step 3: Calculate fees
     const feeCalculation = calculateFees(calculationData);
-
-    // Step 4: Prepare data for database
     const transferData = prepareTransferData(data, adminUnitId, feeCalculation);
 
-    // Step 5: Create record
-    const ownershipTransfer = await db.OwnershipTransfer.create(transferData);
+    const ownershipTransfer = await OwnershipTransfer.create(transferData);
 
-    // Step 6: Log the action
     await createAuditLog({
       action: 'CREATE_OWNERSHIP_TRANSFER',
       entity: 'OwnershipTransfer',
@@ -198,12 +178,10 @@ const CreateTransferService = async (data, adminUnitId) => {
       details: {
         transfer_type: data.transfer_type,
         property_use: data.property_use,
-        total_payable: feeCalculation.totalPayable,
-        is_free_inheritance: isFreeInheritance(transfer_type, inheritance_relation)
+        total_payable: feeCalculation.totalPayable
       }
     });
 
-    // Step 7: Return result
     return {
       id: ownershipTransfer.id,
       plot_number: ownershipTransfer.plot_number,
@@ -231,7 +209,6 @@ const previewFeeCalculation = async (data) => {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
-    // Handle free inheritance case
     let calculationData = { ...data };
     if (isFreeInheritance(data.transfer_type, data.inheritance_relation)) {
       calculationData.service_rate = 0;
@@ -244,8 +221,7 @@ const previewFeeCalculation = async (data) => {
       success: true,
       data: {
         ...feeCalculation,
-        is_free_inheritance: isFreeInheritance(data.transfer_type, data.inheritance_relation),
-        calculation_formula: 'base_value = (land_value × property_area) + building_value'
+        is_free_inheritance: isFreeInheritance(data.transfer_type, data.inheritance_relation)
       }
     };
 
@@ -255,7 +231,141 @@ const previewFeeCalculation = async (data) => {
   }
 };
 
+/**
+ * Get transfers with pagination and filtering
+ */
+const GetTransfersService = async ({ page, limit, transfer_type, property_use, adminUnitId }) => {
+  try {
+    const offset = (page - 1) * limit;
+
+    const whereClause = { administrative_unit_id: adminUnitId };
+
+    if (transfer_type) whereClause.transfer_type = transfer_type;
+    if (property_use) whereClause.property_use = property_use;
+
+    const { count, rows } = await OwnershipTransfer.findAndCountAll({
+      where: whereClause,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+      attributes: [
+        'id', 'plot_number', 'property_use', 'transfer_type', 
+        'total_payable', 'createdAt', 'transceiver_full_name',
+        'recipient_full_name'
+      ]
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(count / limit),
+        totalItems: count,
+        itemsPerPage: limit
+      }
+    };
+
+  } catch (error) {
+    console.error('GetTransfersService Error:', error);
+    throw new Error('Failed to fetch transfers');
+  }
+};
+
+/**
+ * Get single transfer by ID
+ */
+const GetTransferByIdService = async (id, adminUnitId) => {
+  try {
+    const transfer = await OwnershipTransfer.findOne({
+      where: { id, administrative_unit_id: adminUnitId }
+    });
+
+    return transfer;
+
+  } catch (error) {
+    console.error('GetTransferByIdService Error:', error);
+    throw new Error('Failed to fetch transfer');
+  }
+};
+
+/**
+ * Update transfer status
+ */
+const UpdateTransferStatusService = async (id, status, adminUnitId) => {
+  try {
+    const transfer = await OwnershipTransfer.findOne({
+      where: { id, administrative_unit_id: adminUnitId }
+    });
+
+    if (!transfer) {
+      throw new Error('Ownership transfer not found');
+    }
+
+    const updatedTransfer = await transfer.update({ status });
+
+    await createAuditLog({
+      action: 'UPDATE_TRANSFER_STATUS',
+      entity: 'OwnershipTransfer',
+      entityId: id,
+      adminUnitId,
+      details: {
+        previousStatus: transfer.status,
+        newStatus: status
+      }
+    });
+
+    return updatedTransfer;
+
+  } catch (error) {
+    console.error('UpdateTransferStatusService Error:', error);
+    throw new Error(`Failed to update transfer status: ${error.message}`);
+  }
+};
+
+/**
+ * Get transfer statistics
+ */
+const GetTransferStatsService = async (adminUnitId) => {
+  try {
+    const stats = await OwnershipTransfer.findAll({
+      where: { administrative_unit_id: adminUnitId },
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'total_transfers'],
+        [Sequelize.fn('SUM', Sequelize.col('total_payable')), 'total_revenue'],
+        [Sequelize.fn('AVG', Sequelize.col('total_payable')), 'average_payment'],
+        [Sequelize.literal(`COUNT(CASE WHEN transfer_type = 'በውርስ የተገኘ ቤት እና ይዞታ ስመ-ንብረት ዝውውር' THEN 1 END)`), 'inheritance_transfers'],
+        [Sequelize.literal(`COUNT(CASE WHEN transfer_type = 'በሽያጭ ወይም በስጦታ ስመ-ንብረት ዝውውር' THEN 1 END)`), 'sale_transfers']
+      ],
+      raw: true
+    });
+
+    return {
+      total_transfers: parseInt(stats[0].total_transfers) || 0,
+      total_revenue: parseFloat(stats[0].total_revenue) || 0,
+      average_payment: parseFloat(stats[0].average_payment) || 0,
+      inheritance_transfers: parseInt(stats[0].inheritance_transfers) || 0,
+      sale_transfers: parseInt(stats[0].sale_transfers) || 0
+    };
+
+  } catch (error) {
+    console.error('GetTransferStatsService Error:', error);
+    throw new Error('Failed to fetch statistics');
+  }
+};
+
+/**
+ * Audit log helper (you can implement based on your audit system)
+ */
+const createAuditLog = async (logData) => {
+  // Implement your audit logging logic here
+  console.log('Audit Log:', logData);
+};
+
 module.exports = {
   CreateTransferService,
-  previewFeeCalculation
+  previewFeeCalculation,
+  GetTransfersService,
+  GetTransferByIdService,
+  UpdateTransferStatusService,
+  GetTransferStatsService
 };
