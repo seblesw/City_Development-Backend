@@ -23,7 +23,7 @@ const landPaymentRoutes = require('./routes/landPaymentRoutes');
 const paymentSchedulesRoutes = require('./routes/paymentScheduleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes');
-// const ownershipTransferRoutes = require('./routes/ownershipTransferRoutes');
+const ownershipTransferRoutes = require('./routes/ownershipTransferRoutes');
 // Import services
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');

@@ -1,3 +1,5 @@
+const { Model } = require("sequelize");
+
 // models/OwnershipTransfer.js
 const PROPERTY_USE = {
   RESIDENTIAL: "መኖሪያ",
@@ -11,14 +13,14 @@ const SALE_OR_GIFT_SUB = {
 };
 
 const TRANSFER_TYPE = {
-  SALE_OR_GIFT: "በሽያጭ ወይም በስጦታ ስመ-ንብረት ዝውውር",
-  BANK_FORECLOSURE: "በባንክ ሐራጅ የሚሸጥ ቤት እና ይዞታ ስመ-ንብረት ዝውውር",
-  COURT_DECISION: "በፍርድ ዉሳኔ የሚተላለፍ ቤት እና ይዞታ ስመ-ንብረት ዝውውር",
-  CONDOMINIUM: "የጋራ ህንጻ ኮንዶሚኒየም ቤት ስመ-ንብረት ዝውውር",
-  RESIDENTIAL_ASSOCIATION: "የመኖሪያ ቤት ህብረት ስራ ማህበር ቤት እና ይዞታ ስመ-ንብረት ዝውውር",
-  INHERITANCE: "በውርስ የተገኘ ቤት እና ይዞታ ስመ-ንብረት ዝውውር",
-  REALSTATE_HOUSE: "የሪልስቴት ቤት ስመ-ንብረት ዝውውር",
-  TRADE_ORGANIZATION: "የንግድ ማህበር አደረጃጀት ስመ-ንብረት ዝውውር",
+  SALE_OR_GIFT: "በሽያጭ ወይም በስጦታ",
+  BANK_FORECLOSURE: "በባንክ ሐራጅ",
+  COURT_DECISION: "በፍርድ ዉሳኔ ",
+  CONDOMINIUM: "የጋራ ህንጻ ኮንዶሚኒየም",
+  RESIDENTIAL_ASSOCIATION: "የመኖሪያ ቤት ህብረት ስራ ማህበር",
+  INHERITANCE: "በውርስ የተገኘ",
+  REALSTATE_HOUSE: "የሪልስቴት ቤት",
+  TRADE_ORGANIZATION: "የንግድ ማህበር አደረጃጀት",
 };
 
 const INHERITANCE_RELATION = {
@@ -225,19 +227,21 @@ module.exports = (db, DataTypes) => {
       // Administrative Unit Reference
       administrative_unit_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
+        references: { model: "administrative_units", key: "id" },
       },
 
       // User References
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        references: { model: "users", key: "id" },
       },
       updated_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        references: { model: "users", key: "id" },
       },
-
     },
     {
       tableName: "ownership_transfers",
@@ -255,7 +259,7 @@ module.exports = (db, DataTypes) => {
     }
   );
 
-  // Return both model and constants as object
+  // Return both model
   return {
     OwnershipTransfer,
     SALE_OR_GIFT_SUB,
