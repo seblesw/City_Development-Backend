@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Zone, Region, Woreda, AdministrativeUnit } = require("../models/index");
+const { Zone, Region, Woreda, AdministrativeUnit } = require("../models");
 
 const createZoneService = async (zoneData, createdByUserId) => {
   const { name, region_id } = zoneData;

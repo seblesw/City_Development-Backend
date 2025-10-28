@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Woreda, Zone, AdministrativeUnit } = require("../models/index");
+const { Woreda, Zone, AdministrativeUnit } = require("../models");
 
 const createWoredaService = async (woredaData) => {
   const { name, zone_id } = woredaData;

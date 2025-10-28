@@ -9,13 +9,13 @@ const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
 const PushNotification = require("./PushNotification")(db, DataTypes);
-const {
-  OwnershipTransfer,
-  SALE_OR_GIFT_SUB,
-  PROPERTY_USE,
-  INHERITANCE_RELATION,
-  TRANSFER_TYPE,
-} = require("./OwnershipTransfer")(db, DataTypes);
+// const {
+//   OwnershipTransfer,
+//   SALE_OR_GIFT_SUB,
+//   PROPERTY_USE,
+//   INHERITANCE_RELATION,
+//   TRANSFER_TYPE,
+// } = require("./OwnershipTransfer")(db, DataTypes);
 const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
   db,
   DataTypes
@@ -151,6 +151,14 @@ User.hasMany(PushNotification, {
   foreignKey: "user_id",
   as: "pushNotifications",
 });
+// User.hasMany(OwnershipTransfer, {
+//   foreignKey: "created_by",
+//   as: "createdOwnershipTransfers",
+// });
+// User.hasMany(OwnershipTransfer, {
+//   foreignKey: "updated_by",
+//   as: "updatedOwnershipTransfers",
+// });
 // Region associations
 Region.hasMany(Zone, {
   foreignKey: "region_id",
@@ -290,6 +298,10 @@ AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
   as: "leseagreements",
 });
+// AdministrativeUnit.hasMany(OwnershipTransfer, {
+//   foreignKey: "administrative_unit_id",
+//   as: "ownershipTransfers",
+// });
 
 // LandRecord associations
 LandRecord.belongsToMany(User, {
@@ -409,7 +421,6 @@ PaymentSchedule.belongsTo(LandPayment, {
   onUpdate: "CASCADE",
 });
 PaymentSchedule.hasMany(PaymentSchedule, {
-  as: "Penalties",
   foreignKey: "related_schedule_id",
   as: "originalSchedule",
   onDelete: "CASCADE",
@@ -525,9 +536,4 @@ module.exports = {
   LEASE_USER_TYPES,
   LEASE_TRANSFER_REASONS,
   PushNotification,
-  OwnershipTransfer,
-  SALE_OR_GIFT_SUB,
-  PROPERTY_USE,
-  INHERITANCE_RELATION,
-  TRANSFER_TYPE,
 };
