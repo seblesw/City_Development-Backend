@@ -19,11 +19,7 @@ const createTransferOwnership = async (req, res) => {
 
     const result = await CreateTransferService(data, adminUnitId);
 
-    return res.status(201).json({
-      success: true,
-      message: "Ownership transfer created successfully",
-      data: result,
-    });
+    return res.status(201).json(result);
   } catch (error) {
     console.error("Create Transfer Error:", error);
 

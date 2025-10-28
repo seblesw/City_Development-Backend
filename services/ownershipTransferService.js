@@ -3,233 +3,155 @@
 const { OwnershipTransfer, Sequelize } = require("../models");
 
 /**
- * Calculate fees based on user-provided rates and property values
- */
-const calculateFees = (data) => {
-  const {
-    property_area,
-    land_value,
-    building_value,
-    service_rate,
-    tax_rate
-  } = data;
-
-  // Convert rates from percentage to decimal
-  const serviceRate = parseFloat(service_rate) / 100;
-  const taxRate = parseFloat(tax_rate) / 100;
-
-  const area = parseFloat(property_area) || 0;
-  const landRate = parseFloat(land_value) || 0;
-  const building = parseFloat(building_value) || 0;
-  
-  // Calculate base value
-  const baseValue = landRate * area + building;
-
-  // Calculate fees
-  const serviceFee = baseValue * serviceRate;
-  const taxAmount = baseValue * taxRate;
-  const totalPayable = serviceFee + taxAmount;
-
-  return {
-    baseValue: parseFloat(baseValue.toFixed(2)),
-    serviceFee: parseFloat(serviceFee.toFixed(2)),
-    taxAmount: parseFloat(taxAmount.toFixed(2)),
-    totalPayable: parseFloat(totalPayable.toFixed(2)),
-    serviceRate: serviceRate * 100,
-    taxRate: taxRate * 100
-  };
-};
-
-/**
- * Check if transfer is free inheritance (parent ↔ child)
- */
-const isFreeInheritance = (transferType, inheritanceRelation) => {
-  return transferType === "በውርስ የተገኘ ቤት እና ይዞታ ስመ-ንብረት ዝውውር" &&
-         (inheritanceRelation === "ከልጅ ወደ ወላጅ" || inheritanceRelation === "ከወላጅ ወደ ልጅ");
-};
-
-/**
- * Prepare transfer data for database
- */
-const prepareTransferData = (data, adminUnitId, feeCalculation) => {
-  const {
-    property_use,
-    transfer_type,
-    inheritance_relation,
-    plot_number,
-    parcel_number,
-    property_area,
-    land_value,
-    building_value,
-    property_location,
-    transceiver_full_name,
-    transceiver_phone,
-    transceiver_email,
-    transceiver_nationalid,
-    recipient_full_name,
-    recipient_phone,
-    recipient_email,
-    recipient_nationalid,
-    files = []
-  } = data;
-
-  return {
-    property_use,
-    transfer_type,
-    inheritance_relation,
-    plot_number,
-    parcel_number,
-    property_area: parseFloat(property_area) || null,
-    land_value: parseFloat(land_value) || null,
-    building_value: parseFloat(building_value) || null,
-    property_location,
-    base_value: feeCalculation.baseValue,
-    service_fee: feeCalculation.serviceFee,
-    service_rate: feeCalculation.serviceRate,
-    tax_amount: feeCalculation.taxAmount,
-    tax_rate: feeCalculation.taxRate,
-    total_payable: feeCalculation.totalPayable,
-    transceiver_full_name,
-    transceiver_phone: parseInt(transceiver_phone),
-    transceiver_email,
-    transceiver_nationalid,
-    recipient_full_name,
-    recipient_phone: parseInt(recipient_phone),
-    recipient_email,
-    recipient_nationalid,
-    administrative_unit_id: adminUnitId,
-    file: files
-  };
-};
-
-/**
- * Validate required fields
- */
-const validateRequiredFields = (data) => {
-  const requiredFields = [
-    'transceiver_full_name', 
-    'transceiver_phone',
-    'recipient_full_name', 
-    'recipient_phone',
-    'property_use',
-    'transfer_type'
-  ];
-
-  const missingFields = requiredFields.filter(field => !data[field]);
-  
-  if (missingFields.length > 0) {
-    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-  }
-};
-
-/**
- * Validate rates for non-free inheritance
- */
-const validateRates = (data) => {
-  const { service_rate, tax_rate, transfer_type, inheritance_relation } = data;
-
-  // Skip validation for free inheritance
-  if (isFreeInheritance(transfer_type, inheritance_relation)) {
-    return;
-  }
-
-  if (!service_rate || !tax_rate) {
-    throw new Error('Service rate and tax rate are required for non-inheritance transfers');
-  }
-
-  const serviceRate = parseFloat(service_rate);
-  const taxRate = parseFloat(tax_rate);
-
-  if (serviceRate < 0 || serviceRate > 100) {
-    throw new Error('Service rate must be between 0 and 100');
-  }
-
-  if (taxRate < 0 || taxRate > 100) {
-    throw new Error('Tax rate must be between 0 and 100');
-  }
-};
-
-/**
  * Main service to create ownership transfer
  */
 const CreateTransferService = async (data, adminUnitId) => {
   try {
-    validateRequiredFields(data);
-    validateRates(data);
 
-    const { transfer_type, inheritance_relation } = data;
-    let calculationData = { ...data };
+    // Validate rates for non-free inheritance
+    const { service_rate, tax_rate, transfer_type, inheritance_relation } = data;
 
-    if (isFreeInheritance(transfer_type, inheritance_relation)) {
+    // Check if transfer is free inheritance (parent ↔ child)
+    const isFreeTransfer = transfer_type === "በውርስ የተገኘ" &&
+      (inheritance_relation === "ከልጅ ወደ ወላጅ" || inheritance_relation === "ከወላጅ ወደ ልጅ");
+
+    // Skip validation for free inheritance
+    if (!isFreeTransfer) {
+      if (!service_rate || !tax_rate) {
+        throw new Error('Service rate and tax rate are required for non-inheritance transfers');
+      }
+
+      const serviceRateVal = parseFloat(service_rate);
+      const taxRateVal = parseFloat(tax_rate);
+
+      if (serviceRateVal < 0 || serviceRateVal > 100) {
+        throw new Error('Service rate must be between 0 and 100');
+      }
+
+      if (taxRateVal < 0 || taxRateVal > 100) {
+        throw new Error('Tax rate must be between 0 and 100');
+      }
+    }
+
+    // Calculate fees based on user-provided rates and property values
+    const calculationData = { ...data };
+
+    if (isFreeTransfer) {
       calculationData.service_rate = 0;
       calculationData.tax_rate = 0;
     }
 
-    const feeCalculation = calculateFees(calculationData);
-    const transferData = prepareTransferData(data, adminUnitId, feeCalculation);
+    const {
+      property_area,
+      land_value,
+      building_value,
+      service_rate: calc_service_rate,
+      tax_rate: calc_tax_rate
+    } = calculationData;
+
+    // Convert rates from percentage to decimal
+    const serviceRateDecimal = parseFloat(calc_service_rate) / 100;
+    const taxRateDecimal = parseFloat(calc_tax_rate) / 100;
+
+    const area = parseFloat(property_area) || 0;
+    const landRate = parseFloat(land_value) || 0;
+    const buildingVal = parseFloat(building_value) || 0;
+    
+    // Calculate base value
+    const baseValue = landRate * area + buildingVal;
+
+    // Calculate fees
+    const serviceFee = baseValue * serviceRateDecimal;
+    const taxAmount = baseValue * taxRateDecimal;
+    const totalPayable = serviceFee + taxAmount;
+
+    const feeCalculation = {
+      baseValue: parseFloat(baseValue.toFixed(2)),
+      serviceFee: parseFloat(serviceFee.toFixed(2)),
+      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      totalPayable: parseFloat(totalPayable.toFixed(2)),
+      serviceRate: serviceRateDecimal * 100,
+      taxRate: taxRateDecimal * 100
+    };
+
+    // Prepare transfer data for database
+    const {
+      property_use,
+      plot_number,
+      parcel_number,
+      property_location,
+      transceiver_full_name,
+      transceiver_phone,
+      transceiver_email,
+      transceiver_nationalid,
+      recipient_full_name,
+      recipient_phone,
+      recipient_email,
+      recipient_nationalid,
+      files = []
+    } = data;
+
+    const transferData = {
+      property_use,
+      transfer_type,
+      inheritance_relation,
+      plot_number,
+      parcel_number,
+      land_area: parseFloat(property_area) || null,
+      land_value: parseFloat(land_value) || null,
+      building_value: parseFloat(building_value) || null,
+      property_location,
+      base_value: feeCalculation.baseValue,
+      service_fee: feeCalculation.serviceFee,
+      service_rate: feeCalculation.serviceRate,
+      tax_amount: feeCalculation.taxAmount,
+      tax_rate: feeCalculation.taxRate,
+      total_payable: feeCalculation.totalPayable,
+      transceiver_full_name,
+      transceiver_phone: transceiver_phone.toString(),
+      transceiver_email,
+      transceiver_nationalid,
+      recipient_full_name,
+      recipient_phone: recipient_phone.toString(),
+      recipient_email,
+      recipient_nationalid,
+      administrative_unit_id: adminUnitId,
+      file: files
+    };
 
     const ownershipTransfer = await OwnershipTransfer.create(transferData);
 
-    await createAuditLog({
-      action: 'CREATE_OWNERSHIP_TRANSFER',
-      entity: 'OwnershipTransfer',
-      entityId: ownershipTransfer.id,
-      adminUnitId,
-      details: {
-        transfer_type: data.transfer_type,
-        property_use: data.property_use,
-        total_payable: feeCalculation.totalPayable
-      }
-    });
-
     return {
-      id: ownershipTransfer.id,
-      plot_number: ownershipTransfer.plot_number,
-      total_payable: ownershipTransfer.total_payable,
-      transfer_type: ownershipTransfer.transfer_type,
-      created_at: ownershipTransfer.createdAt,
-      fee_breakdown: feeCalculation
+      success: true,
+      message: "Ownership transfer created successfully",
+      data: {
+        id: ownershipTransfer.id,
+        plot_number: ownershipTransfer.plot_number,
+        total_payable: ownershipTransfer.total_payable,
+        transfer_type: ownershipTransfer.transfer_type,
+        created_at: ownershipTransfer.createdAt,
+        fee_breakdown: feeCalculation,
+        is_free_inheritance: isFreeTransfer
+      }
     };
 
   } catch (error) {
     console.error('CreateTransferService Error:', error);
+    
+    // Handle specific error types
+    if (error.name === 'SequelizeValidationError') {
+      const validationErrors = error.errors.map(err => err.message);
+      throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
+    }
+    
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new Error('A transfer with similar details already exists');
+    }
+
     throw new Error(`Failed to create ownership transfer: ${error.message}`);
   }
 };
 
-/**
- * Preview fee calculation
- */
-const previewFeeCalculation = async (data) => {
-  try {
-    const requiredFields = ['property_area', 'land_value', 'building_value'];
-    const missingFields = requiredFields.filter(field => !data[field]);
-    
-    if (missingFields.length > 0) {
-      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-    }
-
-    let calculationData = { ...data };
-    if (isFreeInheritance(data.transfer_type, data.inheritance_relation)) {
-      calculationData.service_rate = 0;
-      calculationData.tax_rate = 0;
-    }
-
-    const feeCalculation = calculateFees(calculationData);
-
-    return {
-      success: true,
-      data: {
-        ...feeCalculation,
-        is_free_inheritance: isFreeInheritance(data.transfer_type, data.inheritance_relation)
-      }
-    };
-
-  } catch (error) {
-    console.error('PreviewFeeCalculation Error:', error);
-    throw new Error(`Failed to calculate fees: ${error.message}`);
-  }
-};
 
 /**
  * Get transfers with pagination and filtering
@@ -353,17 +275,8 @@ const GetTransferStatsService = async (adminUnitId) => {
   }
 };
 
-/**
- * Audit log helper (you can implement based on your audit system)
- */
-const createAuditLog = async (logData) => {
-  // Implement your audit logging logic here
-  console.log('Audit Log:', logData);
-};
-
 module.exports = {
   CreateTransferService,
-  previewFeeCalculation,
   GetTransfersService,
   GetTransferByIdService,
   UpdateTransferStatusService,

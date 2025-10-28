@@ -81,7 +81,7 @@ app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
-// app.use('/api/v1/ownership-transfer', ownershipTransferRoutes)
+app.use('/api/v1/ownership-transfers', ownershipTransferRoutes)
 
 
 
