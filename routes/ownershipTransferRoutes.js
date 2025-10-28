@@ -11,10 +11,9 @@ const {
 } = require('../controllers/ownershipTransferController');
 
 // Apply authentication middleware to all routes
-router.use(require('../middleware/auth'));
-
+const authMiddleware = require("../middlewares/authMiddleware")
 // Routes
-router.post('/', createTransferOwnership);
+router.post('/',authMiddleware.protect, createTransferOwnership);
 router.post('/preview', previewCalculation);
 router.get('/', getTransfers);
 router.get('/stats', getTransferStats);

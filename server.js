@@ -23,7 +23,7 @@ const landPaymentRoutes = require('./routes/landPaymentRoutes');
 const paymentSchedulesRoutes = require('./routes/paymentScheduleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes');
-
+const ownershipTransferRoutes = require('./routes/ownershipTransferRoutes');
 // Import services
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');
@@ -81,6 +81,8 @@ app.use('/api/v1/land-payments', landPaymentRoutes);
 app.use('/api/v1/payment-schedules', paymentSchedulesRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
+app.use('/api/v1/ownership-transfer', ownershipTransferRoutes)
+
 
 
 // app.use(express.static(path.join(__dirname, 'dist')));
@@ -96,7 +98,7 @@ const startServer = async () => {
     console.log('Database connected successfully at', new Date().toISOString());
     
     // Sync database tables (uncomment if needed)
-    // await db.sync({ alter: true });
+    await db.sync({ alter: true });
     // console.log('Database synchronized successfully at', new Date().toISOString());
 
     // Cron job for overdue schedules (penalties)
