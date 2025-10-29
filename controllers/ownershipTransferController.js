@@ -12,11 +12,36 @@ const {
 /**
  * Create ownership transfer
  */
+/**
+ * Create ownership transfer with file upload
+ */
 const createTransferOwnership = async (req, res) => {
   try {
-    const data = req.body;
+    let data;
+    
+    // Parse the data from FormData
+    if (req.body.data) {
+      data = JSON.parse(req.body.data);
+    } else {
+      data = req.body;
+    }
+    
     const adminUnitId = req.user.administrative_unit_id;
     const userId = req.user.id;
+    
+    // Get uploaded files from multer
+    const files = req.files || [];
+    
+    // Add file paths to data for service
+    data.uploadedFiles = files.map(file => ({
+      originalname: file.originalname,
+      filename: file.filename,
+      path: file.path, // This will be the full path on disk
+      serverRelativePath: file.serverRelativePath, // This is set in your multer config
+      mimetype: file.mimetype,
+      size: file.size
+    }));
+
     const result = await CreateTransferService(data, adminUnitId, userId);
 
     return res.status(201).json(result);

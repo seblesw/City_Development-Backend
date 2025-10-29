@@ -11,9 +11,10 @@ const {
 } = require('../controllers/ownershipTransferController');
 
 // Apply authentication middleware to all routes
-const authMiddleware = require("../middlewares/authMiddleware")
+const authMiddleware = require("../middlewares/authMiddleware");
+const upload = require('../middlewares/fileStorage');
 // Routes
-router.post('/',authMiddleware.protect, createTransferOwnership);
+router.post('/',authMiddleware.protect, upload.array('files', 10), createTransferOwnership);
 router.post('/preview', previewCalculation);
 router.get('/',authMiddleware.protect,getTransfers);
 router.get('/stats',authMiddleware.protect, getTransferStats);

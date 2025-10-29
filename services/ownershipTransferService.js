@@ -5,12 +5,15 @@ const { OwnershipTransfer, Sequelize } = require("../models");
 /**
  * Main service to create ownership transfer
  */
+/**
+ * Main service to create ownership transfer
+ */
 const CreateTransferService = async (data, adminUnitId, userId) => {
   try {
-    // STEP 1: Extract all required data from request
+    // STEP 1: Extract all required data from request WITH DEFAULT VALUES
     const { 
-      service_rate, 
-      tax_rate, 
+      service_rate = null,
+      tax_rate = null, 
       transfer_type, 
       inheritance_relation,
       sale_or_gift_sub,
@@ -29,12 +32,13 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       recipient_phone,
       recipient_email,
       recipient_nationalid,
-      files = []
+      uploadedFiles = [], // Files from multer
+      files = [] // Fallback for files array
     } = data;
 
     // STEP 2: Validate SALE_OR_GIFT_SUB - only required if transfer type is SALE_OR_GIFT
     if (transfer_type === "በሽያጭ ወይም በስጦታ" && !sale_or_gift_sub) {
-      throw new Error('በሽያጭ ወይም በስጦታ ለሚተላለፍ መሬት የንብረት ይዞታ አይነት ሊዝ ወይም መኖሪያ መመረጥ አለበት');
+      throw new Error('Sale or gift sub-type is required for sale or gift transfers');
     }
 
     // STEP 3: Check if transfer is free inheritance (parent ↔ child)
@@ -44,18 +48,18 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
     // STEP 4: Validate rates for non-free inheritance transfers
     if (!isFreeTransfer) {
       if (!service_rate || !tax_rate) {
-        throw new Error('ከልጅ ወደ ወላጅ ወይም ከወላጅ ወደ ልጅ ዉጭ ለሚተላለፍ ይዞታ የክፍያ መረጃ አስገቡ');
+        throw new Error('Service rate and tax rate are required for non-inheritance transfers');
       }
 
       const serviceRateVal = parseFloat(service_rate);
       const taxRateVal = parseFloat(tax_rate);
 
       if (serviceRateVal < 0 || serviceRateVal > 100) {
-        throw new Error('የአገልግሎት ክፍያ በ% ከ 0-100 መሆን አለበት');
+        throw new Error('Service rate must be between 0 and 100');
       }
 
       if (taxRateVal < 0 || taxRateVal > 100) {
-        throw new Error('የግብር ክፍያ በ% ከ 1-100 መሆን አለበት');
+        throw new Error('Tax rate must be between 0 and 100');
       }
     }
 
@@ -99,12 +103,15 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       taxRate: taxRateDecimal * 100
     };
 
-    // STEP 12: Prepare complete transfer data for database
+    // STEP 12: Process uploaded files
+    const processedFiles = await processUploadedFiles(uploadedFiles, files);
+
+    // STEP 13: Prepare complete transfer data for database
     const transferData = {
       // Property Information
       property_use,
       transfer_type,
-      sale_or_gift_sub, // Will be null for non-sale/gift transfers
+      sale_or_gift_sub,
       inheritance_relation,
       plot_number,
       parcel_number,
@@ -135,18 +142,18 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
 
       // System Information
       administrative_unit_id: adminUnitId,
-      created_by:userId,
-      updated_by:userId,
-      file: files
+      created_by: userId,
+      updated_by: userId,
+      file: processedFiles // Store processed file information
     };
 
-    // STEP 13: Create the ownership transfer record in database
+    // STEP 14: Create the ownership transfer record in database
     const ownershipTransfer = await OwnershipTransfer.create(transferData);
 
-    // STEP 14: Return success response with all required fields
+    // STEP 15: Return success response with all required fields
     return {
       success: true,
-      message: "ስመ ንብረት ዝውውር በተሳካ ሁኔታ ተፈጥሯል",
+      message: "Ownership transfer created successfully",
       data: {
         id: ownershipTransfer.id,
         plot_number: ownershipTransfer.plot_number,
@@ -154,7 +161,8 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
         transfer_type: ownershipTransfer.transfer_type,
         created_at: ownershipTransfer.createdAt,
         fee_breakdown: feeCalculation,
-        is_free_inheritance: isFreeTransfer
+        is_free_inheritance: isFreeTransfer,
+        uploaded_files: processedFiles.length // Optional: return file count
       }
     };
 
@@ -175,6 +183,49 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
   }
 };
 
+/**
+ * Process uploaded files from multer
+ */
+const processUploadedFiles = async (uploadedFiles = [], fallbackFiles = []) => {
+  try {
+    // Use uploadedFiles from multer if available, otherwise use fallback
+    const filesToProcess = uploadedFiles.length > 0 ? uploadedFiles : fallbackFiles;
+    
+    if (filesToProcess.length === 0) {
+      return [];
+    }
+
+    // Process files - you can store file paths, create document records, etc.
+    const processedFiles = filesToProcess.map(file => {
+      // For multer uploaded files
+      if (file.serverRelativePath) {
+        return {
+          originalName: file.originalname,
+          storedName: file.filename,
+          path: file.serverRelativePath, // Use the relative path from multer
+          mimeType: file.mimetype,
+          size: file.size,
+          uploadedAt: new Date()
+        };
+      }
+      
+      // For fallback files (if any)
+      return {
+        originalName: file.originalname || file.name,
+        storedName: file.filename || `file-${Date.now()}`,
+        path: file.path || file.serverRelativePath,
+        mimeType: file.mimetype || file.type,
+        size: file.size,
+        uploadedAt: new Date()
+      };
+    });
+
+    return processedFiles;
+  } catch (error) {
+    console.error('Error processing uploaded files:', error);
+    throw new Error('Failed to process uploaded files');
+  }
+};
 
 /**
  * Get transfers with pagination and filtering
