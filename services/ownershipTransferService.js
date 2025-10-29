@@ -5,7 +5,7 @@ const { OwnershipTransfer, Sequelize } = require("../models");
 /**
  * Main service to create ownership transfer
  */
-const CreateTransferService = async (data, adminUnitId) => {
+const CreateTransferService = async (data, adminUnitId, userId) => {
   try {
     // STEP 1: Extract all required data from request
     const { 
@@ -135,6 +135,8 @@ const CreateTransferService = async (data, adminUnitId) => {
 
       // System Information
       administrative_unit_id: adminUnitId,
+      created_by:userId,
+      updated_by:userId,
       file: files
     };
 
@@ -144,7 +146,7 @@ const CreateTransferService = async (data, adminUnitId) => {
     // STEP 14: Return success response with all required fields
     return {
       success: true,
-      message: "Ownership transfer created successfully",
+      message: "ስመ ንብረት ዝውውር በተሳካ ሁኔታ ተፈጥሯል",
       data: {
         id: ownershipTransfer.id,
         plot_number: ownershipTransfer.plot_number,

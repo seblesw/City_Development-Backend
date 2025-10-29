@@ -16,8 +16,8 @@ const createTransferOwnership = async (req, res) => {
   try {
     const data = req.body;
     const adminUnitId = req.user.administrative_unit_id;
-
-    const result = await CreateTransferService(data, adminUnitId);
+    const userId = req.user.id;
+    const result = await CreateTransferService(data, adminUnitId, userId);
 
     return res.status(201).json(result);
   } catch (error) {
