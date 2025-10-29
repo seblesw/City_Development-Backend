@@ -170,11 +170,6 @@ const GetTransfersService = async ({ page, limit, transfer_type, property_use, a
       limit,
       offset,
       order: [['createdAt', 'DESC']],
-      attributes: [
-        'id', 'plot_number', 'property_use', 'transfer_type', 
-        'total_payable', 'createdAt', 'transceiver_full_name',
-        'recipient_full_name'
-      ]
     });
 
     return {

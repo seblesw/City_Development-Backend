@@ -15,9 +15,9 @@ const authMiddleware = require("../middlewares/authMiddleware")
 // Routes
 router.post('/',authMiddleware.protect, createTransferOwnership);
 router.post('/preview', previewCalculation);
-router.get('/', getTransfers);
-router.get('/stats', getTransferStats);
-router.get('/:id', getTransferById);
-router.patch('/:id/status', updateTransferStatus);
+router.get('/',authMiddleware.protect,getTransfers);
+router.get('/stats',authMiddleware.protect, getTransferStats);
+router.get('/:id',authMiddleware.protect, getTransferById);
+router.patch('/:id/status',authMiddleware.protect, updateTransferStatus);
 
 module.exports = router;
