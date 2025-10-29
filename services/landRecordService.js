@@ -3597,7 +3597,7 @@ const changeRecordStatusService = async (
         </div>
         
         <div style="margin-top: 30px; text-align: center;">
-          <a href="${process.env.FRONTEND_URL}/land-records/${record.id}" 
+          <a href="${process.env.CLIENT_URL}/land-records/${record.id}" 
              style="background-color: #2ecc71; color: white; padding: 10px 20px; 
                     text-decoration: none; border-radius: 5px; display: inline-block;">
             መሬት መዝገብ ለማየት ይህን ይጫኑ
