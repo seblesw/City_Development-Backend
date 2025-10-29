@@ -77,6 +77,7 @@ const CreateTransferService = async (data, adminUnitId) => {
     // Prepare transfer data for database
     const {
       property_use,
+      sale_or_gift_sub,
       plot_number,
       parcel_number,
       property_location,
@@ -94,6 +95,7 @@ const CreateTransferService = async (data, adminUnitId) => {
     const transferData = {
       property_use,
       transfer_type,
+      sale_or_gift_sub,
       inheritance_relation,
       plot_number,
       parcel_number,

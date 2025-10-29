@@ -61,6 +61,16 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      sale_or_gift_sub: {
+        type: DataTypes.ENUM(Object.values(SALE_OR_GIFT_SUB)),
+        allowNull: true,
+        validate: {
+          isIn: {
+            args: [Object.values(SALE_OR_GIFT_SUB)],
+            msg: "የንብረት ይዞታ አይነት ከተፈቀዱት እሴቶች ውስጥ መሆን አለበት።",
+          },
+        },
+      },
       inheritance_relation: {
         type: DataTypes.ENUM(Object.values(INHERITANCE_RELATION)),
         allowNull: true,
