@@ -7,77 +7,17 @@ const { OwnershipTransfer, Sequelize } = require("../models");
  */
 const CreateTransferService = async (data, adminUnitId) => {
   try {
-
-    // Validate rates for non-free inheritance
-    const { service_rate, tax_rate, transfer_type, inheritance_relation } = data;
-
-    // Check if transfer is free inheritance (parent ↔ child)
-    const isFreeTransfer = transfer_type === "በውርስ የተገኘ" &&
-      (inheritance_relation === "ከልጅ ወደ ወላጅ" || inheritance_relation === "ከወላጅ ወደ ልጅ");
-
-    // Skip validation for free inheritance
-    if (!isFreeTransfer) {
-      if (!service_rate || !tax_rate) {
-        throw new Error('Service rate and tax rate are required for non-inheritance transfers');
-      }
-
-      const serviceRateVal = parseFloat(service_rate);
-      const taxRateVal = parseFloat(tax_rate);
-
-      if (serviceRateVal < 0 || serviceRateVal > 100) {
-        throw new Error('Service rate must be between 0 and 100');
-      }
-
-      if (taxRateVal < 0 || taxRateVal > 100) {
-        throw new Error('Tax rate must be between 0 and 100');
-      }
-    }
-
-    // Calculate fees based on user-provided rates and property values
-    const calculationData = { ...data };
-
-    if (isFreeTransfer) {
-      calculationData.service_rate = 0;
-      calculationData.tax_rate = 0;
-    }
-
-    const {
+    // STEP 1: Extract all required data from request
+    const { 
+      service_rate, 
+      tax_rate, 
+      transfer_type, 
+      inheritance_relation,
+      sale_or_gift_sub,
       property_area,
       land_value,
       building_value,
-      service_rate: calc_service_rate,
-      tax_rate: calc_tax_rate
-    } = calculationData;
-
-    // Convert rates from percentage to decimal
-    const serviceRateDecimal = parseFloat(calc_service_rate) / 100;
-    const taxRateDecimal = parseFloat(calc_tax_rate) / 100;
-
-    const area = parseFloat(property_area) || 0;
-    const landRate = parseFloat(land_value) || 0;
-    const buildingVal = parseFloat(building_value) || 0;
-    
-    // Calculate base value
-    const baseValue = landRate * area + buildingVal;
-
-    // Calculate fees
-    const serviceFee = baseValue * serviceRateDecimal;
-    const taxAmount = baseValue * taxRateDecimal;
-    const totalPayable = serviceFee + taxAmount;
-
-    const feeCalculation = {
-      baseValue: parseFloat(baseValue.toFixed(2)),
-      serviceFee: parseFloat(serviceFee.toFixed(2)),
-      taxAmount: parseFloat(taxAmount.toFixed(2)),
-      totalPayable: parseFloat(totalPayable.toFixed(2)),
-      serviceRate: serviceRateDecimal * 100,
-      taxRate: taxRateDecimal * 100
-    };
-
-    // Prepare transfer data for database
-    const {
       property_use,
-      sale_or_gift_sub,
       plot_number,
       parcel_number,
       property_location,
@@ -92,10 +32,79 @@ const CreateTransferService = async (data, adminUnitId) => {
       files = []
     } = data;
 
+    // STEP 2: Validate SALE_OR_GIFT_SUB - only required if transfer type is SALE_OR_GIFT
+    if (transfer_type === "በሽያጭ ወይም በስጦታ" && !sale_or_gift_sub) {
+      throw new Error('በሽያጭ ወይም በስጦታ ለሚተላለፍ መሬት የንብረት ይዞታ አይነት ሊዝ ወይም መኖሪያ መመረጥ አለበት');
+    }
+
+    // STEP 3: Check if transfer is free inheritance (parent ↔ child)
+    const isFreeTransfer = transfer_type === "በውርስ የተገኘ" &&
+      (inheritance_relation === "ከልጅ ወደ ወላጅ" || inheritance_relation === "ከወላጅ ወደ ልጅ");
+
+    // STEP 4: Validate rates for non-free inheritance transfers
+    if (!isFreeTransfer) {
+      if (!service_rate || !tax_rate) {
+        throw new Error('ከልጅ ወደ ወላጅ ወይም ከወላጅ ወደ ልጅ ዉጭ ለሚተላለፍ ይዞታ የክፍያ መረጃ አስገቡ');
+      }
+
+      const serviceRateVal = parseFloat(service_rate);
+      const taxRateVal = parseFloat(tax_rate);
+
+      if (serviceRateVal < 0 || serviceRateVal > 100) {
+        throw new Error('የአገልግሎት ክፍያ በ% ከ 0-100 መሆን አለበት');
+      }
+
+      if (taxRateVal < 0 || taxRateVal > 100) {
+        throw new Error('የግብር ክፍያ በ% ከ 1-100 መሆን አለበት');
+      }
+    }
+
+    // STEP 5: Prepare calculation data - set zero rates for free transfers
+    const calculationData = { ...data };
+    if (isFreeTransfer) {
+      calculationData.service_rate = 0;
+      calculationData.tax_rate = 0;
+    }
+
+    // STEP 6: Extract calculation parameters
+    const {
+      service_rate: calc_service_rate,
+      tax_rate: calc_tax_rate
+    } = calculationData;
+
+    // STEP 7: Convert rates from percentage to decimal for calculation
+    const serviceRateDecimal = parseFloat(calc_service_rate) / 100;
+    const taxRateDecimal = parseFloat(calc_tax_rate) / 100;
+
+    // STEP 8: Parse numeric values with safe defaults
+    const area = parseFloat(property_area) || 0;
+    const landRate = parseFloat(land_value) || 0;
+    const buildingVal = parseFloat(building_value) || 0;
+    
+    // STEP 9: Calculate base property value
+    const baseValue = landRate * area + buildingVal;
+
+    // STEP 10: Calculate individual fees
+    const serviceFee = baseValue * serviceRateDecimal;
+    const taxAmount = baseValue * taxRateDecimal;
+    const totalPayable = serviceFee + taxAmount;
+
+    // STEP 11: Prepare fee calculation results with proper rounding
+    const feeCalculation = {
+      baseValue: parseFloat(baseValue.toFixed(2)),
+      serviceFee: parseFloat(serviceFee.toFixed(2)),
+      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      totalPayable: parseFloat(totalPayable.toFixed(2)),
+      serviceRate: serviceRateDecimal * 100,
+      taxRate: taxRateDecimal * 100
+    };
+
+    // STEP 12: Prepare complete transfer data for database
     const transferData = {
+      // Property Information
       property_use,
       transfer_type,
-      sale_or_gift_sub,
+      sale_or_gift_sub, // Will be null for non-sale/gift transfers
       inheritance_relation,
       plot_number,
       parcel_number,
@@ -103,26 +112,36 @@ const CreateTransferService = async (data, adminUnitId) => {
       land_value: parseFloat(land_value) || null,
       building_value: parseFloat(building_value) || null,
       property_location,
+
+      // Fee Information
       base_value: feeCalculation.baseValue,
       service_fee: feeCalculation.serviceFee,
       service_rate: feeCalculation.serviceRate,
       tax_amount: feeCalculation.taxAmount,
       tax_rate: feeCalculation.taxRate,
       total_payable: feeCalculation.totalPayable,
+
+      // Transceiver (Sender) Information
       transceiver_full_name,
       transceiver_phone: transceiver_phone.toString(),
       transceiver_email,
       transceiver_nationalid,
+
+      // Recipient Information
       recipient_full_name,
       recipient_phone: recipient_phone.toString(),
       recipient_email,
       recipient_nationalid,
+
+      // System Information
       administrative_unit_id: adminUnitId,
       file: files
     };
 
+    // STEP 13: Create the ownership transfer record in database
     const ownershipTransfer = await OwnershipTransfer.create(transferData);
 
+    // STEP 14: Return success response with all required fields
     return {
       success: true,
       message: "Ownership transfer created successfully",
@@ -140,7 +159,7 @@ const CreateTransferService = async (data, adminUnitId) => {
   } catch (error) {
     console.error('CreateTransferService Error:', error);
     
-    // Handle specific error types
+    // Handle specific database error types
     if (error.name === 'SequelizeValidationError') {
       const validationErrors = error.errors.map(err => err.message);
       throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
