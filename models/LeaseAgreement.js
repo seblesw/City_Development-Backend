@@ -63,6 +63,18 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      lease_year:{
+        type:DataTypes.INTEGER,
+        allowNull:true
+      },
+      lease_code:{
+        type:DataTypes.STRING,
+        allowNull:true
+      },
+      page_number:{
+         type:DataTypes.INTEGER,
+        allowNull:true
+      },
       status: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -83,11 +95,8 @@ module.exports = (db, DataTypes) => {
       },
       created_by: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "users", key: "id" },
-        validate: {
-          notNull: { msg: "ፈጣሪ መለያ መግለጽ አለበት።" },
-        },
       },
       updated_by: {
         type: DataTypes.INTEGER,
