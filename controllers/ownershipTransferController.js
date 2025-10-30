@@ -147,18 +147,18 @@ const updateTransferStatus = async (req, res) => {
 };
 
 /**
- * Get transfer statistics
+ * Get transfer statistics without caching
  */
 const getTransferStats = async (req, res) => {
   try {
     const adminUnitId = req.user.administrative_unit_id;
-
     const stats = await GetTransferStatsService(adminUnitId);
 
     return res.status(200).json({
       success: true,
       data: stats,
     });
+
   } catch (error) {
     console.error("Get Stats Error:", error);
 
@@ -168,6 +168,7 @@ const getTransferStats = async (req, res) => {
     });
   }
 };
+
 
 module.exports = {
   createTransferOwnership,
