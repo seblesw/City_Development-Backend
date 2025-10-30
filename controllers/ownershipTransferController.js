@@ -2,16 +2,12 @@
 
 const {
   CreateTransferService,
-  previewFeeCalculation,
   GetTransfersService,
   GetTransferByIdService,
   UpdateTransferStatusService,
   GetTransferStatsService,
 } = require("../services/ownershipTransferService");
 
-/**
- * Create ownership transfer
- */
 /**
  * Create ownership transfer with file upload
  */
@@ -55,25 +51,6 @@ const createTransferOwnership = async (req, res) => {
   }
 };
 
-/**
- * Preview fee calculation
- */
-const previewCalculation = async (req, res) => {
-  try {
-    const data = req.body;
-
-    const result = await previewFeeCalculation(data);
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Preview Calculation Error:", error);
-
-    return res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
 
 /**
  * Get all ownership transfers with pagination
@@ -189,7 +166,6 @@ const getTransferStats = async (req, res) => {
 
 module.exports = {
   createTransferOwnership,
-  previewCalculation,
   getTransfers,
   getTransferById,
   updateTransferStatus,
