@@ -16,7 +16,7 @@ const createLeaseAgreement = async (req, res) => {
       });
     }
 
-    const result = await createLeaseAgreementService(data, null, user);
+    const result = await createLeaseAgreementService(data, user);
     res.status(201).json({
       success: true,
       message: "የኪራይ ስምምነት በተሳካ ሁኔታ ተፈጥሯል።",

@@ -1,19 +1,18 @@
 // services/OwnershipTransferService.js
 
-const { OwnershipTransfer, Sequelize } = require("../models");
+const { OwnershipTransfer, Sequelize, sequelize } = require("../models");
 
-/**
- * Main service to create ownership transfer
- */
-/**
- * Main service to create ownership transfer
- */
+const path = require("path");
+const fs = require('fs')
+
 const CreateTransferService = async (data, adminUnitId, userId) => {
+  const t = await sequelize.transaction();
+
   try {
-    // STEP 1: Extract all required data from request WITH DEFAULT VALUES
+    // STEP 1: Extract all required data from request
     const { 
-      service_rate = null,
-      tax_rate = null, 
+      service_rate,
+      tax_rate, 
       transfer_type, 
       inheritance_relation,
       sale_or_gift_sub,
@@ -22,7 +21,6 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       building_value,
       property_use,
       plot_number,
-      parcel_number,
       property_location,
       transceiver_full_name,
       transceiver_phone,
@@ -32,20 +30,24 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       recipient_phone,
       recipient_email,
       recipient_nationalid,
-      uploadedFiles = [], // Files from multer
-      files = [] // Fallback for files array
+      uploadedFiles = [] // Files from multer
     } = data;
 
-    // STEP 2: Validate SALE_OR_GIFT_SUB - only required if transfer type is SALE_OR_GIFT
+    // STEP 2: Validate required fields
+    if (!transceiver_full_name || !transceiver_phone || !recipient_full_name || !recipient_phone) {
+      throw new Error('Required fields are missing');
+    }
+
+    // STEP 3: Validate SALE_OR_GIFT_SUB - only required if transfer type is SALE_OR_GIFT
     if (transfer_type === "በሽያጭ ወይም በስጦታ" && !sale_or_gift_sub) {
       throw new Error('Sale or gift sub-type is required for sale or gift transfers');
     }
 
-    // STEP 3: Check if transfer is free inheritance (parent ↔ child)
+    // STEP 4: Check if transfer is free inheritance (parent ↔ child)
     const isFreeTransfer = transfer_type === "በውርስ የተገኘ" &&
       (inheritance_relation === "ከልጅ ወደ ወላጅ" || inheritance_relation === "ከወላጅ ወደ ልጅ");
 
-    // STEP 4: Validate rates for non-free inheritance transfers
+    // STEP 5: Validate rates for non-free inheritance transfers
     if (!isFreeTransfer) {
       if (!service_rate || !tax_rate) {
         throw new Error('Service rate and tax rate are required for non-inheritance transfers');
@@ -63,37 +65,37 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       }
     }
 
-    // STEP 5: Prepare calculation data - set zero rates for free transfers
+    // STEP 6: Prepare calculation data - set zero rates for free transfers
     const calculationData = { ...data };
     if (isFreeTransfer) {
       calculationData.service_rate = 0;
       calculationData.tax_rate = 0;
     }
 
-    // STEP 6: Extract calculation parameters
+    // STEP 7: Extract calculation parameters
     const {
       service_rate: calc_service_rate,
       tax_rate: calc_tax_rate
     } = calculationData;
 
-    // STEP 7: Convert rates from percentage to decimal for calculation
+    // STEP 8: Convert rates from percentage to decimal for calculation
     const serviceRateDecimal = parseFloat(calc_service_rate) / 100;
     const taxRateDecimal = parseFloat(calc_tax_rate) / 100;
 
-    // STEP 8: Parse numeric values with safe defaults
+    // STEP 9: Parse numeric values with safe defaults
     const area = parseFloat(property_area) || 0;
     const landRate = parseFloat(land_value) || 0;
     const buildingVal = parseFloat(building_value) || 0;
     
-    // STEP 9: Calculate base property value
+    // STEP 10: Calculate base property value
     const baseValue = landRate * area + buildingVal;
 
-    // STEP 10: Calculate individual fees
+    // STEP 11: Calculate individual fees
     const serviceFee = baseValue * serviceRateDecimal;
     const taxAmount = baseValue * taxRateDecimal;
     const totalPayable = serviceFee + taxAmount;
 
-    // STEP 11: Prepare fee calculation results with proper rounding
+    // STEP 12: Prepare fee calculation results with proper rounding
     const feeCalculation = {
       baseValue: parseFloat(baseValue.toFixed(2)),
       serviceFee: parseFloat(serviceFee.toFixed(2)),
@@ -103,10 +105,35 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       taxRate: taxRateDecimal * 100
     };
 
-    // STEP 12: Process uploaded files
-    const processedFiles = await processUploadedFiles(uploadedFiles, files);
+    // STEP 13: Process uploaded files - FIXED VERSION
+    const fileMetadata = [];
+    if (Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
+      for (const file of uploadedFiles) {
+        // Verify file actually exists on disk
+        if (!fs.existsSync(file.path)) {
+          console.warn('File not found on disk:', file.path);
+          continue; // Skip files that don't exist
+        }
 
-    // STEP 13: Prepare complete transfer data for database
+        // Use serverRelativePath from multer or create it
+        const serverRelativePath = file.serverRelativePath || 
+          `uploads/documents/${file.filename}`;
+
+        fileMetadata.push({
+          file_path: serverRelativePath,
+          file_name: file.originalname || `document_${Date.now()}.pdf`,
+          mime_type: file.mimetype || "application/octet-stream",
+          file_size: file.size || 0,
+          uploaded_at: new Date().toISOString(),
+          uploaded_by: userId,
+          // Add additional useful fields
+          file_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          status: 'uploaded'
+        });
+      }
+    }
+
+    // STEP 14: Prepare complete transfer data for database
     const transferData = {
       // Property Information
       property_use,
@@ -114,7 +141,7 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       sale_or_gift_sub,
       inheritance_relation,
       plot_number,
-      parcel_number,
+      parcel_number: null,
       land_area: parseFloat(property_area) || null,
       land_value: parseFloat(land_value) || null,
       building_value: parseFloat(building_value) || null,
@@ -144,29 +171,38 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       administrative_unit_id: adminUnitId,
       created_by: userId,
       updated_by: userId,
-      file: processedFiles // Store processed file information
+      
+      // File Information - store as JSON array
+      file: fileMetadata.length > 0 ? fileMetadata : null
     };
 
-    // STEP 14: Create the ownership transfer record in database
-    const ownershipTransfer = await OwnershipTransfer.create(transferData);
+    // STEP 15: Create the ownership transfer record in database
+    const ownershipTransfer = await OwnershipTransfer.create(transferData, { 
+      transaction: t 
+    });
 
-    // STEP 15: Return success response with all required fields
+
+    // STEP 16: Create audit log
+    try {
+      const creator = await User.findByPk(userId, {
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t,
+      });
+    } catch (auditError) {
+      // Continue with transaction even if audit fails
+    }
+
+    await t.commit();
+
+    // STEP 17: Return complete transfer data
     return {
       success: true,
       message: "Ownership transfer created successfully",
-      data: {
-        id: ownershipTransfer.id,
-        plot_number: ownershipTransfer.plot_number,
-        total_payable: ownershipTransfer.total_payable,
-        transfer_type: ownershipTransfer.transfer_type,
-        created_at: ownershipTransfer.createdAt,
-        fee_breakdown: feeCalculation,
-        is_free_inheritance: isFreeTransfer,
-        uploaded_files: processedFiles.length // Optional: return file count
-      }
+      data: ownershipTransfer,
     };
 
   } catch (error) {
+    await t.rollback();
     console.error('CreateTransferService Error:', error);
     
     // Handle specific database error types
@@ -182,51 +218,6 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
     throw new Error(`Failed to create ownership transfer: ${error.message}`);
   }
 };
-
-/**
- * Process uploaded files from multer
- */
-const processUploadedFiles = async (uploadedFiles = [], fallbackFiles = []) => {
-  try {
-    // Use uploadedFiles from multer if available, otherwise use fallback
-    const filesToProcess = uploadedFiles.length > 0 ? uploadedFiles : fallbackFiles;
-    
-    if (filesToProcess.length === 0) {
-      return [];
-    }
-
-    // Process files - you can store file paths, create document records, etc.
-    const processedFiles = filesToProcess.map(file => {
-      // For multer uploaded files
-      if (file.serverRelativePath) {
-        return {
-          originalName: file.originalname,
-          storedName: file.filename,
-          path: file.serverRelativePath, // Use the relative path from multer
-          mimeType: file.mimetype,
-          size: file.size,
-          uploadedAt: new Date()
-        };
-      }
-      
-      // For fallback files (if any)
-      return {
-        originalName: file.originalname || file.name,
-        storedName: file.filename || `file-${Date.now()}`,
-        path: file.path || file.serverRelativePath,
-        mimeType: file.mimetype || file.type,
-        size: file.size,
-        uploadedAt: new Date()
-      };
-    });
-
-    return processedFiles;
-  } catch (error) {
-    console.error('Error processing uploaded files:', error);
-    throw new Error('Failed to process uploaded files');
-  }
-};
-
 /**
  * Get transfers with pagination and filtering
  */
@@ -262,16 +253,29 @@ const GetTransfersService = async ({ page, limit, transfer_type, property_use, a
   }
 };
 
-/**
- * Get single transfer by ID
- */
 const GetTransferByIdService = async (id, adminUnitId) => {
   try {
     const transfer = await OwnershipTransfer.findOne({
       where: { id, administrative_unit_id: adminUnitId }
     });
 
-    return transfer;
+    if (!transfer) {
+      return null;
+    }
+
+    // Convert to plain object to work with
+    const result = transfer.get({ plain: true });
+    
+    // Add file URLs - files are in /uploads/documents/
+    if (result.file && Array.isArray(result.file)) {
+      result.file = result.file.map(fileItem => ({
+        ...fileItem,
+        // Direct URL to files in /uploads/documents/
+        file_url: `${process.env.BASE_URL || 'http://localhost:3000'}/uploads/documents/${fileItem.storedName}`
+      }));
+    }
+
+    return result;
 
   } catch (error) {
     console.error('GetTransferByIdService Error:', error);

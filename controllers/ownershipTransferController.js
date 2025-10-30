@@ -11,6 +11,9 @@ const {
 /**
  * Create ownership transfer with file upload
  */
+/**
+ * Create ownership transfer with file upload
+ */
 const createTransferOwnership = async (req, res) => {
   try {
     let data;
@@ -28,12 +31,14 @@ const createTransferOwnership = async (req, res) => {
     // Get uploaded files from multer
     const files = req.files || [];
     
+    console.log('Uploaded files:', files); // Debug log
+
     // Add file paths to data for service
     data.uploadedFiles = files.map(file => ({
       originalname: file.originalname,
       filename: file.filename,
-      path: file.path, // This will be the full path on disk
-      serverRelativePath: file.serverRelativePath, // This is set in your multer config
+      path: file.path,
+      serverRelativePath: file.serverRelativePath,
       mimetype: file.mimetype,
       size: file.size
     }));

@@ -71,6 +71,25 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      file: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        validate: {
+          isValidFileArray(value) {
+            if (value && !Array.isArray(value)) {
+              throw new Error("File must be an array");
+            }
+            if (value) {
+              value.forEach((file) => {
+                if (file.file_path && typeof file.file_path !== "string") {
+                  throw new Error("File path must be a string");
+                }
+              });
+            }
+          },
+        },
+      },
       inheritance_relation: {
         type: DataTypes.ENUM(Object.values(INHERITANCE_RELATION)),
         allowNull: true,
