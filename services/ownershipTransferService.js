@@ -21,6 +21,7 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       building_value,
       property_use,
       plot_number,
+      parcel_number,
       property_location,
       transceiver_full_name,
       transceiver_phone,
@@ -30,7 +31,7 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       recipient_phone,
       recipient_email,
       recipient_nationalid,
-      uploadedFiles = [], // Files from multer
+      uploadedFiles = [],
     } = data;
 
     // STEP 2: Validate required fields
@@ -135,9 +136,7 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
           file_size: file.size || 0,
           uploaded_at: new Date().toISOString(),
           uploaded_by: userId,
-          // Add additional useful fields
           file_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          status: "uploaded",
         });
       }
     }
@@ -150,7 +149,7 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       sale_or_gift_sub,
       inheritance_relation,
       plot_number,
-      parcel_number: null,
+      parcel_number,
       land_area: parseFloat(property_area) || null,
       land_value: parseFloat(land_value) || null,
       building_value: parseFloat(building_value) || null,
