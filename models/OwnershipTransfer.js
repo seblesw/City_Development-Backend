@@ -15,7 +15,7 @@ const SALE_OR_GIFT_SUB = {
 const TRANSFER_TYPE = {
   SALE_OR_GIFT: "በሽያጭ ወይም በስጦታ",
   BANK_FORECLOSURE: "በባንክ ሐራጅ",
-  COURT_DECISION: "በፍርድ ዉሳኔ ",
+  COURT_DECISION: "በፍርድ ዉሳኔ",
   CONDOMINIUM: "የጋራ ህንጻ ኮንዶሚኒየም",
   RESIDENTIAL_ASSOCIATION: "የመኖሪያ ቤት ህብረት ስራ ማህበር",
   INHERITANCE: "በውርስ የተገኘ",
