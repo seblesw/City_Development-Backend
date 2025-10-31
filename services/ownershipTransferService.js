@@ -328,8 +328,6 @@ const UpdateTransferStatusService = async (id, status, adminUnitId) => {
   }
 };
 
-// services/ownershipTransferService.js - UPDATED
-
 /**
  * Get comprehensive transfer statistics with time-based analytics including quarterly reports
  */
