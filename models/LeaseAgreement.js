@@ -1,5 +1,5 @@
 const LEASE_STATUSES = {
-  ACTIVE: "ዝግጁ",
+  ACTIVE: "አክቲቭ",
   TERMINATED: "ተቋርጧል",
   EXPIRED: "ጊዜው አልፏል",
 };
@@ -56,13 +56,13 @@ module.exports = (db, DataTypes) => {
           isDate: { msg: "የኪራይ መጀመሪያ ቀን ትክክለኛ ቀን መሆን አለበት።" },
         },
       },
-      lease_terms: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
       lease_year: {
         type: DataTypes.INTEGER,
         allowNull: true,
+      },
+      tolerance_year:{
+        type:DataTypes.INTEGER,
+        allowNull:true
       },
       lease_code: {
         type: DataTypes.STRING,
