@@ -1,6 +1,7 @@
 
 const LEASE_USER_TYPES = {
   LESSEE: 'ውል ተቀባይ',
+  LEASER: 'ውል ሰጭ',
   LESSEE_TESTIMONIAL: 'የውል ተቀባይ ምስክር',
   LEASER_TESTIMONIAL: 'የውል ሰጭ ምስክር',
 };
@@ -47,10 +48,7 @@ module.exports = (db, DataTypes) => {
       },
       address: {
         type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 200], msg: 'አድራሻ ከ200 ፊደላት መብለጥ አይችልም።' },
-        },
+        allowNull: true,        
       },
       national_id: {
         type: DataTypes.STRING,
@@ -59,6 +57,10 @@ module.exports = (db, DataTypes) => {
         validate: {
           len: { args: [0, 50], msg: 'ብሔራዊ መለያ ከ50 ፊደላት መብለጥ አይችልም።' },
         },
+      },
+      nationality:{
+        type:DataTypes.STRING,
+        allowNull:true
       },
     },
     {

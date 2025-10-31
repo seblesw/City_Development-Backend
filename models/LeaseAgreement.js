@@ -24,13 +24,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "administrative_units", key: "id" },
       },
-      lessee_id: {
+      leas_user_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "lease_users", key: "id" },
-        validate: {
-          notNull: { msg: "የተከራይ መለያ መግለጽ አለበት።" },
-        },
       },
       leased_area: {
         type: DataTypes.FLOAT,
@@ -63,17 +60,17 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      lease_year:{
-        type:DataTypes.INTEGER,
-        allowNull:true
+      lease_year: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
       },
-      lease_code:{
-        type:DataTypes.STRING,
-        allowNull:true
+      lease_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
-      page_number:{
-         type:DataTypes.INTEGER,
-        allowNull:true
+      page_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
       },
       status: {
         type: DataTypes.STRING,
