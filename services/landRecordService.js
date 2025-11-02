@@ -1847,44 +1847,39 @@ const getFilterOptionsService = async (adminUnitId = null) => {
 
 const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
   try {
-    // Get current date ranges for time-based analytics
+    // Fixed date calculations without mutation
     const now = new Date();
-    const todayStart = new Date(now.setHours(0, 0, 0, 0));
-    const todayEnd = new Date(now.setHours(23, 59, 59, 999));
     
-    const weekStart = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - 7);
     weekStart.setHours(0, 0, 0, 0);
     
-    const monthStart = new Date();
+    const monthStart = new Date(now);
     monthStart.setDate(now.getDate() - 30);
     monthStart.setHours(0, 0, 0, 0);
     
-    const yearStart = new Date();
+    const yearStart = new Date(now);
     yearStart.setFullYear(now.getFullYear() - 1);
     yearStart.setHours(0, 0, 0, 0);
 
-    // Execute all queries in parallel for performance
+    // Execute all essential queries in parallel
     const [
       totalStats,
       timeBasedStats,
       landUseStats,
       ownershipStats,
-      debtStats,
-      areaStats,
-      monthlyTrends,
-      statusStats,
-      recentActivity,
-      // NEW: Additional analytics queries
-      priorityStats,
-      infrastructureStats,
-      landHistoryStats,
-      leaseStats,
       zoningStats,
-      blockStats,
-      ownershipCategoryStats,
-      notificationStats,
-      statusTimelineStats
+      landLevelStats,
+      monthlyTrends,
+      weeklyTrends,
+      yearlyTrends,
+      leaseStats,
+      recentActivity
     ] = await Promise.all([
       // 1. Total Statistics
       LandRecord.findOne({
@@ -1934,25 +1929,29 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         attributes: [
           'ownership_type',
           [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
+          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
+          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
         ],
         group: ['ownership_type'],
         order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
         raw: true
       }),
 
-      // 5. Debt Analysis
-      LandRecord.findOne({
+      // 5. Zoning Type Distribution
+      LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN has_debt = true THEN 1 END')), 'with_debt'],
-          [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN has_debt = false THEN 1 END')), 'without_debt'],
-          [Sequelize.fn('SUM', Sequelize.literal('CASE WHEN has_debt = true THEN area ELSE 0 END')), 'debt_area']
+          'zoning_type',
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
+          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
+          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
         ],
+        group: ['zoning_type'],
+        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
         raw: true
       }),
 
-      // 6. Area Distribution by Land Level
+      // 6. Land Level Distribution
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
@@ -1982,19 +1981,57 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true
       }),
 
-      // 8. Record Status Distribution
+      // 8. Weekly Trends (Last 12 weeks)
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { 
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.gte]: weekStart }
+        },
         attributes: [
-          'record_status',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+          [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'week'],
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
+          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
         ],
-        group: ['record_status'],
+        group: [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt'))],
+        order: [[Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'ASC']],
+        raw: true
+      }),
+
+      // 9. Yearly Trends (Last 3 years)
+      LandRecord.findAll({
+        where: { 
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.gte]: new Date(now.getFullYear() - 2, 0, 1) }
+        },
+        attributes: [
+          [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt')), 'year'],
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
+          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
+        ],
+        group: [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt'))],
+        order: [[Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt')), 'ASC']],
+        raw: true
+      }),
+
+      // 10. Lease Analytics
+      LandRecord.findAll({
+        where: { 
+          administrative_unit_id: adminUnitId,
+          lease_ownership_type: { [Op.not]: null }
+        },
+        attributes: [
+          'lease_ownership_type',
+          'lease_transfer_reason',
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
+          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
+          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+        ],
+        group: ['lease_ownership_type', 'lease_transfer_reason'],
         order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
         raw: true
       }),
 
-      // 9. Recent Activity (last 10 records)
+      // 11. Recent Activity (last 10 records)
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         include: [{
@@ -2009,146 +2046,21 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           'land_use',
           'area',
           'record_status',
-          'priority',
+          'zoning_type',
+          'land_level',
           'createdAt'
         ],
         order: [['createdAt', 'DESC']],
         limit: 10
-      }),
-
-      // NEW QUERIES START HERE
-
-      // 10. Priority Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'priority',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['priority'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 11. Infrastructure Status Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'infrastructure_status',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['infrastructure_status'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 12. Land History Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'land_history',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['land_history'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 13. Lease Analytics
-      LandRecord.findAll({
-        where: { 
-          administrative_unit_id: adminUnitId,
-          lease_ownership_type: { [Op.not]: null }
-        },
-        attributes: [
-          'lease_ownership_type',
-          'lease_transfer_reason',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['lease_ownership_type', 'lease_transfer_reason'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 14. Zoning Type Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'zoning_type',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['zoning_type'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 15. Block Analysis
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'block_number',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
-        ],
-        group: ['block_number'],
-        having: Sequelize.where(Sequelize.fn('COUNT', Sequelize.col('id')), '>=', 1),
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        limit: 10,
-        raw: true
-      }),
-
-      // 16. Ownership Category Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'ownership_category',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
-        ],
-        group: ['ownership_category'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 17. Notification Status Distribution
-      LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
-        attributes: [
-          'notification_status',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
-        ],
-        group: ['notification_status'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
-      }),
-
-      // 18. Status Timeline Analysis (Last 6 months)
-      LandRecord.findAll({
-        where: { 
-          administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: monthStart }
-        },
-        attributes: [
-          [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'week'],
-          'record_status',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
-        ],
-        group: [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'record_status'],
-        order: [[Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'ASC']],
-        raw: true
       })
     ]);
+
+    const totalRecords = parseInt(totalStats?.total_records) || 0;
 
     // Process and format the data
     const processedStats = {
       overview: {
-        total_records: parseInt(totalStats?.total_records) || 0,
+        total_records: totalRecords,
         total_area: parseFloat(totalStats?.total_area) || 0,
         average_area: parseFloat(totalStats?.average_area) || 0,
         max_area: parseFloat(totalStats?.max_area) || 0,
@@ -2169,129 +2081,32 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
+          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
         })),
 
         by_ownership_type: (ownershipStats || []).map(item => ({
           ownership_type: item.ownership_type || 'Unknown',
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
+          average_area: parseFloat(item.average_area) || 0,
+          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
         })),
 
-        by_land_level: (areaStats || []).map(item => ({
+        by_zoning_type: (zoningStats || []).map(item => ({
+          zoning_type: item.zoning_type || 'Unknown',
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
+        })),
+
+        by_land_level: (landLevelStats || []).map(item => ({
           land_level: item.land_level || 'Unknown',
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
-          average_area: parseFloat(item.average_area) || 0
-        })),
-
-        by_status: (statusStats || []).map(item => ({
-          record_status: item.record_status || 'Unknown',
-          count: parseInt(item.count),
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        // NEW DISTRIBUTIONS
-        by_priority: (priorityStats || []).map(item => ({
-          priority: item.priority || 'Not Set',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        by_infrastructure: (infrastructureStats || []).map(item => ({
-          infrastructure_status: item.infrastructure_status || 'Not Set',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        by_land_history: (landHistoryStats || []).map(item => ({
-          land_history: item.land_history || 'Not Recorded',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        by_zoning: (zoningStats || []).map(item => ({
-          zoning_type: item.zoning_type || 'Not Set',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        by_ownership_category: (ownershipCategoryStats || []).map(item => ({
-          ownership_category: item.ownership_category || 'Not Set',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        })),
-
-        by_notification: (notificationStats || []).map(item => ({
-          notification_status: item.notification_status || 'Not Set',
-          count: parseInt(item.count),
-          percentage: ((parseInt(item.count) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
+          average_area: parseFloat(item.average_area) || 0,
+          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
         }))
-      },
-
-      // NEW: Enhanced Analytics Sections
-      lease_analytics: {
-        summary: {
-          total_lease_records: leaseStats?.length || 0,
-          lease_percentage: ((leaseStats?.length || 0) / (parseInt(totalStats?.total_records) || 1) * 100).toFixed(1)
-        },
-        by_lease_type: (leaseStats || []).reduce((acc, item) => {
-          const type = item.lease_ownership_type || 'Unknown';
-          if (!acc[type]) acc[type] = { count: 0, total_area: 0, transfer_reasons: {} };
-          acc[type].count += parseInt(item.count);
-          acc[type].total_area += parseFloat(item.total_area) || 0;
-          
-          const reason = item.lease_transfer_reason || 'Not Specified';
-          if (!acc[type].transfer_reasons[reason]) acc[type].transfer_reasons[reason] = 0;
-          acc[type].transfer_reasons[reason] += parseInt(item.count);
-          
-          return acc;
-        }, {}),
-        transfer_reasons: (leaseStats || []).reduce((acc, item) => {
-          const reason = item.lease_transfer_reason || 'Not Specified';
-          if (!acc[reason]) acc[reason] = { count: 0, total_area: 0 };
-          acc[reason].count += parseInt(item.count);
-          acc[reason].total_area += parseFloat(item.total_area) || 0;
-          return acc;
-        }, {})
-      },
-
-      block_analytics: {
-        top_blocks: (blockStats || []).map(item => ({
-          block_number: item.block_number || 'Unknown',
-          count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0,
-          average_area: parseFloat(item.average_area) || 0
-        })),
-        total_blocks: new Set(blockStats?.map(item => item.block_number)).size || 0
-      },
-
-      workflow_analytics: {
-        priority_breakdown: {
-          high_priority: (priorityStats || []).find(p => p.priority === 'ከፍተኛ')?.count || 0,
-          medium_priority: (priorityStats || []).find(p => p.priority === 'መካከለኛ')?.count || 0,
-          low_priority: (priorityStats || []).find(p => p.priority === 'ዝቅተኛ')?.count || 0
-        },
-        notification_status: {
-          sent: (notificationStats || []).find(n => n.notification_status === 'ተልኳል')?.count || 0,
-          not_sent: (notificationStats || []).find(n => n.notification_status === 'አልተላከም')?.count || 0,
-          failed: (notificationStats || []).find(n => n.notification_status === 'አልተሳካም')?.count || 0
-        }
-      },
-
-      financial_analytics: {
-        debt_analysis: {
-          with_debt: parseInt(debtStats?.with_debt) || 0,
-          without_debt: parseInt(debtStats?.without_debt) || 0,
-          debt_area: parseFloat(debtStats?.debt_area) || 0,
-          debt_percentage: ((parseInt(debtStats?.with_debt) / (parseInt(totalStats?.total_records) || 1)) * 100).toFixed(1)
-        }
       },
 
       trends: {
@@ -2300,10 +2115,52 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0
         })),
-        weekly_status: (statusTimelineStats || []).reduce((acc, item) => {
-          const week = item.week;
-          if (!acc[week]) acc[week] = {};
-          acc[week][item.record_status] = parseInt(item.count);
+        
+        weekly: (weeklyTrends || []).map(item => ({
+          week: item.week,
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0
+        })),
+        
+        yearly: (yearlyTrends || []).map(item => ({
+          year: item.year,
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0
+        }))
+      },
+
+      lease_analytics: {
+        summary: {
+          total_lease_records: leaseStats?.length || 0,
+          lease_percentage: totalRecords > 0 ? ((leaseStats?.length || 0) / totalRecords * 100).toFixed(1) : 0
+        },
+        by_lease_type: (leaseStats || []).map(item => ({
+          lease_ownership_type: item.lease_ownership_type || 'Unknown',
+          lease_transfer_reason: item.lease_transfer_reason || 'Not Specified',
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0
+        })),
+        
+        // Aggregated by lease type only
+        aggregated_by_type: (leaseStats || []).reduce((acc, item) => {
+          const type = item.lease_ownership_type || 'Unknown';
+          if (!acc[type]) {
+            acc[type] = {
+              count: 0,
+              total_area: 0,
+              transfer_reasons: {}
+            };
+          }
+          acc[type].count += parseInt(item.count);
+          acc[type].total_area += parseFloat(item.total_area) || 0;
+          
+          const reason = item.lease_transfer_reason || 'Not Specified';
+          if (!acc[type].transfer_reasons[reason]) {
+            acc[type].transfer_reasons[reason] = 0;
+          }
+          acc[type].transfer_reasons[reason] += parseInt(item.count);
+          
           return acc;
         }, {})
       },
@@ -2314,21 +2171,22 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         land_use: record.land_use,
         area: record.area,
         record_status: record.record_status,
-        priority: record.priority,
+        zoning_type: record.zoning_type,
+        land_level: record.land_level,
         created_at: record.createdAt,
         owner_names: record.owners?.map(owner => 
           `${owner.first_name} ${owner.last_name}`.trim()
         ).filter(name => name) || []
       })),
 
+      // Essential calculated metrics only
       calculated_metrics: {
-        records_per_hectare: totalStats?.total_records > 0 ? 
-          (parseInt(totalStats.total_records) / (parseFloat(totalStats.total_area) / 10000)).toFixed(2) : 0,
-        infrastructure_coverage: infrastructureStats?.find(i => i.infrastructure_status === 'የተሟላለት')?.count || 0,
-        approval_rate: statusStats?.find(s => s.record_status === 'ጸድቋል')?.count || 0,
-        rejection_rate: statusStats?.find(s => s.record_status === 'ውድቅ ተደርጓል')?.count || 0,
-        average_land_level: areaStats?.reduce((sum, item) => sum + (parseInt(item.land_level) * parseInt(item.count)), 0) / 
-          (areaStats?.reduce((sum, item) => sum + parseInt(item.count), 0) || 1) || 0
+        records_per_hectare: totalRecords > 0 && totalStats?.total_area > 0 ? 
+          (totalRecords / (parseFloat(totalStats.total_area) / 10000)).toFixed(2) : 0,
+        
+        average_land_level: landLevelStats?.length > 0 ? 
+          landLevelStats.reduce((sum, item) => sum + (parseInt(item.land_level) * parseInt(item.count)), 0) / 
+          landLevelStats.reduce((sum, item) => sum + parseInt(item.count), 0) : 0
       }
     };
 
