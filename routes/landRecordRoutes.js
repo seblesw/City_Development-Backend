@@ -96,9 +96,11 @@ router.get(
 );
 router.get('/filter-options', landRecordController.getFilterOptions);
 
-router.get('/stat', landRecordController.getLandRecordsStats);
-//this helps to filter land records geographically by admin unit
-router.get(
+router.get('/admin-stat',
+  authMiddleware.protect,
+  landRecordController.getLandRecordsStats);
+
+  router.get(
   "/admin-unit-records",
   authMiddleware.protect,
   landRecordController.getLandRecordsByUserAdminUnit

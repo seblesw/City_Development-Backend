@@ -26,6 +26,7 @@ const {
   getLandBankRecordsService,
   getLandRecordsStatsService,
   getFilterOptionsService,
+  getLandRecordsStatsByAdminUnit,
 } = require("../services/landRecordService");
 
 
@@ -371,12 +372,13 @@ const getFilterOptions = async (req, res) => {
 
 const getLandRecordsStats = async (req, res) => {
   try {
-    const result = await getLandRecordsStatsService();
+    const adminUnitId = req.user.administrative_unit_id;
+    const result = await getLandRecordsStatsByAdminUnit(adminUnitId);
     
     return res.status(200).json({
       status: "success",
       message: "Statistics retrieved successfully",
-      data: result.data,
+      data: result,
     });
   } catch (error) {
     return res.status(500).json({
