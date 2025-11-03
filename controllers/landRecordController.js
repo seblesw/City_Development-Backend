@@ -49,7 +49,6 @@ const createLandRecord = async (req, res) => {
       user
     );
 
-    // ✅ ENHANCED: Add action log entry and comprehensive notification
     try {
       const landRecord = await LandRecord.findByPk(result.landRecord.id, {
         include: [{
@@ -60,7 +59,6 @@ const createLandRecord = async (req, res) => {
       });
       
       if (landRecord) {
-        // Trigger notification for creation of land record
         try {
           const io = req.app.get('io');
           const { notifyNewAction } = require('../utils/notificationUtils'); 
@@ -85,16 +83,13 @@ const createLandRecord = async (req, res) => {
               }
             });
             
-            console.log(`✅ ActionLog and Notification created for record creation: ${landRecord.parcel_number}`);
           }
         } catch (notificationError) {
-          console.error('❌ Notification error:', notificationError);
-          // Don't fail the request if notification fails
+          throw new Error(' Notification error:', notificationError.message);
         }
       }
     } catch (logError) {
-      console.error('❌ Action log error:', logError);
-      // Don't fail the main request if logging fails
+      throw new Error(`Logging error: ${logError.message}`);
     }
 
     return res.status(201).json({
@@ -103,7 +98,6 @@ const createLandRecord = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error('❌ Create land record error:', error);
     return res.status(400).json({
       status: "error",
       message: `የመዝገብ መፍጠር ስህተት: ${error.message}`,

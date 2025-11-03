@@ -78,7 +78,7 @@ const createLandOwner = async (
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
               profile_picture: profilePicture || existingUser.profile_picture,
-              role_id: ownerData.role_id || existingUser.role_id, // Keep existing role_id if not provided
+              role_id: ownerData.role_id || existingUser.role_id, 
             },
             { transaction: t }
           );

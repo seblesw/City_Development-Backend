@@ -60,6 +60,7 @@ const createLandRecordService = async (data, files, user) => {
 
     const ownersWithPhotos = processOwnerPhotos();
 
+    // action_log for LandRecord creation
     const landRecord = await LandRecord.create(
       {
         ...land_record,
@@ -80,23 +81,28 @@ const createLandRecordService = async (data, files, user) => {
             changed_at: new Date(),
           },
         ],
-        action_log: [
-          {
-            action: "የመሬት መዝገብ ተፈጥሯል",
-            changed_by: {
-              id: user.id,
-              first_name: user.first_name,
-              middle_name: user.middle_name,
-              last_name: user.last_name,
-              email: user.email,
-            },
-            changed_at: new Date(),
-          },
-        ],
       },
       { transaction: t }
     );
 
+    // Create ActionLog entry for record creation 
+    await ActionLog.create({
+      land_record_id: landRecord.id,
+      performed_by: user.id,
+      action_type: 'RECORD_CREATED',
+      notes: 'የመሬት መዝገብ ተፈጥሯል',
+      additional_data: {
+        parcel_number: landRecord.parcel_number,
+        administrative_unit_id: adminunit,
+        owners_count: owners.length,
+        documents_count: documents.length,
+        created_by_name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" "),
+        initial_status: RECORD_STATUSES.SUBMITTED,
+        action_description: "የመሬት መዝገብ ተፈጥሯል"
+      }
+    }, { transaction: t });
+
+    // Rest of the code remains exactly the same...
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -173,6 +179,7 @@ const createLandRecordService = async (data, files, user) => {
         { transaction: t }
       );
     }
+
     await t.commit();
 
     return {
