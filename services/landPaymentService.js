@@ -6,6 +6,7 @@ const {
   LandRecord,
   User,
   Role,
+  ActionLog,
 } = require("../models");
 const { Op } = require("sequelize");
 const addNewPaymentService = async (landRecordId, user, data) => {
