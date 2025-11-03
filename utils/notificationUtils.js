@@ -15,8 +15,8 @@ const notifyNewAction = async (io, actionData) => {
     const { 
       landRecordId, 
       parcelNumber, 
-      action_type, // CHANGED: from 'action' to 'action_type'
-      performed_by, // CHANGED: from 'changed_by' to 'performed_by'
+      action_type,
+      performed_by, 
       changed_at = new Date().toISOString(), 
       administrative_unit_id, 
       notes = '',
@@ -28,10 +28,6 @@ const notifyNewAction = async (io, actionData) => {
     if (!action_type || !performed_by) {
       throw new Error("ActionLog.action_type and performed_by are required");
     }
-    // Validate required fields for ActionLog
-    // if (!action_type || !performed_by) {
-    //   throw new Error("ActionLog.action_type and performed_by are required");
-    // }
 
     // Get the land record with associated documents to extract plot_number
     const landRecord = await LandRecord.findByPk(landRecordId, {
@@ -68,13 +64,13 @@ const notifyNewAction = async (io, actionData) => {
       return await PushNotification.create({
         user_id: user.id,
         land_record_id: landRecordId,
-        action_log_id: actionLog.id, // ADDED: Link to ActionLog
+        action_log_id: actionLog.id, 
         title: title,
         message: message,
         action_type: action_type,
         is_seen: false,
         additional_data: {
-          action_log_id: actionLog.id, // Include ActionLog reference
+          action_log_id: actionLog.id, 
           ...additional_data,
           plot_number: plotNumber 
         }
@@ -230,7 +226,6 @@ const generateNotificationContent = (action_type, parcelNumber, additionalData, 
   };
 };
 
-// KEEP ALL YOUR EXISTING FUNCTIONS EXACTLY AS THEY ARE:
 /**
  * Get user's unseen notifications count
  */
