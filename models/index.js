@@ -13,6 +13,7 @@ const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
   db,
   DataTypes
 );
+const ActionLog = require("./ActionLog")(db, DataTypes);
 
 const User = require("./User")(db, DataTypes);
 const {
@@ -165,6 +166,8 @@ User.hasMany(OwnershipTransfer, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+User.hasMany(ActionLog, { foreignKey: "user_id", as: "actionLogs" });
+
 // Region associations
 Region.hasMany(Zone, {
   foreignKey: "region_id",
@@ -363,6 +366,10 @@ LandRecord.hasMany(PushNotification, {
   foreignKey: "land_record_id",
   as: "pushnotifications",
 });
+LandRecord.hasMany(ActionLog, {
+  foreignKey: "land_record_id",
+  as: "actionLogs",
+});
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -523,7 +530,11 @@ OwnershipTransfer.belongsTo(User, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-
+ActionLog.belongsTo(User, { foreignKey: "user_id", as: "user" });
+ActionLog.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -566,4 +577,5 @@ module.exports = {
   PROPERTY_USE,
   INHERITANCE_RELATION,
   TRANSFER_TYPE,
+  ActionLog,
 };
