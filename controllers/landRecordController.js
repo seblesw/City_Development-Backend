@@ -29,7 +29,6 @@ const {
   getLandRecordsStatsByAdminUnit,
 } = require("../services/landRecordService");
 
-
 const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
@@ -61,22 +60,21 @@ const createLandRecord = async (req, res) => {
       });
       
       if (landRecord) {
-
-        // trigger notification for creation of land record
+        // Trigger notification for creation of land record
         try {
           const io = req.app.get('io');
-          const notifyNewAction = req.app.get('notifyNewAction');
+          const { notifyNewAction } = require('../utils/notificationUtils'); 
           
           if (io && notifyNewAction) {
             const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
             
-            await notifyNewAction({
+            await notifyNewAction(io, { 
               landRecordId: landRecord.id,
               parcelNumber: landRecord.parcel_number,
-              action: 'RECORD_CREATED',
-              changed_by: user.id,
-              changed_at: new Date().toISOString(),
+              action_type: 'RECORD_CREATED', 
+              performed_by: user.id, 
               administrative_unit_id: landRecord.administrative_unit_id,
+              notes: `አዲስ የመሬት መዝገብ ተፈጥሯል - የመሬት ቁጥር: ${landRecord.parcel_number}`,
               additional_data: {
                 status: landRecord.record_status,
                 owners_count: owners.length,
@@ -86,15 +84,17 @@ const createLandRecord = async (req, res) => {
                 action_description: "የመሬት መዝገብ ተፈጥሯል"
               }
             });
+            
+            console.log(`✅ ActionLog and Notification created for record creation: ${landRecord.parcel_number}`);
           }
         } catch (notificationError) {
-          console.error('Notification error:', notificationError);
+          console.error('❌ Notification error:', notificationError);
           // Don't fail the request if notification fails
         }
       }
     } catch (logError) {
-      console.error('Action log error:', logError);
-      // Don't fail the request if action logging fails
+      console.error('❌ Action log error:', logError);
+      // Don't fail the main request if logging fails
     }
 
     return res.status(201).json({
@@ -103,6 +103,7 @@ const createLandRecord = async (req, res) => {
       data: result,
     });
   } catch (error) {
+    console.error('❌ Create land record error:', error);
     return res.status(400).json({
       status: "error",
       message: `የመዝገብ መፍጠር ስህተት: ${error.message}`,
@@ -761,12 +762,10 @@ const changeRecordStatus = async (req, res) => {
     const user = req.user;
 
     if (!record_status) {
-      return res
-        .status(400)
-        .json({ status: "error", message: "Record status is required" });
+      return res.status(400).json({ status: "error", message: "Record status is required" });
     }
 
-    //Get the land record with current status BEFORE updating
+    // Get the land record with current status BEFORE updating
     const landRecordBeforeUpdate = await LandRecord.findByPk(recordId, {
       include: [{
         model: Document,
@@ -776,10 +775,7 @@ const changeRecordStatus = async (req, res) => {
     });
 
     if (!landRecordBeforeUpdate) {
-      return res.status(404).json({
-        status: "error",
-        message: "Land record not found"
-      });
+      return res.status(404).json({ status: "error", message: "Land record not found" });
     }
 
     const previousStatus = landRecordBeforeUpdate.record_status;
@@ -793,23 +789,22 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
-    //Trigger notification with the correct previous_status
+    // Trigger ActionLog and Notification
     try {
       const io = req.app.get('io');
-      const notifyNewAction = req.app.get('notifyNewAction');
+      const { notifyNewAction } = require('../utils/notificationUtils');
       
       if (io && notifyNewAction) {
-        await notifyNewAction({
+        await notifyNewAction(io, {
           landRecordId: landRecordBeforeUpdate.id,
           parcelNumber: landRecordBeforeUpdate.parcel_number,
-          action: `STATUS_CHANGED_TO_${record_status}`,
-          changed_by: user.id,
-          changed_at: new Date().toISOString(),
+          action_type: `STATUS_${record_status}`,
+          performed_by: user.id,
           administrative_unit_id: landRecordBeforeUpdate.administrative_unit_id,
+          notes: notes || `Status changed from ${previousStatus} to ${record_status}`,
           additional_data: {
             status: record_status,
             previous_status: previousStatus, 
-            notes: notes,
             rejection_reason: rejection_reason,
             changed_by_name: `${user.first_name} ${user.middle_name}`,
             plot_number: plotNumber 
@@ -817,7 +812,7 @@ const changeRecordStatus = async (req, res) => {
         });
       }
     } catch (notificationError) {
-      console.error('Notification error:', notificationError);
+throw new Error(`Notification error: ${notificationError.message}`);
     }
 
     res.status(200).json({

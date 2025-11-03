@@ -149,10 +149,7 @@ User.hasMany(LeaseAgreement, {
   foreignKey: "updated_by",
   as: "updatedLeases",
 });
-User.hasMany(PushNotification, {
-  foreignKey: "user_id",
-  as: "pushNotifications",
-});
+
 User.hasMany(OwnershipTransfer, {
   foreignKey: "created_by",
   as: "createdOwnershipTransfers",
@@ -166,8 +163,15 @@ User.hasMany(OwnershipTransfer, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
-User.hasMany(ActionLog, { foreignKey: "user_id", as: "actionLogs" });
+User.hasMany(ActionLog, {
+  foreignKey: 'performed_by',
+  as: 'performedActions'
+});
 
+User.hasMany(PushNotification, {
+  foreignKey: 'user_id',
+  as: 'notifications'
+});
 // Region associations
 Region.hasMany(Zone, {
   foreignKey: "region_id",
@@ -362,13 +366,14 @@ LandRecord.hasMany(LeaseAgreement, {
   foreignKey: "land_record_id",
   as: "leasedlands",
 });
-LandRecord.hasMany(PushNotification, {
-  foreignKey: "land_record_id",
-  as: "pushnotifications",
-});
 LandRecord.hasMany(ActionLog, {
-  foreignKey: "land_record_id",
-  as: "actionLogs",
+  foreignKey: 'land_record_id',
+  as: 'actionLogs'
+});
+
+LandRecord.hasMany(PushNotification, {
+  foreignKey: 'land_record_id',
+  as: 'notifications'
 });
 
 // LandPayment associations
@@ -502,12 +507,18 @@ LeaseUser.belongsTo(LeaseAgreement, {
 
 //push notification associations
 PushNotification.belongsTo(User, {
-  foreignKey: "user_id",
-  as: "user",
+  foreignKey: 'user_id',
+  as: 'user'
 });
+
 PushNotification.belongsTo(LandRecord, {
-  foreignKey: "land_record_id",
-  as: "landRecord",
+  foreignKey: 'land_record_id',
+  as: 'landRecord'
+});
+
+PushNotification.belongsTo(ActionLog, {
+  foreignKey: 'action_log_id',
+  as: 'actionLog'
 });
 //ownership transfer association
 OwnershipTransfer.belongsTo(AdministrativeUnit, {
@@ -530,10 +541,20 @@ OwnershipTransfer.belongsTo(User, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-ActionLog.belongsTo(User, { foreignKey: "user_id", as: "user" });
+// ActionLog associations
+ActionLog.belongsTo(User, {
+  foreignKey: 'performed_by',
+  as: 'performedBy'
+});
+
 ActionLog.belongsTo(LandRecord, {
-  foreignKey: "land_record_id",
-  as: "landRecord",
+  foreignKey: 'land_record_id',
+  as: 'landRecord'
+});
+
+ActionLog.hasMany(PushNotification, {
+  foreignKey: 'action_log_id',
+  as: 'notifications'
 });
 // Export Sequelize instance, models, and constants
 module.exports = {

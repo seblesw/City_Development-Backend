@@ -22,6 +22,14 @@ module.exports = (db, DataTypes) => {
         key: 'id'
       }
     },
+    action_log_id: {  // ADD THIS FIELD
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'action_logs',
+        key: 'id'
+      }
+    },
     title: {
       type: DataTypes.STRING,
       allowNull: false

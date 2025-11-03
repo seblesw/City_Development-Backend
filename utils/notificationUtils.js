@@ -1,16 +1,38 @@
+// utils/notificationUtils.js
 const { Op } = require("sequelize");
-const { LandRecord, User, PushNotification, Role, Document } = require("../models");
+const { LandRecord, User, PushNotification, Role, Document, ActionLog } = require("../models");
 
 // Store user sessions
 const userSockets = new Map();
 
 /**
- * Create notifications for relevant users when an action occurs
+ * Create ActionLog and generate notifications for relevant users
  */
 const notifyNewAction = async (io, actionData) => {
+  
   try {
-    const { landRecordId, parcelNumber, action, changed_by, changed_at, administrative_unit_id, additional_data } = actionData;
     
+    const { 
+      landRecordId, 
+      parcelNumber, 
+      action_type, // CHANGED: from 'action' to 'action_type'
+      performed_by, // CHANGED: from 'changed_by' to 'performed_by'
+      changed_at = new Date().toISOString(), 
+      administrative_unit_id, 
+      notes = '',
+      additional_data = {} 
+    } = actionData;
+
+
+    // Validate required fields for ActionLog
+    if (!action_type || !performed_by) {
+      throw new Error("ActionLog.action_type and performed_by are required");
+    }
+    // Validate required fields for ActionLog
+    // if (!action_type || !performed_by) {
+    //   throw new Error("ActionLog.action_type and performed_by are required");
+    // }
+
     // Get the land record with associated documents to extract plot_number
     const landRecord = await LandRecord.findByPk(landRecordId, {
       include: [{
@@ -22,53 +44,37 @@ const notifyNewAction = async (io, actionData) => {
     
     // Extract plot_number from the first document (if exists)
     const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
-    
-    // Build the where clause for users
-    const userWhereClause = {
-      is_active: true,
-      [Op.or]: [
-        // Users in the same administrative unit
-        ...(administrative_unit_id ? [{ administrative_unit_id }] : []),
-        // Users with specific roles (መዝጋቢ and አስተዳደር)
-        {
-          '$role.name$': {
-            [Op.in]: ['መዝጋቢ', 'አስተዳደር']
-          }
-        }
-      ]
-    };
 
-    // If no administrative_unit_id, remove the empty array condition
-    if (!administrative_unit_id) {
-      userWhereClause[Op.or] = userWhereClause[Op.or].filter(condition => 
-        !condition.administrative_unit_id
-      );
-    }
-
-    // Get all users to notify in one query
-    const usersToNotify = await User.findAll({
-      where: userWhereClause,
-      include: [{
-        model:Role,
-        as: 'role',
-        attributes: ['id', 'name']
-      }],
-      attributes: ['id', 'first_name',"middle_name",'last_name', 'administrative_unit_id']
+    // 1. FIRST CREATE ACTION LOG
+    const actionLog = await ActionLog.create({
+      land_record_id: landRecordId,
+      performed_by: performed_by,
+      action_type: action_type,
+      notes: notes,
+      additional_data: {
+        ...additional_data,
+        plot_number: plotNumber,
+        parcel_number: parcelNumber || landRecord?.parcel_number
+      }
     });
+
+    // 2. THEN CREATE NOTIFICATIONS FOR RELEVANT USERS
+    const usersToNotify = await getUsersToNotify(administrative_unit_id || landRecord?.administrative_unit_id);
 
     // Create push notification records for each user
     const notificationPromises = usersToNotify.map(async (user) => {
-      const title = getNotificationTitle(action, parcelNumber, plotNumber);
-      const message = getNotificationMessage(action, parcelNumber, additional_data, plotNumber);
+      const { title, message } = generateNotificationContent(action_type, parcelNumber || landRecord?.parcel_number, additional_data, plotNumber);
       
       return await PushNotification.create({
         user_id: user.id,
         land_record_id: landRecordId,
+        action_log_id: actionLog.id, // ADDED: Link to ActionLog
         title: title,
         message: message,
-        action_type: action,
+        action_type: action_type,
         is_seen: false,
         additional_data: {
+          action_log_id: actionLog.id, // Include ActionLog reference
           ...additional_data,
           plot_number: plotNumber 
         }
@@ -77,7 +83,7 @@ const notifyNewAction = async (io, actionData) => {
 
     const createdNotifications = await Promise.all(notificationPromises);
 
-    // Send real-time updates to connected users
+    // 3. SEND REAL-TIME UPDATES
     let notifiedCount = 0;
     usersToNotify.forEach(user => {
       const socketId = userSockets.get(user.id);
@@ -90,9 +96,10 @@ const notifyNewAction = async (io, actionData) => {
             title: userNotification.title,
             message: userNotification.message,
             action_type: userNotification.action_type,
-            parcel_number: parcelNumber,
+            parcel_number: parcelNumber || landRecord?.parcel_number,
             plot_number: plotNumber, 
             land_record_id: landRecordId,
+            action_log_id: actionLog.id, // Include ActionLog ID
             is_seen: userNotification.is_seen,
             created_at: userNotification.created_at,
             additional_data: userNotification.additional_data
@@ -104,13 +111,126 @@ const notifyNewAction = async (io, actionData) => {
       }
     });
 
-    return notifiedCount;
+    return { actionLog, notifiedCount };
     
   } catch (error) {
     throw error;
   }
 };
 
+/**
+ * Get users to notify based on administrative unit and roles
+ */
+const getUsersToNotify = async (administrative_unit_id) => {
+  // Build the where clause for users
+  const userWhereClause = {
+    is_active: true,
+    [Op.or]: [
+      // Users in the same administrative unit
+      ...(administrative_unit_id ? [{ administrative_unit_id }] : []),
+      // Users with specific roles (መዝጋቢ and አስተዳደር)
+      {
+        '$role.name$': {
+          [Op.in]: ['መዝጋቢ', 'አስተዳደር']
+        }
+      }
+    ]
+  };
+
+  // If no administrative_unit_id, remove the empty array condition
+  if (!administrative_unit_id) {
+    userWhereClause[Op.or] = userWhereClause[Op.or].filter(condition => 
+      !condition.administrative_unit_id
+    );
+  }
+
+  // Get all users to notify in one query
+  return await User.findAll({
+    where: userWhereClause,
+    include: [{
+      model: Role,
+      as: 'role',
+      attributes: ['id', 'name']
+    }],
+    attributes: ['id', 'first_name', "middle_name", 'last_name', 'administrative_unit_id']
+  });
+};
+
+/**
+ * Helper function to generate notification title and message
+ */
+const generateNotificationContent = (action_type, parcelNumber, additionalData, plotNumber = null) => {
+  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `ፓርሰል ${parcelNumber}`;
+  const changedByName = additionalData?.changed_by_name || 'ያልታወቀ ተጠቃሚ';
+  
+  // Handle different action types
+  if (action_type === 'RECORD_CREATED') {
+    const ownersCount = additionalData?.owners_count || 0;
+    
+    let message = `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
+    message += `\nየባለቤቶች ብዛት: ${ownersCount}`;
+    message += `\nየመጀመሪያ ሁኔታ: ${additionalData?.status || 'ረቂቅ'}`;
+    message += `\n(በ${changedByName} ተፈጥሯል)`;
+    
+    return {
+      title: `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`,
+      message: message
+    };
+  }
+  
+  // Handle status changes - UPDATED FOR NEW ACTION TYPES
+  if (action_type.startsWith('STATUS_')) {
+    const status = action_type.replace('STATUS_', '');
+    const statusMap = {
+      'SUBMITTED': 'ተልኳል',
+      'UNDER_REVIEW': 'በግምገማ ላይ', 
+      'APPROVED': 'ጸድቋል',
+      'REJECTED': 'ውድቅ ተደርጓል'
+    };
+    const statusText = statusMap[status] || status;
+    const previousStatus = additionalData?.previous_status || '';
+    
+    let message = `የ${identifier} መሬት መዝገብ ሁኔታ`;
+    if (previousStatus) {
+      const previousStatusText = statusMap[previousStatus] || previousStatus;
+      message += ` ከ "${previousStatusText}" ወደ "${statusText}" ተቀይሯል።`;
+    } else {
+      message += ` ወደ "${statusText}" ተቀይሯል።`;
+    }
+    
+    // Add additional context if available
+    if (additionalData?.rejection_reason) {
+      message += `\nምክንያት: ${additionalData.rejection_reason}`;
+    } else if (additionalData?.notes) {
+      message += `\nማስታወሻ: ${additionalData.notes}`;
+    } else if (additionalData.filelength){
+      message += `\nማስታወሻ: ${additionalData.filelength}`;
+    }
+    
+    message += `\n(በ${changedByName} ተቀይሯል)`;
+    
+    return {
+      title: `የመሬት መዝገብ ሁኔታ ተቀይሯል - ${identifier} | ${statusText}`,
+      message: message
+    };
+  }
+  
+  // Record updates
+  if (action_type === 'RECORD_UPDATED') {
+    return {
+      title: `የመሬት መዝገብ ተቀይሯል - ${identifier}`,
+      message: `የ${identifier} መሬት መዝገብ ታሪፍ ተቀይሯል። (በ${changedByName})`
+    };
+  }
+  
+  // Default fallback
+  return {
+    title: `የስርአት ማሳወቂያ - ${identifier}`,
+    message: `በ${identifier} መሬት መዝገብ ላይ እንቅስቃሴ ተካሂዷል። (በ${changedByName})`
+  };
+};
+
+// KEEP ALL YOUR EXISTING FUNCTIONS EXACTLY AS THEY ARE:
 /**
  * Get user's unseen notifications count
  */
@@ -144,6 +264,16 @@ const getUserNotifications = async (userId, limit = 20, offset = 0) => {
           as: "landRecord",
           attributes: ["id", "parcel_number"],
         },
+        {
+          model: ActionLog,
+          as: "actionLog",
+          attributes: ["id", "action_type", "notes", "additional_data", "created_at"],
+          include: [{
+            model: User,
+            as: "performedBy",
+            attributes: ["first_name", "middle_name", "last_name"]
+          }]
+        }
       ],
     });
     return notifications;
@@ -186,71 +316,6 @@ const sendUserUnseenCount = async (io, userId) => {
     io.to(`user_${userId}`).emit("unseen_count_update", { count: 0 });
     return 0;
   }
-};
-
-/**
- * Helper function to generate notification title
- */
-const getNotificationTitle = (action, parcelNumber, plotNumber = null) => {
-  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `Parcel ${parcelNumber}`;
-  
-  // Handle different action types
-  if (action === 'RECORD_CREATED') {
-    return `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
-  }
-  
-  // Handle status changes
-  if (action.startsWith('STATUS_CHANGED_TO_')) {
-    const status = action.replace('STATUS_CHANGED_TO_', '');
-    return `የመሬት መዝገብ ሁኔታ ተቀይሯል - ${identifier} | ${status}`;
-  }
-  
-  // Default fallback
-  return `የስርአት ማሳወቂያ - ${identifier}`;
-};
-
-/**
- * Helper function to generate notification message
- */
-const getNotificationMessage = (action, parcelNumber, additionalData, plotNumber = null) => {
-  const identifier = plotNumber ? `የካርታ ቁጥር ${plotNumber}` : `ፓርሰል ${parcelNumber}`;
-  const changedByName = additionalData?.changed_by_name || 'ያልታወቀ ተጠቃሚ';
-  
-  // Handle different action types
-  if (action === 'RECORD_CREATED') {
-    const ownersCount = additionalData?.owners_count || 0;
-    
-    let message = `አዲስ የመሬት መዝገብ ተፈጥሯል - ${identifier}`;
-    message += `\nየባለቤቶች ብዛት: ${ownersCount}`;
-    message += `\nየመጀመሪያ ሁኔታ: ${additionalData?.status || 'ረቂቅ'}`;
-    message += `\n(በ${changedByName} ተፈጥሯል)`;
-    
-    return message;
-  }
-  
-  // Handle status changes
-  if (action.startsWith('STATUS_CHANGED_TO_')) {
-    const status = action.replace('STATUS_CHANGED_TO_', '');
-    const previousStatus = additionalData?.previous_status || '';
-    
-    let message = `የ${identifier} መሬት መዝገብ ሁኔታ ከ "${previousStatus}" ወደ "${status}" ተቀይሯል።`;
-    
-    // Add additional context if available
-    if (additionalData?.rejection_reason) {
-      message += `\nምክንያት: ${additionalData.rejection_reason}`;
-    } else if (additionalData?.notes) {
-      message += `\nማስታወሻ: ${additionalData.notes}`;
-    } else if (additionalData.filelength){
-      message +=`\nማስታወሻ: ${additionalData.filelength}`;
-    }
-    
-    message += `\n(በ${changedByName} ተቀይሯል)`;
-    
-    return message;
-  }
-  
-  // Default fallback
-  return `በ${identifier} መሬት መዝገብ ላይ እንቅስቃሴ ተካሂዷል። (በ${changedByName})`;
 };
 
 /**
