@@ -95,7 +95,7 @@ const createLandOwner = async (
             administrative_unit_id: administrativeUnitId,
             password,
             profile_picture: profilePicture,
-            role_id: roleId, // This is the crucial fix - setting role_id
+            role_id: roleId, 
             created_by: creatorId,
             is_active: true,
           },

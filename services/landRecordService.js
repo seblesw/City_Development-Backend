@@ -14,6 +14,7 @@ const {
   PAYMENT_TYPES,
   OWNERSHIP_TYPES,
   Sequelize,
+  ActionLog,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");

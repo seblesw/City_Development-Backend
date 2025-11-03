@@ -104,11 +104,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የመሬት መዝገቡ አልተገኘም።");
     }
 
-    const currentLog = Array.isArray(landRecord.action_log)
-      ? landRecord.action_log
-      : [];
-
-    
+    // Get creator info for ActionLog
     let creator = null;
     try {
       creator = await User.findByPk(creatorId, {
@@ -119,26 +115,28 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       creator = null;
     }
 
-    const newLog = [
-      ...currentLog,
-      {
-        action: `ሰነድ ተፈጥሯል_${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
+    // Create ActionLog entry for document creation (replaces the old action_log)
+    await ActionLog.create({
+      land_record_id: data.land_record_id,
+      performed_by: creatorId,
+      action_type: 'DOCUMENT_CREATED',
+      notes: `ሰነድ ተፈጥሯል - የካርታ ቁጥር: ${data.plot_number}, የሰነድ አይነት: ${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
+      additional_data: {
         document_id: document.id,
-        changed_by: {
-          id: creator.id,
-          first_name: creator.first_name,
-          middle_name: creator.middle_name,
-          last_name: creator.last_name,
-        },
-        changed_at: new Date(),
-        details: {
-          plot_number: data.plot_number,
-          files_added: fileMetadata.length,
-        },
-      },
-    ];
-
-    await landRecord.update({ action_log: newLog }, { transaction: t });
+        plot_number: data.plot_number,
+        document_type: data.document_type || DOCUMENT_TYPES.TITLE_DEED,
+        reference_number: data.reference_number,
+        files_added: fileMetadata.length,
+        version: version,
+        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
+        parcel_number: landRecord.parcel_number,
+        file_details: fileMetadata.map(file => ({
+          file_name: file.file_name,
+          file_size: file.file_size,
+          mime_type: file.mime_type
+        }))
+      }
+    }, { transaction: t });
 
     if (!transaction) await t.commit();
     return document;

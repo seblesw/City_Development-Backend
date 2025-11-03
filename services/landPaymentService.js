@@ -152,39 +152,36 @@ const createLandPaymentService = async (data, options = {}) => {
       throw new Error("Land record not found");
     }
 
-    const currentLog = Array.isArray(landRecord.action_log)
-      ? landRecord.action_log
-      : [];
-    
+    //  Get creator info for ActionLog
     let creator = null;
     if (data.created_by) {
-      creator = await User.findByPk(data.created_by, { transaction: t });
+      creator = await User.findByPk(data.created_by, { 
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t 
+      });
     }
-    const newLog = [
-      ...currentLog,
-      {
-        action: "ክፍያ ተጨምሯል",
+
+    //  Create ActionLog entry for payment creation (replaces the old action_log)
+    await ActionLog.create({
+      land_record_id: data.land_record_id,
+      performed_by: data.created_by,
+      action_type: 'PAYMENT_CREATED',
+      notes: `ክፍያ ተጨምሯል - አጠቃላይ: ${data.total_amount} ${data.currency || 'ETB'}, የተከፈለ: ${data.paid_amount} ${data.currency || 'ETB'}`,
+      additional_data: {
         payment_id: payment.id,
-        amount: payment.paid_amount,
-        currency: payment.currency,
-        payment_type: payment.payment_type,
-        changed_by: 
-           {
-              id: creator.id,
-              first_name: creator.first_name,
-              middle_name: creator.middle_name,
-              last_name: creator.last_name,
-            },
-        changed_at: new Date(),
-      },
-    ];
-
-    await LandRecord.update(
-      { action_log: newLog },
-      { where: { id: data.land_record_id }, transaction: t }
-    );
-
-    
+        payment_type: data.payment_type,
+        total_amount: data.total_amount,
+        paid_amount: data.paid_amount,
+        currency: data.currency || "ETB",
+        payment_status: payment_status,
+        balance: data.total_amount - data.paid_amount,
+        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
+        parcel_number: landRecord.parcel_number,
+        description: data.description,
+        penalty_reason: data.penalty_reason,
+        payer_id: data.payer_id
+      }
+    }, { transaction: t });
     if (!transaction) await t.commit();
 
     return payment;
