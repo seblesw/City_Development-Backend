@@ -4,6 +4,7 @@ const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
+const { getActionLog } = require("../controllers/actionLogController");
 
 // Rate limiters
 const getLimiter = rateLimit({
@@ -33,6 +34,7 @@ router.get(
   landRecordController.getLandRecordStatsController
 ),
 router.get("/land-banks", authMiddleware.protect, landRecordController.getLandBankRecords)
+router.get('/:landRecordId/action-logs', authMiddleware.protect, getActionLog);
   // Draft Management Routes
   router.post(
     "/drafts",
