@@ -42,11 +42,22 @@ const getAllAdministrativeUnits = async (req, res) => {
 const getAdministrativeUnitById = async (req, res) => {
   try {
     const unit = await getAdministrativeUnitByIdService(req.params.id);
+    
     res.status(200).json({
       status: "success",
       data: unit,
     });
   } catch (error) {
+    console.error("Error in getAdministrativeUnitById:", error);
+    
+    // More specific error handling
+    if (error.name === 'SequelizeDatabaseError') {
+      return res.status(500).json({
+        status: "error",
+        message: "Database error occurred",
+      });
+    }
+    
     res.status(404).json({
       status: "error",
       message: error.message || "አስተዳደር ክፍል አልተገኘም።",
