@@ -10,6 +10,11 @@ const {
   registerOfficialByManagerService,
 } = require("../services/authServices");
 const fs= require("fs")
+
+
+
+
+
 const registerOfficialController = async (req, res) => {
   try {
     const { body } = req;
@@ -101,26 +106,52 @@ const loginController = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Input validation
     if (!email) {
       return res.status(400).json({ error: "ኢሜይል መግለጽ አለበት።" });
+    }
+    if (!password) {
+      return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
     }
 
     const result = await login({ email, password });
 
-    return res.status(200).json({
-      message: "መግባት ተሳክቷል።", 
-      data: result,
-    });
-  } catch (error) {
-    
-    
-    const errorMessage = error.message.includes("Invalid") || error.message.includes("Incorrect")
-      ? "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።"
-      : error.message.includes("User not found")
-      ? "ተጠቃሚ አልተገኙም"
-      : error.message;
+    // Handle OTP verification case
+    if (result.requiresOTPVerification) {
+      return res.status(200).json({
+        message: result.message,
+        requiresOTPVerification: true,
+        data: { email } 
+      });
+    }
 
-    return res.status(400).json({ 
+    // Successful login
+    return res.status(200).json({
+      message: result.message || "መግባት ተሳክቷል።",
+      data: result
+    });
+
+  } catch (error) {
+    console.error("Login error:", error);
+
+    // Enhanced error mapping
+    let errorMessage = error.message;
+    let statusCode = 400;
+
+    if (error.message.includes("ተጠቃሚ አልተገኘም") || error.message.includes("User not found")) {
+      errorMessage = "ተጠቃሚ አልተገኙም";
+      statusCode = 404;
+    } else if (error.message.includes("የተሳሳተ የይለፍ ቃል") || error.message.includes("Invalid") || error.message.includes("Incorrect")) {
+      errorMessage = "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።";
+      statusCode = 401;
+    } else if (error.message.includes("ማኔጅሩ አስተዳደራዊ ክፍል የለውም")) {
+      errorMessage = error.message;
+      statusCode = 403;
+    } else if (error.message.includes("OTP") || error.message.includes("እባክዎ ያለፈውን OTP")) {
+      statusCode = 429; // Too Many Requests for OTP errors
+    }
+
+    return res.status(statusCode).json({ 
       error: errorMessage 
     });
   }
@@ -140,8 +171,14 @@ const resendOTPController = async (req, res) => {
 
     return res.status(200).json(result);
   } catch (error) {
+    // Enhanced error mapping like other controllers
+    let statusCode = 400;
     
-    return res.status(400).json({
+    if (error.message.includes("OTP") || error.message.includes("ያለፈው OTP")) {
+      statusCode = 429; // Too Many Requests for OTP rate limiting
+    }
+
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "የOTP እንደገና ላክ አልተሳካም", 
     });
@@ -165,15 +202,22 @@ const verifyOtpController = async (req, res) => {
       data: result
     });
   } catch (error) {
-    
-    
-    const errorMessage = error.message.includes("Invalid") || error.message.includes("No OTP")
-      ? "የተሳሳተ ወይም ያልተገኘ OTP"
-      : error.message.includes("expired")
-      ? "OTP ጊዜው አልፎታል፣ እባክዎ አዲስ OTP ይጠይቁ"
-      : error.message;
+    // Enhanced error mapping with proper status codes
+    let errorMessage = error.message;
+    let statusCode = 400;
 
-    return res.status(400).json({ 
+    if (error.message.includes("Invalid") || error.message.includes("No OTP") || error.message.includes("የተሳሳተ OTP")) {
+      errorMessage = "የተሳሳተ ወይም ያልተገኘ OTP";
+      statusCode = 401;
+    } else if (error.message.includes("expired") || error.message.includes("ጊዜው አልፎታል")) {
+      errorMessage = "OTP ጊዜው አልፎታል፣ እባክዎ አዲስ OTP ይጠይቁ";
+      statusCode = 410; // Gone - resource expired
+    } else if (error.message.includes("ተጠቃሚ አልተገኘም")) {
+      errorMessage = "ተጠቃሚ አልተገኙም";
+      statusCode = 404;
+    }
+
+    return res.status(statusCode).json({ 
       error: errorMessage 
     });
   }

@@ -10,6 +10,23 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendPasswordResetEmail } = require("../utils/mailService");
 const nodemailer = require('nodemailer');
+// Create reusable email transporter (create once, use everywhere)
+const emailTransporter = nodemailer.createTransport({
+  service: process.env.EMAIL_SERVICE,
+  auth: {
+    user: process.env.EMAIL_USERNAME,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+});
+
+// Verify transporter on startup
+emailTransporter.verify((error) => {
+  if (error) {
+    console.error('Email transporter error:', error);
+  } else {
+    console.log('Email transporter ready');
+  }
+});
 
 const registerOfficial = async (data, options = {}) => {
   const { transaction } = options;
@@ -181,34 +198,40 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
 };
 
 const login = async ({ email, password }, options = {}) => {
-  
-  const t = options.transaction || await sequelize.transaction();
-  const shouldCommit = !options.transaction; 
-
   try {
-    
+    // Input validation
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
     if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል");
 
-    
+    // Find user without transaction (read operation doesn't need transaction)
     const user = await User.findOne({
-      where: { email, deletedAt: null, is_active: true },
-      include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
-      transaction: t,
-      attributes: ['id', 'first_name', 'last_name', 'administrative_unit_id','oversight_office_id', 'phone_number', 'middle_name', 'email', 'national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin','profile_picture'],
+      where: { 
+        email, 
+        deletedAt: null, 
+        is_active: true 
+      },
+      include: [{ 
+        model: Role, 
+        as: "role", 
+        attributes: ["id", "name"] 
+      }],
+      attributes: [
+        'id', 'first_name', 'last_name', 'administrative_unit_id',
+        'oversight_office_id', 'phone_number', 'middle_name', 'email', 
+        'national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin',
+        'profile_picture', 'last_login'
+      ],
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
 
-    
+    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new Error("የተሳሳተ የይለፍ ቃል");
 
-    
+    // Handle first-time login
     if (user.isFirstLogin) {
-      await sendOTP(user.email, { transaction: t });
-      
-      if (shouldCommit) await t.commit();
+      await sendOTP(user.email); // Remove transaction from OTP send
       return { 
         success: true, 
         message: "OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
@@ -216,9 +239,10 @@ const login = async ({ email, password }, options = {}) => {
       };
     }
 
-    
-    await user.update({ last_login: new Date() }, { transaction: t });
+    // Update last login without transaction (single update operation)
+    await user.update({ last_login: new Date() });
 
+    // Generate token
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -231,8 +255,6 @@ const login = async ({ email, password }, options = {}) => {
       { expiresIn: "1d" }
     );
 
-    
-    if (shouldCommit) await t.commit();
     return { 
       token, 
       user: {
@@ -252,50 +274,39 @@ const login = async ({ email, password }, options = {}) => {
       message: "በተሳካ ሁኔታ ገብተዋል"
     };
   } catch (error) {
-    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
 
-const sendOTP = async (email, options = {}) => {
-  const t = options.transaction || await sequelize.transaction();
-  const shouldCommit = !options.transaction;
-
+const sendOTP = async (email) => {
   try {
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
-      transaction: t,
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    
+    // Check if existing OTP is still valid
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
       const remainingMinutes = Math.floor(remainingSeconds / 60);
       const seconds = remainingSeconds % 60;
       throw new Error(
-      `እባክዎ ያለፈውን OTP ይጠቀሙ ወይም ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+        `እባክዎ ያለፈውን OTP ይጠቀሙ ወይም ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
       );
     }
 
-    
+    // Generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`Generated OTP for ${email}: ${otp}`);
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
-    await user.update({ otp, otpExpiry }, { transaction: t });
-
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
     
-    const transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE,
-      auth: {
-        user: process.env.EMAIL_USERNAME,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
+    // Update user with new OTP (no transaction needed for single update)
+    await user.update({ otp, otpExpiry });
 
-    await transporter.sendMail({
+    // Send OTP email using reusable transporter
+    await emailTransporter.sendMail({
       from: process.env.EMAIL_FROM,
       to: email,
       subject: 'የእርስዎ OTP ኮድ',
@@ -314,37 +325,31 @@ const sendOTP = async (email, options = {}) => {
       `,
     });
 
-    if (shouldCommit) await t.commit();
     return { success: true, message: "OTP በትክክል ተልኳል" };
   } catch (error) {
-    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
 
-const resendOTP = async (email, options = {}) => {
-  const t = options.transaction || await sequelize.transaction();
-  const shouldCommit = !options.transaction;
-
+const resendOTP = async (email) => {
   try {
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
 
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
-      transaction: t,
       attributes: ['id', 'email', 'isFirstLogin', 'otp', 'otpExpiry']
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    
+    // Check if existing OTP is still valid
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
       const remainingMinutes = Math.floor(remainingSeconds / 60);
       const seconds = remainingSeconds % 60;
       throw new Error(
-      `ያለፈው OTP አሁንም የሚሰራ ነው። ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+        `ያለፈው OTP አሁንም የሚሰራ ነው። ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
       );
     }
 
@@ -352,42 +357,37 @@ const resendOTP = async (email, options = {}) => {
       throw new Error("OTP የሚልክበት ለመጀመሪያ ጊዜ የገባ ተጠቃሚ ነው");
     }
 
-    await sendOTP(user.email, { transaction: t });
+    // Use the optimized sendOTP function
+    await sendOTP(email);
     
-    if (shouldCommit) await t.commit();
     return { 
       success: true, 
       message: "አዲስ OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
       requiresOTPVerification: true 
     };
   } catch (error) {
-    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
-const verifyOTP = async ({ email, otp }, options = {}) => {
-  const t = options.transaction || await sequelize.transaction();
-  const shouldCommit = !options.transaction;
-
+const verifyOTP = async ({ email, otp }) => {
   try {
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role" }],
-      transaction: t,
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
-    if (!user.otp ) throw new Error("OTP አልተጠየቀም");
+    if (!user.otp) throw new Error("OTP አልተጠየቀም");
     if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
     if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
 
-    
+    // Update user (no transaction needed for single atomic operation)
     await user.update({
       isFirstLogin: false,
       last_login: new Date(),
       otp: null,
       otpExpiry: null
-    }, { transaction: t });
+    });
 
     const token = jwt.sign(
       {
@@ -401,7 +401,6 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
       { expiresIn: "1d" }
     );
 
-    if (shouldCommit) await t.commit();
     return {
       token,
       user: {
@@ -415,8 +414,6 @@ const verifyOTP = async ({ email, otp }, options = {}) => {
       message: "OTP በትክክል ተረጋግጧል"
     };
   } catch (error) {
-    if (shouldCommit && !t.finished) await t.rollback();
-    
     throw error;
   }
 };
