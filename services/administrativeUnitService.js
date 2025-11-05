@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { AdministrativeUnit, Region, Zone, Woreda, OversightOffice, User, LandRecord } = require("../models/index");
+const flatted = require('flatted');
 
 const typeLevels = {
   "ሪጂኦፖሊታን": 1,
@@ -98,7 +99,9 @@ const getAllAdministrativeUnitsService = async () => {
   });
 };
 
+
 const getAdministrativeUnitByIdService = async (id) => {
+  // Get administrative unit without users
   const unit = await AdministrativeUnit.findByPk(id, {
     where: { deletedAt: null },
     include: [
@@ -106,7 +109,6 @@ const getAdministrativeUnitByIdService = async (id) => {
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name","middle_name","last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -115,7 +117,18 @@ const getAdministrativeUnitByIdService = async (id) => {
     throw new Error("አስተዳደር ክፍል አልተገኘም።");
   }
 
-  return unit;
+  // Get users separately
+  const users = await User.findAll({
+    where: { administrative_unit_id: id },
+    attributes: ["id", "first_name", "middle_name", "last_name"],
+    raw: true 
+  });
+
+  // Return combined data
+  return {
+    ...unit.toJSON(),
+    users
+  };
 };
 
 const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, transaction = null) => {
