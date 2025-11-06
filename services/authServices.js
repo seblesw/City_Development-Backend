@@ -33,87 +33,72 @@ const registerOfficial = async (data, options = {}) => {
   let t = transaction;
 
   try {
-    if (
-      !data.first_name ||
-      !data.last_name ||
-      !data.phone_number ||
-      !data.national_id ||
-      !data.role_id
-    ) {
-      throw new Error(
-        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
-      );
+    // Validation
+    if (!data.first_name || !data.last_name || !data.phone_number || 
+        !data.national_id || !data.role_id) {
+      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።");
     }
 
     t = t || (await sequelize.transaction());
-    
-    if (data.oversight_office_id) {
-      const office = await OversightOffice.findByPk(data.oversight_office_id, {
-        transaction: t,
-      });
-      if (!office) {
-        throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
-      }
-    }
-    
-    if (data.administrative_unit_id) {
-      const administrativeUnit = await AdministrativeUnit.findByPk(
-        data.administrative_unit_id,
-        {
-          transaction: t,
-        }
-      );
-      if (!administrativeUnit) {
-        throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
-      }
+
+    // Batch all existence checks in parallel
+    const [office, administrativeUnit, existingRecords] = await Promise.all([
+      // Check office existence only if provided
+      data.oversight_office_id 
+        ? OversightOffice.findByPk(data.oversight_office_id, { transaction: t })
+        : Promise.resolve(null),
+      
+      // Check administrative unit only if provided
+      data.administrative_unit_id
+        ? AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t })
+        : Promise.resolve(null),
+      
+      // Check for duplicate data in single query
+      User.findOne({
+        where: {
+          [Op.or]: [
+            data.email ? { email: data.email } : null,
+            { phone_number: data.phone_number },
+            { national_id: data.national_id }
+          ].filter(Boolean), // Remove null entries
+          deletedAt: { [Op.eq]: null }
+        },
+        attributes: ['email', 'phone_number', 'national_id'],
+        transaction: t
+      })
+    ]);
+
+    // Validate results
+    if (data.oversight_office_id && !office) {
+      throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
     }
 
-    
-    if (data.email) {
-      const existingEmail = await User.findOne({
-        where: { email: data.email, deletedAt: { [Op.eq]: null } },
-        transaction: t,
-      });
-      if (existingEmail) {
+    if (data.administrative_unit_id && !administrativeUnit) {
+      throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
+    }
+
+    // Check for duplicates
+    if (existingRecords) {
+      if (data.email && existingRecords.email === data.email) {
         throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
       }
-    }
-
-    
-    if (data.phone_number) {
-      const existingPhone = await User.findOne({
-        where: {
-          phone_number: data.phone_number,
-          deletedAt: { [Op.eq]: null },
-        },
-        transaction: t,
-      });
-      if (existingPhone) {
+      if (existingRecords.phone_number === data.phone_number) {
         throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
+      }
+      if (existingRecords.national_id === data.national_id) {
+        throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
       }
     }
 
-    
-    const existingNationalId = await User.findOne({
-      where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
-      transaction: t,
-    });
-    if (existingNationalId) {
-      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
-    }
-
-    
+    // Hash password
     const rawPassword = data.password || "12345678";
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    
-    const official = await User.create(
-      {
-        ...data,
-        password: hashedPassword,
-      },
-      { transaction: t }
-    );
+    // Create user
+    const official = await User.create({
+      ...data,
+      password: hashedPassword,
+    }, { transaction: t });
 
     if (!transaction) await t.commit();
 
@@ -123,76 +108,95 @@ const registerOfficial = async (data, options = {}) => {
     throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
   }
 };
-const registerOfficialByManagerService = async (data, user, options = {}) => {
-  const { transaction } = options;
-
+const registerOfficialByManagerService = async (data, user) => {
   try {
-    if (
-      !data.first_name ||
-      !data.last_name ||
-      !data.phone_number ||
-      !data.national_id ||
-      !data.role_id
-    ) {
-      throw new Error(
-        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
-      );
-    }
-
-    // Verify that the manager has an administrative unit
+    // Fast validation - check most common failures first
     if (!user.administrative_unit_id) {
       throw new Error("ማኔጅሩ አስተዳደራዊ ክፍል የለውም።");
     }
-      const administrativeUnitId = user.administrative_unit_id;
-    // Email validation (optional field)
+
+    if (!data.first_name || !data.last_name || !data.phone_number || 
+        !data.national_id || !data.role_id) {
+      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።");
+    }
+
+    const administrativeUnitId = user.administrative_unit_id;
+
+    // Single optimized query for all duplicate checks
+    const whereConditions = [
+      { phone_number: data.phone_number },
+      { national_id: data.national_id }
+    ];
+    
     if (data.email) {
-      const existingEmail = await User.findOne({
-        where: { email: data.email, deletedAt: { [Op.eq]: null } },
-        transaction,
-      });
-      if (existingEmail) {
+      whereConditions.push({ email: data.email });
+    }
+
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: whereConditions,
+        deletedAt: { [Op.eq]: null }
+      },
+      attributes: ['email', 'phone_number', 'national_id'],
+      logging: false, // Disable query logging for performance
+      benchmark: false
+    });
+
+    if (existingUser) {
+      if (existingUser.phone_number === data.phone_number) {
+        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
+      }
+      if (existingUser.national_id === data.national_id) {
+        throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
+      }
+      if (existingUser.email === data.email) {
         throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
       }
     }
 
-    // Phone number validation
-    if (data.phone_number) {
-      const existingPhone = await User.findOne({
-        where: {
-          phone_number: data.phone_number,
-          deletedAt: { [Op.eq]: null },
-        },
-        transaction,
-      });
-      if (existingPhone) {
-        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
-      }
-    }
-
-    // National ID validation
-    const existingNationalId = await User.findOne({
-      where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
-      transaction,
-    });
-    if (existingNationalId) {
-      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
-    }
-
-    // Hash password
+    // Optimized password hashing with cost adjustment
     const rawPassword = data.password || "12345678";
-    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+    const hashedPassword = await bcrypt.hash(rawPassword, 12); // Higher security for production
 
-    // Create official with explicit administrative_unit_id
+    // Prepare data with only necessary fields
     const officialData = {
-      ...data,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      middle_name: data.middle_name || null,
+      email: data.email || null,
+      phone_number: data.phone_number,
       password: hashedPassword,
+      role_id: data.role_id,
       administrative_unit_id: administrativeUnitId,
+      oversight_office_id: data.oversight_office_id || null,
+      national_id: data.national_id,
+      address: data.address || null,
+      gender: data.gender,
+      profile_picture: data.profile_picture || null,
+      relationship_type: null,
+      marital_status: data.marital_status || null,
+      is_active: data.is_active !== undefined ? data.is_active : true,
+      created_by: user.id,
     };
 
-    const official = await User.create(officialData, { transaction });
+    // Create user with performance optimizations
+    const official = await User.create(officialData, {
+      logging: false,
+      benchmark: false,
+      returning: true // Ensure we get the created record
+    });
 
     return official;
+
   } catch (error) {
+    // More specific error handling for large datasets
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new Error("የተደጋገመ መረጃ አልተገናኘም።");
+    }
+    if (error.name === 'SequelizeDatabaseError') {
+      throw new Error("የውሂብ ጎታ ስህተት። እባክዎ እንደገና ይሞክሩ።");
+    }
+    
     throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
   }
 };
