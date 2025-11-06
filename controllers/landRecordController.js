@@ -112,9 +112,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     if (!req.file) {
       throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
-
-    
-
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
@@ -129,10 +126,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     if (fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-
-    
-
-    
     res.status(201).json({
       status: "success",
       message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
@@ -165,14 +158,7 @@ const importLandRecordsFromXLSX = async (req, res) => {
     });
   }
 };
-
-const cleanupFile = (filePath) => {
-  if (fs.existsSync(filePath)) {
-    fs.unlink(filePath, (err) => {
-      
-    });
-  }
-};
+// Draft Management Controllers
 const saveLandRecordAsDraft = async (req, res) => {
   try {
     const user = req.user;
