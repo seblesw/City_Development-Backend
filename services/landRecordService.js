@@ -282,9 +282,7 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       throw new Error("ሁሉም የተጻፉ ውሂቦች ስህተት አላቸው። ከላይ ያሉትን ስህተቶች ይመልከቱ።");
     }
 
-    // Pre-load existing plot numbers for duplicate checking
-    const existingPlots = await preloadExistingPlots(adminUnitId);
-
+    // 🚀 OPTIMIZED: Remove preloadExistingPlots - let createLandRecordService handle duplicates
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -294,20 +292,33 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       processingTime: 0,
     };
 
-    // Filter out duplicates and group by plot number
-    const uniquePlots = filterUniquePlots(validatedData, existingPlots);
+    // 🚀 OPTIMIZED: Just group by plot number without duplicate checking
+    const uniquePlots = new Map();
+    for (const row of validatedData) {
+      const plotKey = String(row.plot_number).trim();
+      
+      // Skip invalid plot numbers only
+      if (!plotKey || plotKey === "null" || plotKey === "undefined") {
+        continue;
+      }
 
-    if (uniquePlots.size === 0) {
-      throw new Error("ሁሉም ውሂቦች አስቀድመው ተመዝግተዋል ወይም ባዶ ናቸው።");
+      if (!uniquePlots.has(plotKey)) {
+        uniquePlots.set(plotKey, [row]);
+      } else {
+        uniquePlots.get(plotKey).push(row);
+      }
     }
 
-    // Process with optimal concurrency
-    const BATCH_SIZE = 200;
-    const CONCURRENCY = 3;
+    if (uniquePlots.size === 0) {
+      throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
+    }
+
+    // 🚀 OPTIMIZED: Increase concurrency since we removed the bottleneck
+    const BATCH_SIZE = 100; // Smaller batches for better parallelization
+    const CONCURRENCY = 5; // More concurrent operations
 
     const plotEntries = Array.from(uniquePlots.entries());
 
-    // Add progress logging
     console.log(
       `🔄 Processing ${plotEntries.length} unique plots from ${validatedData.length} total rows`
     );
@@ -341,7 +352,6 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       console.warn("⚠️ Could not delete temporary file:", cleanupError.message);
     }
 
-    // Log summary
     console.log(
       `✅ Import completed: ${results.createdCount} created, ${results.skippedCount} skipped in ${results.processingTime}s`
     );
@@ -358,7 +368,6 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       );
     }
 
-    // Preserve Amharic error messages
     const amharicErrors = ["የተጠቃሚው", "ምንም የሚገባ", "ሁሉም ውሂቦች", "ፋይሉ", "የተጻፉ"];
     const isAmharicError = amharicErrors.some((phrase) =>
       error.message.includes(phrase)
@@ -510,42 +519,42 @@ async function streamAndParseXLSX(filePath) {
     }
   });
 }
-function filterUniquePlots(xlsxData, existingPlots) {
-  const uniquePlots = new Map();
-  let stats = { skippedExisting: 0, skippedInvalid: 0 };
+// function filterUniquePlots(xlsxData, existingPlots) {
+//   const uniquePlots = new Map();
+//   let stats = { skippedExisting: 0, skippedInvalid: 0 };
 
-  for (const row of xlsxData) {
-    const plotKey = String(row.plot_number).trim();
+//   for (const row of xlsxData) {
+//     const plotKey = String(row.plot_number).trim();
 
-    // Skip invalid plot numbers
-    if (!plotKey || plotKey === "null" || plotKey === "undefined") {
-      stats.skippedInvalid++;
-      continue;
-    }
+//     // Skip invalid plot numbers
+//     if (!plotKey || plotKey === "null" || plotKey === "undefined") {
+//       stats.skippedInvalid++;
+//       continue;
+//     }
 
-    // Skip existing plots
-    if (existingPlots.has(plotKey)) {
-      stats.skippedExisting++;
-      continue;
-    }
+//     // Skip existing plots
+//     if (existingPlots.has(plotKey)) {
+//       stats.skippedExisting++;
+//       continue;
+//     }
 
-    // Group by plot number
-    if (!uniquePlots.has(plotKey)) {
-      uniquePlots.set(plotKey, [row]);
-    } else {
-      uniquePlots.get(plotKey).push(row);
-    }
-  }
+//     // Group by plot number
+//     if (!uniquePlots.has(plotKey)) {
+//       uniquePlots.set(plotKey, [row]);
+//     } else {
+//       uniquePlots.get(plotKey).push(row);
+//     }
+//   }
 
-  // Log summary for debugging
-  if (stats.skippedExisting > 0 || stats.skippedInvalid > 0) {
-    console.log(
-      `📊 Filter stats: ${uniquePlots.size} unique, ${stats.skippedExisting} existing, ${stats.skippedInvalid} invalid`
-    );
-  }
+//   // Log summary for debugging
+//   if (stats.skippedExisting > 0 || stats.skippedInvalid > 0) {
+//     console.log(
+//       `📊 Filter stats: ${uniquePlots.size} unique, ${stats.skippedExisting} existing, ${stats.skippedInvalid} invalid`
+//     );
+//   }
 
-  return uniquePlots;
-}
+//   return uniquePlots;
+// }
 async function processBatchesWithConcurrency(
   plotEntries,
   adminUnitId,
@@ -964,52 +973,53 @@ function calculatePaymentStatus(row) {
     return "አልተከፈለም";
   }
 }
-async function preloadExistingPlots(adminUnitId) {
-  try {
-    console.log(
-      "Loading existing plot numbers from documents for admin unit:",
-      adminUnitId
-    );
+// async function preloadExistingPlots(adminUnitId) {
+//   try {
+//     console.log(
+//       "Loading existing plot numbers from documents for admin unit:",
+//       adminUnitId
+//     );
 
-    // Query the documents table for existing plot numbers
-    const existingDocuments = await Document.findAll({
-      include: [
-        {
-          model: LandRecord,
-          as: "landRecord",
-          where: {
-            administrative_unit_id: adminUnitId,
-            deletedAt: null,
-          },
-          attributes: [],
-        },
-      ],
-      attributes: ["plot_number"],
-      raw: true,
-    });
+//     // Query the documents table for existing plot numbers
+//     const existingDocuments = await Document.findAll({
+//       include: [
+//         {
+//           model: LandRecord,
+//           as: "landRecord",
+//           where: {
+//             administrative_unit_id: adminUnitId,
+//             deletedAt: null,
+//           },
+//           attributes: [],
+//         },
+//       ],
+//       attributes: ["plot_number"],
+//       raw: true,
+//     });
 
-    console.log(
-      `Found ${existingDocuments.length} existing documents with plots`
-    );
+//     console.log(
+//       `Found ${existingDocuments.length} existing documents with plots`
+//     );
 
-    // Create set of existing plot numbers
-    const plotNumbers = new Set();
-    existingDocuments.forEach((doc) => {
-      if (doc.plot_number) {
-        plotNumbers.add(String(doc.plot_number).trim());
-      }
-    });
+//     // Create set of existing plot numbers
+//     const plotNumbers = new Set();
+//     existingDocuments.forEach((doc) => {
+//       if (doc.plot_number) {
+//         plotNumbers.add(String(doc.plot_number).trim());
+//       }
+//     });
 
-    console.log(`Unique plot numbers found: ${plotNumbers.size}`);
-    return plotNumbers;
-  } catch (error) {
-    console.error("Error loading existing plots from documents:", error);
-    // Return empty set to allow import to continue
-    return new Set();
-  }
-}
+//     console.log(`Unique plot numbers found: ${plotNumbers.size}`);
+//     return plotNumbers;
+//   } catch (error) {
+//     console.error("Error loading existing plots from documents:", error);
+//     // Return empty set to allow import to continue
+//     return new Set();
+//   }
+// }
 
 // Draft Management Service
+
 const saveLandRecordAsDraftService = async (
   data,
   files,
