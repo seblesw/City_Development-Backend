@@ -53,6 +53,9 @@ const getAllDocumentsController = async (req, res) => {
   }
 };
 const importPDFDocuments = async (req, res) => {
+  const startTime = Date.now();
+  let processedFiles = [];
+
   try {
     const uploaderId = req.user?.id;
     const files = req.files || [];
@@ -64,43 +67,45 @@ const importPDFDocuments = async (req, res) => {
       });
     }
 
-    // Enhanced filename processing with better error handling
-    const processedFiles = files.map(file => {
+    console.log(`📁 Processing ${files.length} PDF files`);
+
+    // Use your original filename processing logic - this is critical for Amharic/English
+    processedFiles = files.map(file => {
       let originalname = file.originalname;
       let processingError = null;
       
       try {
-        // Remove .pdf extension case-insensitively
+        // Your original decoding strategy - keep this exactly as it was
         const filenameWithoutExt = originalname.replace(/\.pdf$/i, '');
         
-        // Multiple decoding strategies with fallbacks
+        // Multiple decoding strategies with fallbacks (ORIGINAL LOGIC)
         try {
           originalname = decodeURIComponent(escape(filenameWithoutExt));
         } catch (decodeError) {
           try {
             originalname = Buffer.from(filenameWithoutExt, 'binary').toString('utf8');
           } catch (bufferError) {
-            originalname = filenameWithoutExt; // Fallback to original without extension
+            originalname = filenameWithoutExt;
           }
         }
         
-        // Enhanced normalization for better matching
+        // Enhanced normalization for better matching (ORIGINAL LOGIC)
         const normalizedName = originalname
           .normalize("NFC")
           .trim()
-          .replace(/\s+/g, ' ') // Normalize multiple spaces
-          .replace(/[^\p{L}\p{N}\s_-]/gu, '') // Keep only letters, numbers, spaces, underscores, hyphens
+          .replace(/\s+/g, ' ')
+          .replace(/[^\p{L}\p{N}\s_-]/gu, '')
           .trim();
 
         return {
           ...file,
           originalname: originalname,
           filenameForMatching: normalizedName,
-          cleanPlotNumber: normalizedName.replace(/[^\p{L}\p{N}]/gu, ''), // Remove all non-alphanumeric for fuzzy matching
+          cleanPlotNumber: normalizedName.replace(/[^\p{L}\p{N}]/gu, ''),
           processingError: null
         };
       } catch (error) {
-        // Fallback processing with basic cleaning
+        // Fallback processing with basic cleaning (ORIGINAL LOGIC)
         const fallbackName = file.originalname.replace(/\.pdf$/i, '').trim();
         return {
           ...file,
@@ -112,44 +117,65 @@ const importPDFDocuments = async (req, res) => {
       }
     });
 
+    console.log(`🔄 Starting PDF import for ${processedFiles.length} files`);
     const result = await importPDFs({ 
       files: processedFiles, 
       uploaderId 
     });
 
-    // Enhanced response structure
+    const processingTime = (Date.now() - startTime) / 1000;
+    
     const response = {
       status: "success",
       message: result.message,
-      processedFiles: result.processedFiles || [],
+      processingTime: `${processingTime}s`,
+      performance: {
+        filesPerSecond: (files.length / processingTime).toFixed(2),
+        totalFiles: files.length
+      },
       updatedCount: result.updatedDocuments.length,
       updatedDocuments: result.updatedDocuments,
       unmatchedLogs: result.unmatchedLogs,
-      errorFiles: result.errorFiles || [],
-      skippedFiles: result.skippedFiles || [],
-      processingErrors: result.processingErrors || [],
+      errorFiles: result.errorFiles,
+      skippedFiles: result.skippedFiles,
+      processingErrors: result.processingErrors,
       summary: {
         totalFiles: files.length,
         successful: result.updatedDocuments.length,
         failed: result.unmatchedLogs.length,
         skipped: result.skippedFiles.length,
         processingErrors: result.processingErrors?.length || 0,
-        matchStatistics: result.matchStatistics || {}
+        successRate: ((result.updatedDocuments.length / files.length) * 100).toFixed(1) + '%',
+        matchStatistics: result.matchStatistics
       },
       timestamp: new Date().toISOString()
     };
 
+    console.log(`✅ PDF import completed in ${processingTime}s: ${result.updatedDocuments.length}/${files.length} successful`);
+    
     return res.status(200).json(response);
   } catch (error) {
+    const processingTime = (Date.now() - startTime) / 1000;
+    console.error(`❌ PDF import failed after ${processingTime}s:`, error.message);
+    
     return res.status(500).json({
       status: "error",
       message: "PDF import failed",
+      processingTime: `${processingTime}s`,
       error: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       timestamp: new Date().toISOString()
     });
   }
 };
+
+// Helper function for cleanup
+async function cleanupFilesOnError(files) {
+  const cleanupPromises = files.map(file => 
+    safeFileDelete(file.path, file.originalname).catch(() => {})
+  );
+  await Promise.allSettled(cleanupPromises);
+}
 const addFilesToDocumentController = async (req, res) => {
   try {
     const { id } = req.params;

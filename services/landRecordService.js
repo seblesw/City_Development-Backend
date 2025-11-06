@@ -21,29 +21,54 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
-const  fs  = require("fs");
-
-const createLandRecordService = async (data, files, user) => {
-  const t = await sequelize.transaction();
+const fs = require("fs");
+const createLandRecordService = async (data, files, user, options = {}) => {
+  const { transaction: externalTransaction, isImport = false } = options;
+  const t = externalTransaction || (await sequelize.transaction());
 
   try {
     const { owners = [], land_record, documents = [], land_payment } = data;
     const adminunit = user.administrative_unit_id;
 
-    const existingRecord = await LandRecord.findOne({
-      where: {
-        parcel_number: land_record.parcel_number,
-        administrative_unit_id: adminunit,
-        deletedAt: null,
-      },
-      transaction: t,
-    });
+    // 🚀 OPTIMIZED: For imports, check plot_number in documents table
+    // For normal operations, keep the original parcel_number check
+    if (isImport) {
+      const plotNumber = documents[0]?.plot_number;
+      if (!plotNumber) {
+        throw new Error("የመሬት ቁጥር (plot_number) ከሰነዶች አልተገኘም።");
+      }
 
-    if (existingRecord) {
-      throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
+      const existingDocument = await Document.findOne({
+        where: {
+          plot_number: plotNumber,
+          deletedAt: null,
+        },
+        attributes: ["id"],
+        transaction: t,
+      });
+
+      if (existingDocument) {
+        throw new Error(`ይህ የመሬት ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`);
+      }
+    } else {
+      // Original duplicate check for normal operations
+      const existingRecord = await LandRecord.findOne({
+        where: {
+          parcel_number: land_record.parcel_number,
+          administrative_unit_id: adminunit,
+          deletedAt: null,
+        },
+        transaction: t,
+      });
+
+      if (existingRecord) {
+        throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
+      }
     }
 
     const processOwnerPhotos = () => {
+      if (!files) return owners;
+
       const profilePictures = Array.isArray(files?.profile_picture)
         ? files.profile_picture.filter(
             (file) => file && file.serverRelativePath
@@ -58,51 +83,56 @@ const createLandRecordService = async (data, files, user) => {
       }));
     };
 
-    const ownersWithPhotos = processOwnerPhotos();
+    const ownersWithPhotos = isImport ? owners : processOwnerPhotos();
 
-    // action_log for LandRecord creation
-    const landRecord = await LandRecord.create(
-      {
-        ...land_record,
-        administrative_unit_id: adminunit,
-        created_by: user.id,
-        record_status: RECORD_STATUSES.SUBMITTED,
-        notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-        priority: land_record.priority || PRIORITIES.MEDIUM,
-        status_history: [
-          {
-            status: RECORD_STATUSES.SUBMITTED,
-            changed_by: {
-              id: user.id,
-              name: [user.first_name, user.middle_name, user.last_name]
-                .filter(Boolean)
-                .join(" "),
-            },
-            changed_at: new Date(),
+    // 🚀 OPTIMIZED: Skip status_history during import for performance
+    const landRecordData = {
+      ...land_record,
+      administrative_unit_id: adminunit,
+      created_by: user.id,
+      record_status: RECORD_STATUSES.SUBMITTED,
+      notification_status: NOTIFICATION_STATUSES.NOT_SENT,
+      priority: land_record.priority || PRIORITIES.MEDIUM,
+    };
+
+    // Only add status_history for non-import operations
+    if (!isImport) {
+      landRecordData.status_history = [
+        {
+          status: RECORD_STATUSES.SUBMITTED,
+          changed_by: {
+            id: user.id,
+            name: [user.first_name, user.middle_name, user.last_name]
+              .filter(Boolean)
+              .join(" "),
           },
-        ],
-      },
-      { transaction: t }
-    );
+          changed_at: new Date(),
+        },
+      ];
+    }
 
-    // Create ActionLog entry for record creation 
-    await ActionLog.create({
-      land_record_id: landRecord.id,
-      performed_by: user.id,
-      action_type: 'RECORD_CREATED',
-      notes: 'የመሬት መዝገብ ተፈጥሯል',
-      additional_data: {
-        parcel_number: landRecord.parcel_number,
-        administrative_unit_id: adminunit,
-        owners_count: owners.length,
-        documents_count: documents.length,
-        created_by_name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" "),
-        initial_status: RECORD_STATUSES.SUBMITTED,
-        action_description: "የመሬት መዝገብ ተፈጥሯል"
-      }
-    }, { transaction: t });
+    const landRecord = await LandRecord.create(landRecordData, { transaction: t });
 
-    // Rest of the code remains exactly the same...
+    // 🚀 OPTIMIZED: Skip ActionLog during import for performance
+    if (!isImport) {
+      await ActionLog.create({
+        land_record_id: landRecord.id,
+        performed_by: user.id,
+        action_type: 'RECORD_CREATED',
+        notes: 'የመሬት መዝገብ ተፈጥሯል',
+        additional_data: {
+          parcel_number: landRecord.parcel_number,
+          administrative_unit_id: adminunit,
+          owners_count: owners.length,
+          documents_count: documents.length,
+          created_by_name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" "),
+          initial_status: RECORD_STATUSES.SUBMITTED,
+          action_description: "የመሬት መዝገብ ተፈጥሯል"
+        }
+      }, { transaction: t });
+    }
+
+    // 🚀 OPTIMIZED: Use bulk operations for imports
     const createdOwners = await userService.createLandOwner(
       ownersWithPhotos.map((owner) => ({
         ...owner,
@@ -115,32 +145,42 @@ const createLandRecordService = async (data, files, user) => {
       { transaction: t }
     );
 
-    await Promise.all(
-      createdOwners.map((owner) =>
-        LandOwner.create(
-          {
-            user_id: owner.id,
-            land_record_id: landRecord.id,
-            ownership_percentage:
-              land_record.ownership_category === "የጋራ"
-                ? 100 / createdOwners.length
-                : 100,
-            verified: true,
-            created_at: new Date(),
-          },
-          { transaction: t }
+    // 🚀 OPTIMIZED: Use bulkCreate for land owners during import
+    if (isImport && createdOwners.length > 0) {
+      const landOwnerData = createdOwners.map((owner) => ({
+        user_id: owner.id,
+        land_record_id: landRecord.id,
+        ownership_percentage: land_record.ownership_category === "የጋራ" ? 100 / createdOwners.length : 100,
+        verified: true,
+        created_at: new Date(),
+      }));
+      
+      await LandOwner.bulkCreate(landOwnerData, { transaction: t });
+    } else {
+      await Promise.all(
+        createdOwners.map((owner) =>
+          LandOwner.create(
+            {
+              user_id: owner.id,
+              land_record_id: landRecord.id,
+              ownership_percentage: land_record.ownership_category === "የጋራ" ? 100 / createdOwners.length : 100,
+              verified: true,
+              created_at: new Date(),
+            },
+            { transaction: t }
+          )
         )
-      )
-    );
+      );
+    }
 
-    const processDocuments = async () => {
-      if (!documents.length) return [];
-
+    // 🚀 OPTIMIZED: Skip document processing during import or use bulk operations
+    let documentResults = [];
+    if (!isImport && documents.length > 0) {
       const filesArr = Array.isArray(files?.documents)
         ? files.documents.filter((file) => file && file.serverRelativePath)
         : [];
 
-      return Promise.all(
+      documentResults = await Promise.all(
         documents.map((doc, index) => {
           const file = filesArr[index];
           return documentService.createDocumentService(
@@ -155,15 +195,21 @@ const createLandRecordService = async (data, files, user) => {
           );
         })
       );
-    };
-
-    const documentResults = await processDocuments();
+    } else if (isImport && documents.length > 0) {
+      // 🚀 OPTIMIZED: Bulk create documents for imports
+      const documentData = documents.map((doc) => ({
+        ...doc,
+        land_record_id: landRecord.id,
+        created_by: user.id,
+        created_at: new Date(),
+      }));
+      
+      const createdDocs = await Document.bulkCreate(documentData, { transaction: t });
+      documentResults = createdDocs.map(doc => doc.toJSON());
+    }
 
     let landPayment = null;
-    if (
-      land_payment &&
-      (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
-    ) {
+    if (land_payment && (land_payment.total_amount > 0 || land_payment.paid_amount > 0)) {
       if (!land_payment.payment_type) {
         throw new Error("የክፍያ አይነት መግለጽ አለበት።");
       }
@@ -180,7 +226,9 @@ const createLandRecordService = async (data, files, user) => {
       );
     }
 
-    await t.commit();
+    if (!externalTransaction) {
+      await t.commit();
+    }
 
     return {
       landRecord: landRecord.toJSON(),
@@ -189,9 +237,11 @@ const createLandRecordService = async (data, files, user) => {
       landPayment: landPayment?.toJSON(),
     };
   } catch (error) {
-    await t.rollback();
+    if (!externalTransaction) {
+      await t.rollback();
+    }
 
-    if (files) {
+    if (!isImport && files) {
       const cleanupFiles = Object.values(files).flat();
       cleanupFiles.forEach((file) => {
         try {
@@ -199,7 +249,7 @@ const createLandRecordService = async (data, files, user) => {
             fs.unlinkSync(file.path);
           }
         } catch (cleanupError) {
-          // Silent fail - no error thrown during cleanup
+          // Silent fail
         }
       });
     }
@@ -208,9 +258,10 @@ const createLandRecordService = async (data, files, user) => {
   }
 };
 
+//importLandRecordsFromXLSXService
 const importLandRecordsFromXLSXService = async (filePath, user) => {
   const startTime = Date.now();
-  
+
   try {
     if (!user?.administrative_unit_id) {
       throw new Error("የተጠቃሚው አስተዳደራዊ ክፍል አልተገኘም።");
@@ -219,8 +270,10 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     const adminUnitId = user.administrative_unit_id;
 
     // Stream and parse XLSX file
-    const { validatedData, validationErrors } = await streamAndParseXLSX(filePath);
-    
+    const { validatedData, validationErrors } = await streamAndParseXLSX(
+      filePath
+    );
+
     if (validatedData.length === 0 && validationErrors.length === 0) {
       throw new Error("ፋይሉ ባዶ ነው ወይም ምንም የሚገባ ውሂብ አልተገኘም።");
     }
@@ -243,7 +296,7 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
 
     // Filter out duplicates and group by plot number
     const uniquePlots = filterUniquePlots(validatedData, existingPlots);
-    
+
     if (uniquePlots.size === 0) {
       throw new Error("ሁሉም ውሂቦች አስቀድመው ተመዝግተዋል ወይም ባዶ ናቸው።");
     }
@@ -251,61 +304,72 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     // Process with optimal concurrency
     const BATCH_SIZE = 200;
     const CONCURRENCY = 3;
-    
+
     const plotEntries = Array.from(uniquePlots.entries());
-    
+
     // Add progress logging
-    console.log(`🔄 Processing ${plotEntries.length} unique plots from ${validatedData.length} total rows`);
-    
+    console.log(
+      `🔄 Processing ${plotEntries.length} unique plots from ${validatedData.length} total rows`
+    );
+
     const batchResults = await processBatchesWithConcurrency(
-      plotEntries, 
-      adminUnitId, 
-      user, 
-      BATCH_SIZE, 
+      plotEntries,
+      adminUnitId,
+      user,
+      BATCH_SIZE,
       CONCURRENCY
     );
 
     // Aggregate results
     Object.assign(results, batchResults);
-    
+
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
     results.performance = {
-      rowsPerSecond: results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
+      rowsPerSecond:
+        results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
       plotsProcessed: results.createdCount,
-      successRate: ((results.createdCount / plotEntries.length) * 100).toFixed(2) + '%',
-      totalTime: `${Math.round(results.processingTime)}s`
+      successRate:
+        ((results.createdCount / plotEntries.length) * 100).toFixed(2) + "%",
+      totalTime: `${Math.round(results.processingTime)}s`,
     };
 
     // Cleanup file
     try {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
-      console.warn('⚠️ Could not delete temporary file:', cleanupError.message);
+      console.warn("⚠️ Could not delete temporary file:", cleanupError.message);
     }
-    
+
     // Log summary
-    console.log(`✅ Import completed: ${results.createdCount} created, ${results.skippedCount} skipped in ${results.processingTime}s`);
-    
+    console.log(
+      `✅ Import completed: ${results.createdCount} created, ${results.skippedCount} skipped in ${results.processingTime}s`
+    );
+
     return results;
   } catch (error) {
     // Cleanup file on error
     try {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
-      console.warn('⚠️ Could not delete temporary file on error:', cleanupError.message);
+      console.warn(
+        "⚠️ Could not delete temporary file on error:",
+        cleanupError.message
+      );
     }
-    
+
     // Preserve Amharic error messages
-    const amharicErrors = ['የተጠቃሚው', 'ምንም የሚገባ', 'ሁሉም ውሂቦች', 'ፋይሉ', 'የተጻፉ'];
-    const isAmharicError = amharicErrors.some(phrase => error.message.includes(phrase));
-    
+    const amharicErrors = ["የተጠቃሚው", "ምንም የሚገባ", "ሁሉም ውሂቦች", "ፋይሉ", "የተጻፉ"];
+    const isAmharicError = amharicErrors.some((phrase) =>
+      error.message.includes(phrase)
+    );
+
     if (isAmharicError) {
-      console.error('❌ Import failed with Amharic error:', error.message);
+      console.error("❌ Import failed with Amharic error:", error.message);
       throw error;
     }
-    
-    console.error('❌ Import failed:', error.message);
+
+    console.error("❌ Import failed:", error.message);
     throw new Error(`የ Excel ፋይል ማስገቢያ አልተሳካም: ${error.message}`);
   }
 };
@@ -317,11 +381,11 @@ async function streamAndParseXLSX(filePath) {
 
     try {
       console.log(`📖 Reading Excel file: ${filePath}`);
-      
+
       const workbook = XLSX.readFile(filePath, {
         cellDates: true,
         dense: true,
-        sheetStubs: true
+        sheetStubs: true,
       });
 
       // Check if worksheet exists
@@ -330,16 +394,16 @@ async function streamAndParseXLSX(filePath) {
       }
 
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      
+
       // Check if worksheet has data
-      if (!worksheet || !worksheet['!ref']) {
+      if (!worksheet || !worksheet["!ref"]) {
         throw new Error("የመጀመሪያው ሉህ ባዶ ነው።");
       }
 
       const jsonData = XLSX.utils.sheet_to_json(worksheet, {
         raw: false,
         defval: null,
-        blankrows: false
+        blankrows: false,
       });
 
       console.log(`📊 Found ${jsonData.length} rows in Excel file`);
@@ -351,7 +415,7 @@ async function streamAndParseXLSX(filePath) {
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         rowCount = i + 2; // +2 because Excel rows start at 1 and header is row 1
-        
+
         try {
           // Store original row number for error reporting
           row.__rowNum__ = i;
@@ -373,12 +437,20 @@ async function streamAndParseXLSX(filePath) {
           row.plot_number = String(row.plot_number).trim();
           row.land_use = String(row.land_use).trim();
           row.ownership_type = String(row.ownership_type).trim();
-          row.parcel_number = row.parcel_number ? String(row.parcel_number).trim() : null;
-          row.ownership_category = row.ownership_category ? String(row.ownership_category).trim() : "የግል";
-          
+          row.parcel_number = row.parcel_number
+            ? String(row.parcel_number).trim()
+            : null;
+          row.ownership_category = row.ownership_category
+            ? String(row.ownership_category).trim()
+            : "የግል";
+
           // Validate plot number format
-          if (row.plot_number === 'null' || row.plot_number === 'undefined' || 
-              row.plot_number === 'ሰ_ን_ማ' || row.plot_number.length < 2) {
+          if (
+            row.plot_number === "null" ||
+            row.plot_number === "undefined" ||
+            row.plot_number === "ሰ_ን_ማ" ||
+            row.plot_number.length < 2
+          ) {
             throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ትክክለኛ አይደለም።`);
           }
 
@@ -394,7 +466,10 @@ async function streamAndParseXLSX(filePath) {
           }
 
           // Fix common ownership category spelling
-          if (row.ownership_category === "የገራ" || row.ownership_category === "የጋር") {
+          if (
+            row.ownership_category === "የገራ" ||
+            row.ownership_category === "የጋር"
+          ) {
             row.ownership_category = "የጋራ";
           }
 
@@ -407,18 +482,27 @@ async function streamAndParseXLSX(filePath) {
         }
       }
 
-      console.log(`✅ Parsing completed: ${validatedData.length} valid rows, ${validationErrors.length} errors`);
-      
+      console.log(
+        `✅ Parsing completed: ${validatedData.length} valid rows, ${validationErrors.length} errors`
+      );
+
       resolve({ validatedData, validationErrors });
     } catch (error) {
-      console.error('❌ Excel parsing failed:', error.message);
-      
+      console.error("❌ Excel parsing failed:", error.message);
+
       // Provide more specific error messages for common issues
-      if (error.message.includes('no such file') || error.message.includes('ENOENT')) {
+      if (
+        error.message.includes("no such file") ||
+        error.message.includes("ENOENT")
+      ) {
         reject(new Error("ፋይሉ አልተገኘም። የቀረበው ፋይል መንገድ ትክክል መሆኑን ያረጋግጡ።"));
-      } else if (error.message.includes('file format')) {
-        reject(new Error("የቀረበው ፋይል ቅርጽ ትክክል አይደለም። እባክዎ ትክክለኛ Excel ፋይል (.xlsx ወይም .xls) ያስገቡ።"));
-      } else if (error.message.includes('password')) {
+      } else if (error.message.includes("file format")) {
+        reject(
+          new Error(
+            "የቀረበው ፋይል ቅርጽ ትክክል አይደለም። እባክዎ ትክክለኛ Excel ፋይል (.xlsx ወይም .xls) ያስገቡ።"
+          )
+        );
+      } else if (error.message.includes("password")) {
         reject(new Error("ፋይሉ በይለፍ ቃል ተጠቅሷል። ያልተገደበ ፋይል ያስገቡ።"));
       } else {
         reject(new Error(`ፋይሉን ማንበብ አልተቻለም: ${error.message}`));
@@ -432,13 +516,13 @@ function filterUniquePlots(xlsxData, existingPlots) {
 
   for (const row of xlsxData) {
     const plotKey = String(row.plot_number).trim();
-    
+
     // Skip invalid plot numbers
-    if (!plotKey || plotKey === 'null' || plotKey === 'undefined') {
+    if (!plotKey || plotKey === "null" || plotKey === "undefined") {
       stats.skippedInvalid++;
       continue;
     }
-    
+
     // Skip existing plots
     if (existingPlots.has(plotKey)) {
       stats.skippedExisting++;
@@ -455,21 +539,31 @@ function filterUniquePlots(xlsxData, existingPlots) {
 
   // Log summary for debugging
   if (stats.skippedExisting > 0 || stats.skippedInvalid > 0) {
-    console.log(`📊 Filter stats: ${uniquePlots.size} unique, ${stats.skippedExisting} existing, ${stats.skippedInvalid} invalid`);
+    console.log(
+      `📊 Filter stats: ${uniquePlots.size} unique, ${stats.skippedExisting} existing, ${stats.skippedInvalid} invalid`
+    );
   }
 
   return uniquePlots;
 }
-async function processBatchesWithConcurrency(plotEntries, adminUnitId, user, batchSize = 200, concurrency = 3) {
+async function processBatchesWithConcurrency(
+  plotEntries,
+  adminUnitId,
+  user,
+  batchSize = 200,
+  concurrency = 3
+) {
   const results = {
     createdCount: 0,
     skippedCount: 0,
     errors: [],
-    errorDetails: []
+    errorDetails: [],
   };
 
   const totalBatches = Math.ceil(plotEntries.length / batchSize);
-  console.log(`🔄 Processing ${plotEntries.length} plots in ${totalBatches} batches`);
+  console.log(
+    `🔄 Processing ${plotEntries.length} plots in ${totalBatches} batches`
+  );
 
   // Process with controlled concurrency using a simple semaphore
   const processWithConcurrency = async () => {
@@ -483,21 +577,32 @@ async function processBatchesWithConcurrency(plotEntries, adminUnitId, user, bat
       promises.push(
         semaphore.acquire().then(async () => {
           try {
-            console.log(`📦 Starting batch ${batchNumber}/${totalBatches} (${batch.length} plots)`);
-            const batchResult = await processBatch(batch, adminUnitId, user, batchNumber);
-            
+            console.log(
+              `📦 Starting batch ${batchNumber}/${totalBatches} (${batch.length} plots)`
+            );
+            const batchResult = await processBatch(
+              batch,
+              adminUnitId,
+              user,
+              batchNumber
+            );
+
             results.createdCount += batchResult.createdCount;
             results.skippedCount += batchResult.skippedCount;
             results.errors.push(...batchResult.errors);
             results.errorDetails.push(...batchResult.errorDetails);
-            
-            console.log(`  ✅ Batch ${batchNumber} completed: ${batchResult.createdCount} created, ${batchResult.skippedCount} skipped`);
-            
+
+            console.log(
+              `  ✅ Batch ${batchNumber} completed: ${batchResult.createdCount} created, ${batchResult.skippedCount} skipped`
+            );
+
             return batchResult;
           } catch (error) {
             console.error(`  ❌ Batch ${batchNumber} failed:`, error.message);
             results.skippedCount += batch.length;
-            results.errors.push(`Batch ${batchNumber} failed: ${error.message}`);
+            results.errors.push(
+              `Batch ${batchNumber} failed: ${error.message}`
+            );
             return null;
           } finally {
             semaphore.release();
@@ -511,10 +616,11 @@ async function processBatchesWithConcurrency(plotEntries, adminUnitId, user, bat
 
   await processWithConcurrency();
 
-  console.log(`✅ All batches completed: ${results.createdCount} created, ${results.skippedCount} skipped`);
+  console.log(
+    `✅ All batches completed: ${results.createdCount} created, ${results.skippedCount} skipped`
+  );
   return results;
 }
-
 // Simple semaphore implementation
 class Semaphore {
   constructor(max) {
@@ -528,8 +634,8 @@ class Semaphore {
       this.current++;
       return Promise.resolve();
     }
-    
-    return new Promise(resolve => {
+
+    return new Promise((resolve) => {
       this.queue.push(resolve);
     });
   }
@@ -543,15 +649,20 @@ class Semaphore {
     }
   }
 }
-async function processBatch(batchEntries, adminUnitId, user, batchNumber = null) {
+async function processBatch(
+  batchEntries,
+  adminUnitId,
+  user,
+  batchNumber = null
+) {
   const batchResults = {
     createdCount: 0,
     skippedCount: 0,
     errors: [],
-    errorDetails: []
+    errorDetails: [],
   };
 
-  const batchInfo = batchNumber ? `Batch ${batchNumber}` : 'Current batch';
+  const batchInfo = batchNumber ? `Batch ${batchNumber}` : "Current batch";
   console.log(`🔧 ${batchInfo}: Processing ${batchEntries.length} plots`);
 
   const processPromises = batchEntries.map(async ([plotNumber, rows]) => {
@@ -559,7 +670,7 @@ async function processBatch(batchEntries, adminUnitId, user, batchNumber = null)
       // Transform data with enhanced error context
       const transformedData = await transformXLSXData(rows, adminUnitId);
 
-      // Call your existing service
+      // Call your existing service WITHOUT transaction - let createLandRecordService handle it
       await createLandRecordService(
         {
           land_record: transformedData.landRecordData,
@@ -567,10 +678,11 @@ async function processBatch(batchEntries, adminUnitId, user, batchNumber = null)
           documents: transformedData.documents,
           land_payment: transformedData.payments[0] || null,
         },
-        [],
+        [], // No files during import
         user,
         {
-          isImport: true
+          isImport: true,
+          // REMOVED: transaction: t - let createLandRecordService handle its own transactions
         }
       );
 
@@ -579,32 +691,32 @@ async function processBatch(batchEntries, adminUnitId, user, batchNumber = null)
     } catch (error) {
       // Extract detailed error information
       const detailedError = extractDetailedError(error, plotNumber);
-      
+
       console.warn(`⚠️ Failed to create plot ${plotNumber}:`, detailedError);
-      
+
       return {
         success: false,
         error: new Error(detailedError),
         plotNumber,
-        primaryRow: rows[0]
+        primaryRow: rows[0],
       };
     }
   });
 
   const results = await Promise.allSettled(processPromises);
-  
+
   // Process results with better error extraction
   results.forEach((result, index) => {
     const [plotNumber, rows] = batchEntries[index];
-    
+
     if (result.status === "fulfilled" && result.value.success) {
       batchResults.createdCount++;
     } else {
       batchResults.skippedCount++;
-      
+
       let error;
       let row;
-      
+
       if (result.status === "rejected") {
         error = result.reason;
         row = { plot_number: plotNumber };
@@ -612,25 +724,27 @@ async function processBatch(batchEntries, adminUnitId, user, batchNumber = null)
         error = result.value.error;
         row = result.value.primaryRow;
       }
-      
+
       // Create a clean error message without the generic wrapper
       const cleanErrorMessage = getCleanErrorMessage(error.message, plotNumber);
       const errorMsg = `ካርታ ${plotNumber}: ${cleanErrorMessage}`;
-      
+
       batchResults.errors.push(errorMsg);
       batchResults.errorDetails.push({
         plot_number: plotNumber,
         error: cleanErrorMessage,
         row_data: row,
         batch_number: batchNumber,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   });
 
   // Log batch summary
   if (batchResults.createdCount > 0 || batchResults.skippedCount > 0) {
-    console.log(`📊 ${batchInfo} results: ${batchResults.createdCount} created, ${batchResults.skippedCount} skipped`);
+    console.log(
+      `📊 ${batchInfo} results: ${batchResults.createdCount} created, ${batchResults.skippedCount} skipped`
+    );
   }
 
   return batchResults;
@@ -640,74 +754,83 @@ async function processBatch(batchEntries, adminUnitId, user, batchNumber = null)
 function getCleanErrorMessage(errorMessage, plotNumber) {
   // Remove redundant prefixes
   let cleanMessage = errorMessage
-    .replace(`ካርታ ${plotNumber}: `, '')
-    .replace(`ረድፍ ${plotNumber}: `, '')
-    .replace('የመዝገብ መፍጠር ስህተት: ', '')
-    .replace('የሰነድ መፍጠር ስህተት: ', '')
+    .replace(`ካርታ ${plotNumber}: `, "")
+    .replace(`ረድፍ ${plotNumber}: `, "")
+    .replace("የመዝገብ መፍጠር ስህተት: ", "")
+    .replace("የሰነድ መፍጠር ስህተት: ", "")
     .trim();
 
   // If it's still a generic validation error, try to extract more details
-  if (cleanMessage === 'Validation error' && errorMessage.includes('Validation error')) {
-    return 'የውሂብ ማረጋገጫ ስህተት። አንዳንድ መስኮች ትክክለኛ አይደሉም።';
+  if (
+    cleanMessage === "Validation error" &&
+    errorMessage.includes("Validation error")
+  ) {
+    return "የውሂብ ማረጋገጫ ስህተት። አንዳንድ መስኮች ትክክለኛ አይደሉም።";
   }
 
   return cleanMessage;
 }
-
 // Enhanced error extraction function
 function extractDetailedError(error, plotNumber) {
   let errorMessage = error.message;
 
   // Case 1: Sequelize validation errors
-  if (error.name === 'SequelizeValidationError' && error.errors) {
-    const validationErrors = error.errors.map(err => {
-      const field = err.path || 'unknown_field';
-      const message = err.message || 'Validation failed';
+  if (error.name === "SequelizeValidationError" && error.errors) {
+    const validationErrors = error.errors.map((err) => {
+      const field = err.path || "unknown_field";
+      const message = err.message || "Validation failed";
       return `${field}: ${message}`;
     });
-    
+
     if (validationErrors.length > 0) {
-      return `የውሂብ ማረጋገጫ ስህተቶች: ${validationErrors.join('; ')}`;
+      return `የውሂብ ማረጋገጫ ስህተቶች: ${validationErrors.join("; ")}`;
     }
   }
 
   // Case 2: Database constraint errors
   if (error.original) {
     const dbError = error.original;
-    
+
     // Unique constraint violation
-    if (dbError.code === '23505') {
-      if (dbError.detail && dbError.detail.includes('plot_number')) {
-        return 'ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።';
+    if (dbError.code === "23505") {
+      if (dbError.detail && dbError.detail.includes("plot_number")) {
+        return "ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።";
       }
-      return 'ድርብ መረጃ ተገኝቷል። አንዳንድ መረጃዎች ቀደም ሲል ተመዝግተዋል።';
+      return "ድርብ መረጃ ተገኝቷል። አንዳንድ መረጃዎች ቀደም ሲል ተመዝግተዋል።";
     }
-    
+
     // Foreign key violation
-    if (dbError.code === '23503') {
-      return 'የተሳሳተ ማጣቀሻ መረጃ። አንዳንድ የተዛመዱ መረጃዎች አልተገኙም።';
+    if (dbError.code === "23503") {
+      return "የተሳሳተ ማጣቀሻ መረጃ። አንዳንድ የተዛመዱ መረጃዎች አልተገኙም።";
     }
-    
+
     // Return original database message if it's meaningful
-    if (dbError.message && !dbError.message.includes('Validation error')) {
+    if (dbError.message && !dbError.message.includes("Validation error")) {
       return dbError.message;
     }
   }
 
   // Case 3: Custom error messages from our transform function
-  if (errorMessage.includes('ረድፍ') || errorMessage.includes('ያስፈልጋል') || 
-      errorMessage.includes('ትክክለኛ') || errorMessage.includes('መሆን አለበት')) {
+  if (
+    errorMessage.includes("ረድፍ") ||
+    errorMessage.includes("ያስፈልጋል") ||
+    errorMessage.includes("ትክክለኛ") ||
+    errorMessage.includes("መሆን አለበት")
+  ) {
     return errorMessage;
   }
 
   // Case 4: Network or connection errors
-  if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED') || 
-      errorMessage.includes('Network')) {
-    return 'የውሂብ ጎታ ግንኙነት ስህተት። እባክዎ እንደገና ይሞክሩ።';
+  if (
+    errorMessage.includes("timeout") ||
+    errorMessage.includes("ECONNREFUSED") ||
+    errorMessage.includes("Network")
+  ) {
+    return "የውሂብ ጎታ ግንኙነት ስህተት። እባክዎ እንደገና ይሞክሩ።";
   }
 
   // Default: return the original message but clean it up
-  return errorMessage.replace('Validation error', 'የውሂብ ማረጋገጫ ስህተት');
+  return errorMessage.replace("Validation error", "የውሂብ ማረጋገጫ ስህተት");
 }
 
 async function transformXLSXData(rows, adminUnitId) {
@@ -730,47 +853,49 @@ async function transformXLSXData(rows, adminUnitId) {
     const ownershipCategory = primaryRow.ownership_category || "የግል";
     let owners = [];
 
-    // if (ownershipCategory === "የጋራ") {
-    //   // Shared ownership - multiple owners
-    //   owners = rows.map((row, index) => {
-    //     // if (!row.first_name || !row.middle_name) {
-    //     //   throw new Error(`ተጋሪ ${index + 1} ስም እና የአባት ስም ያስፈልጋል።`);
-    //     // }
+    if (ownershipCategory === "የጋራ") {
+      // Shared ownership - multiple owners
+      owners = rows.map((row, index) => {
+        // if (!row.first_name || !row.middle_name) {
+        //   throw new Error(`ተጋሪ ${index + 1} ስም እና የአባት ስም ያስፈልጋል።`);
+        // }
 
-    //     return {
-    //       first_name: row.first_name || "Unknown",
-    //       middle_name: row.middle_name || "unknown",
-    //       last_name: row.last_name || "Unknown",
-    //       national_id: row.national_id ? String(row.national_id).trim() : null,
-    //       email: row.email?.trim() || null,
-    //       phone_number: row.phone_number || null,
-    //       gender: row.gender || null,
-    //       relationship_type: row.relationship_type || null,
-    //       address: row.address || null,
-    //     };
-    //   });
-    // } else {
-    //   // Single ownership - use primary row
-    //   if (!primaryRow.first_name || !primaryRow.middle_name) {
-    //     throw new Error("ዋና ባለቤት ስም እና የአባት ስም ያስፈልጋል።");
-    //   }
+        return {
+          first_name: row.first_name || "Unknown",
+          middle_name: row.middle_name || "unknown",
+          last_name: row.last_name || "Unknown",
+          national_id: row.national_id ? String(row.national_id).trim() : null,
+          email: row.email?.trim() || null,
+          phone_number: row.phone_number || null,
+          gender: row.gender || null,
+          relationship_type: row.relationship_type || null,
+          address: row.address || null,
+        };
+      });
+    } else {
+      // Single ownership - use primary row
+      if (!primaryRow.first_name || !primaryRow.middle_name) {
+        throw new Error("ዋና ባለቤት ስም እና የአባት ስም ያስፈልጋል።");
+      }
 
-    //   owners.push({
-    //     first_name: primaryRow.first_name || "Unknown",
-    //     middle_name: primaryRow.middle_name || "unknown",
-    //     last_name: primaryRow.last_name || "Unknown",
-    //     national_id: primaryRow.national_id ? String(primaryRow.national_id).trim() : null,
-    //     email: primaryRow.email?.trim() || null,
-    //     gender: primaryRow.gender || null,
-    //     phone_number: primaryRow.phone_number || null,
-    //     relationship_type: primaryRow.relationship_type || null,
-    //   });
-    // }
+      owners.push({
+        first_name: primaryRow.first_name || "Unknown",
+        middle_name: primaryRow.middle_name || "unknown",
+        last_name: primaryRow.last_name || "Unknown",
+        national_id: primaryRow.national_id
+          ? String(primaryRow.national_id).trim()
+          : null,
+        email: primaryRow.email?.trim() || null,
+        gender: primaryRow.gender || null,
+        phone_number: primaryRow.phone_number || null,
+        relationship_type: primaryRow.relationship_type || null,
+      });
+    }
 
     // Land record data - parcel_number can be null
-    
+
     const landRecordData = {
-      parcel_number: primaryRow.parcel_number  ,
+      parcel_number: primaryRow.parcel_number,
       land_level: parseInt(primaryRow.land_level) || 1,
       area: parseFloat(primaryRow.area) || 0,
       administrative_unit_id: adminUnitId,
@@ -792,7 +917,7 @@ async function transformXLSXData(rows, adminUnitId) {
     // Documents - use all rows for shared ownership, primary row for single
     const documentRows = ownershipCategory === "የጋራ" ? rows : [primaryRow];
     const documents = documentRows.map((row) => ({
-      document_type: DOCUMENT_TYPES.TITLE_DEED, 
+      document_type: DOCUMENT_TYPES.TITLE_DEED,
       plot_number: row.plot_number,
       approver_name: row.approver_name || null,
       preparer_name: row.preparer_name || null,
@@ -807,7 +932,7 @@ async function transformXLSXData(rows, adminUnitId) {
     const payments = paymentRows
       .filter((row) => row.payment_type)
       .map((row) => ({
-        payment_type: row.payment_type || 'TAX', 
+        payment_type: row.payment_type || PAYMENT_TYPES.TAX,
         total_amount: parseFloat(row.total_amount) || 0,
         paid_amount: parseFloat(row.paid_amount) || 0,
         currency: row.currency || "ETB",
@@ -841,28 +966,35 @@ function calculatePaymentStatus(row) {
 }
 async function preloadExistingPlots(adminUnitId) {
   try {
-    console.log('Loading existing plot numbers from documents for admin unit:', adminUnitId);
-    
+    console.log(
+      "Loading existing plot numbers from documents for admin unit:",
+      adminUnitId
+    );
+
     // Query the documents table for existing plot numbers
     const existingDocuments = await Document.findAll({
-      include: [{
-        model: LandRecord,
-        as: 'landRecord',
-        where: { 
-          administrative_unit_id: adminUnitId,
-          deletedAt: null
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          where: {
+            administrative_unit_id: adminUnitId,
+            deletedAt: null,
+          },
+          attributes: [],
         },
-        attributes: [] 
-      }],
+      ],
       attributes: ["plot_number"],
-      raw: true
+      raw: true,
     });
 
-    console.log(`Found ${existingDocuments.length} existing documents with plots`);
-    
+    console.log(
+      `Found ${existingDocuments.length} existing documents with plots`
+    );
+
     // Create set of existing plot numbers
     const plotNumbers = new Set();
-    existingDocuments.forEach(doc => {
+    existingDocuments.forEach((doc) => {
       if (doc.plot_number) {
         plotNumbers.add(String(doc.plot_number).trim());
       }
@@ -871,7 +1003,7 @@ async function preloadExistingPlots(adminUnitId) {
     console.log(`Unique plot numbers found: ${plotNumbers.size}`);
     return plotNumbers;
   } catch (error) {
-    console.error('Error loading existing plots from documents:', error);
+    console.error("Error loading existing plots from documents:", error);
     // Return empty set to allow import to continue
     return new Set();
   }
@@ -1848,7 +1980,9 @@ const getAllLandRecordService = async (options = {}) => {
 const getFilterOptionsService = async (adminUnitId = null) => {
   try {
     // Base where clause for administrative unit filtering
-    const whereClause = adminUnitId ? { administrative_unit_id: adminUnitId } : {};
+    const whereClause = adminUnitId
+      ? { administrative_unit_id: adminUnitId }
+      : {};
 
     // Get distinct values from LandRecord for ONLY the specified filters
     const landRecordOptions = await LandRecord.findAll({
@@ -1860,18 +1994,18 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         "land_level",
         "record_status",
         "priority",
-        "ownership_category"
+        "ownership_category",
       ],
       where: whereClause,
       group: [
         "land_use",
-        "ownership_type", 
+        "ownership_type",
         "lease_ownership_type",
         "lease_transfer_reason",
         "land_level",
         "record_status",
         "priority",
-        "ownership_category"
+        "ownership_category",
       ],
       raw: true,
     });
@@ -1879,46 +2013,50 @@ const getFilterOptionsService = async (adminUnitId = null) => {
     // FIXED: Get plot_number options from Document model without GROUP BY issues
     const documentOptions = await Document.findAll({
       attributes: ["plot_number"],
-      where: { 
-        plot_number: { 
+      where: {
+        plot_number: {
           [Op.ne]: null,
-          [Op.ne]: "" // Also exclude empty strings
-        }
+          [Op.ne]: "", // Also exclude empty strings
+        },
       },
-      include: [{
-        model: LandRecord,
-        as: "landRecord",
-        attributes: [], // Only include for filtering, not for selection
-        where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
-        required: true
-      }],
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: [], // Only include for filtering, not for selection
+          where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
+          required: true,
+        },
+      ],
       raw: true,
     });
 
     // Alternative approach for plot numbers using separate query (more reliable)
-    const plotNumbers = await Document.aggregate('plot_number', 'DISTINCT', {
+    const plotNumbers = await Document.aggregate("plot_number", "DISTINCT", {
       plain: false,
-      where: { 
-        plot_number: { 
+      where: {
+        plot_number: {
           [Op.ne]: null,
-          [Op.ne]: ""
-        }
+          [Op.ne]: "",
+        },
       },
-      include: [{
-        model: LandRecord,
-        as: "landRecord",
-        attributes: [],
-        where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
-        required: true
-      }]
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: [],
+          where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
+          required: true,
+        },
+      ],
     });
 
     // Get area range for slider
     const areaRange = await LandRecord.findOne({
       attributes: [
-        [sequelize.fn('MIN', sequelize.col('area')), 'min_area'],
-        [sequelize.fn('MAX', sequelize.col('area')), 'max_area'],
-        [sequelize.fn('AVG', sequelize.col('area')), 'avg_area']
+        [sequelize.fn("MIN", sequelize.col("area")), "min_area"],
+        [sequelize.fn("MAX", sequelize.col("area")), "max_area"],
+        [sequelize.fn("AVG", sequelize.col("area")), "avg_area"],
       ],
       where: whereClause,
       raw: true,
@@ -1927,8 +2065,8 @@ const getFilterOptionsService = async (adminUnitId = null) => {
     // Get date range for createdAt filter
     const dateRange = await LandRecord.findOne({
       attributes: [
-        [sequelize.fn('MIN', sequelize.col('createdAt')), 'min_date'],
-        [sequelize.fn('MAX', sequelize.col('createdAt')), 'max_date']
+        [sequelize.fn("MIN", sequelize.col("createdAt")), "min_date"],
+        [sequelize.fn("MAX", sequelize.col("createdAt")), "max_date"],
       ],
       where: whereClause,
       raw: true,
@@ -1938,34 +2076,45 @@ const getFilterOptionsService = async (adminUnitId = null) => {
     const totalRecords = await LandRecord.count({ where: whereClause });
 
     // Helper function to get sorted unique values
-    const getSortedUniqueValues = (key, sortType = 'alphabetical') => {
-      const values = [...new Set(landRecordOptions.map((opt) => opt[key]).filter(Boolean))];
-      
-      if (sortType === 'numerical') {
+    const getSortedUniqueValues = (key, sortType = "alphabetical") => {
+      const values = [
+        ...new Set(landRecordOptions.map((opt) => opt[key]).filter(Boolean)),
+      ];
+
+      if (sortType === "numerical") {
         return values.sort((a, b) => a - b);
-      } else if (sortType === 'priority') {
-        const priorityOrder = ['high', 'medium', 'low'];
-        return values.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
+      } else if (sortType === "priority") {
+        const priorityOrder = ["high", "medium", "low"];
+        return values.sort(
+          (a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b)
+        );
       } else {
         return values.sort();
       }
     };
 
     // Process plot numbers from the aggregation result
-    const processedPlotNumbers = plotNumbers 
-      ? plotNumbers.map(item => item.DISTINCT).filter(Boolean).sort()
-      : [...new Set(documentOptions.map((opt) => opt.plot_number).filter(Boolean))].sort();
+    const processedPlotNumbers = plotNumbers
+      ? plotNumbers
+          .map((item) => item.DISTINCT)
+          .filter(Boolean)
+          .sort()
+      : [
+          ...new Set(
+            documentOptions.map((opt) => opt.plot_number).filter(Boolean)
+          ),
+        ].sort();
 
     const filterOptions = {
       // ==================== QUICK FILTERS ====================
-      land_use: getSortedUniqueValues('land_use'),
-      ownership_type: getSortedUniqueValues('ownership_type'),
-      lease_ownership_type: getSortedUniqueValues('lease_ownership_type'),
-      lease_transfer_reason: getSortedUniqueValues('lease_transfer_reason'),
-      land_level: getSortedUniqueValues('land_level', 'numerical'),
-      record_status: getSortedUniqueValues('record_status'),
-      priority: getSortedUniqueValues('priority', 'priority'),
-      ownership_category: getSortedUniqueValues('ownership_category'),
+      land_use: getSortedUniqueValues("land_use"),
+      ownership_type: getSortedUniqueValues("ownership_type"),
+      lease_ownership_type: getSortedUniqueValues("lease_ownership_type"),
+      lease_transfer_reason: getSortedUniqueValues("lease_transfer_reason"),
+      land_level: getSortedUniqueValues("land_level", "numerical"),
+      record_status: getSortedUniqueValues("record_status"),
+      priority: getSortedUniqueValues("priority", "priority"),
+      ownership_category: getSortedUniqueValues("ownership_category"),
 
       // ==================== PLOT NUMBER FILTER ====================
       plot_number: processedPlotNumbers,
@@ -1974,12 +2123,12 @@ const getFilterOptionsService = async (adminUnitId = null) => {
       boolean_filters: {
         has_debt: [
           { value: "true", label: "Has Debt" },
-          { value: "false", label: "No Debt" }
+          { value: "false", label: "No Debt" },
         ],
         include_deleted: [
           { value: "true", label: "Include Deleted" },
-          { value: "false", label: "Exclude Deleted" }
-        ]
+          { value: "false", label: "Exclude Deleted" },
+        ],
       },
 
       // ==================== RANGE DATA FOR UI ====================
@@ -1990,19 +2139,21 @@ const getFilterOptionsService = async (adminUnitId = null) => {
           avg: parseFloat(areaRange?.avg_area) || 0,
           step: 0.1,
           unit: "m²",
-          format: (value) => `${value.toLocaleString()} m²`
+          format: (value) => `${value.toLocaleString()} m²`,
         },
         date: {
-          min: dateRange?.min_date || new Date('2000-01-01'),
+          min: dateRange?.min_date || new Date("2000-01-01"),
           max: dateRange?.max_date || new Date(),
-          format: (date) => new Date(date).toLocaleDateString('en-ET')
+          format: (date) => new Date(date).toLocaleDateString("en-ET"),
         },
         land_level: {
-          min: Math.min(...getSortedUniqueValues('land_level', 'numerical')) || 1,
-          max: Math.max(...getSortedUniqueValues('land_level', 'numerical')) || 10,
+          min:
+            Math.min(...getSortedUniqueValues("land_level", "numerical")) || 1,
+          max:
+            Math.max(...getSortedUniqueValues("land_level", "numerical")) || 10,
           step: 1,
-          format: (level) => `Level ${level}`
-        }
+          format: (level) => `Level ${level}`,
+        },
       },
 
       // ==================== SORT OPTIONS ====================
@@ -2010,52 +2161,106 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         { value: "createdAt_DESC", label: "Newest First", group: "date" },
         { value: "createdAt_ASC", label: "Oldest First", group: "date" },
         { value: "updatedAt_DESC", label: "Recently Updated", group: "date" },
-        { value: "parcel_number_ASC", label: "Parcel Number (A-Z)", group: "identification" },
-        { value: "parcel_number_DESC", label: "Parcel Number (Z-A)", group: "identification" },
+        {
+          value: "parcel_number_ASC",
+          label: "Parcel Number (A-Z)",
+          group: "identification",
+        },
+        {
+          value: "parcel_number_DESC",
+          label: "Parcel Number (Z-A)",
+          group: "identification",
+        },
         { value: "area_DESC", label: "Largest Area First", group: "land" },
         { value: "area_ASC", label: "Smallest Area First", group: "land" },
-        { value: "land_level_DESC", label: "Highest Land Level First", group: "land" },
-        { value: "land_level_ASC", label: "Lowest Land Level First", group: "land" },
-        { value: "priority_DESC", label: "Highest Priority First", group: "status" },
-        { value: "priority_ASC", label: "Lowest Priority First", group: "status" },
+        {
+          value: "land_level_DESC",
+          label: "Highest Land Level First",
+          group: "land",
+        },
+        {
+          value: "land_level_ASC",
+          label: "Lowest Land Level First",
+          group: "land",
+        },
+        {
+          value: "priority_DESC",
+          label: "Highest Priority First",
+          group: "status",
+        },
+        {
+          value: "priority_ASC",
+          label: "Lowest Priority First",
+          group: "status",
+        },
       ],
 
       // ==================== SEARCH TYPES ====================
       search_types: [
-        { value: "global", label: "Global Search", description: "Search across all fields" },
-        { value: "owner_name", label: "Owner Name", description: "Search by owner name" },
-        { value: "parcel_number", label: "Parcel Number", description: "Search by parcel number" },
-        { value: "plot_number", label: "Plot Number", description: "Search by plot number" },
-        { value: "national_id", label: "National ID", description: "Search by national ID" },
-        { value: "phone_number", label: "Phone Number", description: "Search by phone number" },
+        {
+          value: "global",
+          label: "Global Search",
+          description: "Search across all fields",
+        },
+        {
+          value: "owner_name",
+          label: "Owner Name",
+          description: "Search by owner name",
+        },
+        {
+          value: "parcel_number",
+          label: "Parcel Number",
+          description: "Search by parcel number",
+        },
+        {
+          value: "plot_number",
+          label: "Plot Number",
+          description: "Search by plot number",
+        },
+        {
+          value: "national_id",
+          label: "National ID",
+          description: "Search by national ID",
+        },
+        {
+          value: "phone_number",
+          label: "Phone Number",
+          description: "Search by phone number",
+        },
       ],
 
       // ==================== FILTER GROUPS FOR ORGANIZED UI ====================
       filter_groups: {
         quick_filters: {
           label: "Quick Filters",
-          filters: ["land_use", "ownership_type", "lease_ownership_type", "lease_transfer_reason", "land_level"]
+          filters: [
+            "land_use",
+            "ownership_type",
+            "lease_ownership_type",
+            "lease_transfer_reason",
+            "land_level",
+          ],
         },
         status_filters: {
-          label: "Status Filters", 
-          filters: ["record_status", "priority", "ownership_category"]
+          label: "Status Filters",
+          filters: ["record_status", "priority", "ownership_category"],
         },
         identification: {
           label: "Identification",
-          filters: ["parcel_number", "plot_number"]
+          filters: ["parcel_number", "plot_number"],
         },
         owner_search: {
           label: "Owner Search",
-          filters: ["owner_name", "national_id", "phone_number"]
+          filters: ["owner_name", "national_id", "phone_number"],
         },
         range_filters: {
           label: "Range Filters",
-          filters: ["area", "date_range", "land_level_range"]
+          filters: ["area", "date_range", "land_level_range"],
         },
         additional_filters: {
           label: "Additional Filters",
-          filters: ["has_debt", "include_deleted"]
-        }
+          filters: ["has_debt", "include_deleted"],
+        },
       },
 
       // ==================== UI CONFIGURATION ====================
@@ -2064,8 +2269,8 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         page_size_options: [10, 20, 50, 100],
         max_search_results: 1000,
         debounce_timeout: 300,
-        auto_complete_min_chars: 2
-      }
+        auto_complete_min_chars: 2,
+      },
     };
 
     return {
@@ -2076,12 +2281,16 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         total_filters: Object.keys(filterOptions).length - 5, // Exclude metadata fields
         total_records: totalRecords,
         administrative_unit: adminUnitId || "all",
-        quick_filters_count: filterOptions.filter_groups.quick_filters.filters.length,
-        status_filters_count: filterOptions.filter_groups.status_filters.filters.length,
-        range_filters_count: filterOptions.filter_groups.range_filters.filters.length,
-        additional_filters_count: filterOptions.filter_groups.additional_filters.filters.length,
-        plot_numbers_count: processedPlotNumbers.length
-      }
+        quick_filters_count:
+          filterOptions.filter_groups.quick_filters.filters.length,
+        status_filters_count:
+          filterOptions.filter_groups.status_filters.filters.length,
+        range_filters_count:
+          filterOptions.filter_groups.range_filters.filters.length,
+        additional_filters_count:
+          filterOptions.filter_groups.additional_filters.filters.length,
+        plot_numbers_count: processedPlotNumbers.length,
+      },
     };
   } catch (error) {
     throw new Error(`Failed to get filter options: ${error.message}`);
@@ -2092,20 +2301,20 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
   try {
     // Fixed date calculations without mutation
     const now = new Date();
-    
+
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - 7);
     weekStart.setHours(0, 0, 0, 0);
-    
+
     const monthStart = new Date(now);
     monthStart.setDate(now.getDate() - 30);
     monthStart.setHours(0, 0, 0, 0);
-    
+
     const yearStart = new Date(now);
     yearStart.setFullYear(now.getFullYear() - 1);
     yearStart.setHours(0, 0, 0, 0);
@@ -2122,180 +2331,240 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       weeklyTrends,
       yearlyTrends,
       leaseStats,
-      recentActivity
+      recentActivity,
     ] = await Promise.all([
       // 1. Total Statistics
       LandRecord.findOne({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'total_records'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area'],
-          [Sequelize.fn('MAX', Sequelize.col('area')), 'max_area'],
-          [Sequelize.fn('MIN', Sequelize.col('area')), 'min_area']
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "total_records"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+          [Sequelize.fn("MAX", Sequelize.col("area")), "max_area"],
+          [Sequelize.fn("MIN", Sequelize.col("area")), "min_area"],
         ],
-        raw: true
+        raw: true,
       }),
 
       // 2. Time-based Statistics
       LandRecord.findOne({
-        where: { 
+        where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.between]: [yearStart, todayEnd] }
+          createdAt: { [Op.between]: [yearStart, todayEnd] },
         },
         attributes: [
-          [Sequelize.fn('COUNT', Sequelize.literal(`CASE WHEN "createdAt" >= '${todayStart.toISOString()}' THEN 1 END`)), 'today_count'],
-          [Sequelize.fn('COUNT', Sequelize.literal(`CASE WHEN "createdAt" >= '${weekStart.toISOString()}' THEN 1 END`)), 'weekly_count'],
-          [Sequelize.fn('COUNT', Sequelize.literal(`CASE WHEN "createdAt" >= '${monthStart.toISOString()}' THEN 1 END`)), 'monthly_count'],
-          [Sequelize.fn('COUNT', Sequelize.literal(`CASE WHEN "createdAt" >= '${yearStart.toISOString()}' THEN 1 END`)), 'yearly_count']
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${todayStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "today_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${weekStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "weekly_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${monthStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "monthly_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${yearStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "yearly_count",
+          ],
         ],
-        raw: true
+        raw: true,
       }),
 
       // 3. Land Use Distribution
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          'land_use',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+          "land_use",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ['land_use'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
+        group: ["land_use"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
       }),
 
       // 4. Ownership Type Distribution
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          'ownership_type',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+          "ownership_type",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ['ownership_type'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
+        group: ["ownership_type"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
       }),
 
       // 5. Zoning Type Distribution
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          'zoning_type',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+          "zoning_type",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ['zoning_type'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
+        group: ["zoning_type"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
       }),
 
       // 6. Land Level Distribution
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         attributes: [
-          'land_level',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+          "land_level",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ['land_level'],
-        order: ['land_level'],
-        raw: true
+        group: ["land_level"],
+        order: ["land_level"],
+        raw: true,
       }),
 
       // 7. Monthly Trends (Last 12 months)
       LandRecord.findAll({
-        where: { 
+        where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: yearStart }
+          createdAt: { [Op.gte]: yearStart },
         },
         attributes: [
-          [Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('createdAt')), 'month'],
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
+          [
+            Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+            "month",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
         ],
-        group: [Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('createdAt'))],
-        order: [[Sequelize.fn('DATE_TRUNC', 'month', Sequelize.col('createdAt')), 'ASC']],
-        raw: true
+        group: [
+          Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+        ],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
       }),
 
       // 8. Weekly Trends (Last 12 weeks)
       LandRecord.findAll({
-        where: { 
+        where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: weekStart }
+          createdAt: { [Op.gte]: weekStart },
         },
         attributes: [
-          [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'week'],
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
+          [
+            Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt")),
+            "week",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
         ],
-        group: [Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt'))],
-        order: [[Sequelize.fn('DATE_TRUNC', 'week', Sequelize.col('createdAt')), 'ASC']],
-        raw: true
+        group: [Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt"))],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
       }),
 
       // 9. Yearly Trends (Last 3 years)
       LandRecord.findAll({
-        where: { 
+        where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: new Date(now.getFullYear() - 2, 0, 1) }
+          createdAt: { [Op.gte]: new Date(now.getFullYear() - 2, 0, 1) },
         },
         attributes: [
-          [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt')), 'year'],
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area']
+          [
+            Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt")),
+            "year",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
         ],
-        group: [Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt'))],
-        order: [[Sequelize.fn('DATE_TRUNC', 'year', Sequelize.col('createdAt')), 'ASC']],
-        raw: true
+        group: [Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt"))],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
       }),
 
       // 10. Lease Analytics
       LandRecord.findAll({
-        where: { 
+        where: {
           administrative_unit_id: adminUnitId,
-          lease_ownership_type: { [Op.not]: null }
+          lease_ownership_type: { [Op.not]: null },
         },
         attributes: [
-          'lease_ownership_type',
-          'lease_transfer_reason',
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count'],
-          [Sequelize.fn('SUM', Sequelize.col('area')), 'total_area'],
-          [Sequelize.fn('AVG', Sequelize.col('area')), 'average_area']
+          "lease_ownership_type",
+          "lease_transfer_reason",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ['lease_ownership_type', 'lease_transfer_reason'],
-        order: [[Sequelize.fn('COUNT', Sequelize.col('id')), 'DESC']],
-        raw: true
+        group: ["lease_ownership_type", "lease_transfer_reason"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
       }),
 
       // 11. Recent Activity (last 10 records)
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
-        include: [{
-          model: User,
-          as: 'owners',
-          attributes: ['id', 'first_name', 'last_name'],
-          through: { attributes: [] }
-        }],
-        attributes: [
-          'id',
-          'parcel_number',
-          'land_use',
-          'area',
-          'record_status',
-          'zoning_type',
-          'land_level',
-          'createdAt'
+        include: [
+          {
+            model: User,
+            as: "owners",
+            attributes: ["id", "first_name", "last_name"],
+            through: { attributes: [] },
+          },
         ],
-        order: [['createdAt', 'DESC']],
-        limit: 10
-      })
+        attributes: [
+          "id",
+          "parcel_number",
+          "land_use",
+          "area",
+          "record_status",
+          "zoning_type",
+          "land_level",
+          "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: 10,
+      }),
     ]);
 
     const totalRecords = parseInt(totalStats?.total_records) || 0;
@@ -2308,107 +2577,122 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         average_area: parseFloat(totalStats?.average_area) || 0,
         max_area: parseFloat(totalStats?.max_area) || 0,
         min_area: parseFloat(totalStats?.min_area) || 0,
-        area_unit: 'square_meters'
+        area_unit: "square_meters",
       },
 
       time_analytics: {
         today: parseInt(timeBasedStats?.today_count) || 0,
         last_7_days: parseInt(timeBasedStats?.weekly_count) || 0,
         last_30_days: parseInt(timeBasedStats?.monthly_count) || 0,
-        last_365_days: parseInt(timeBasedStats?.yearly_count) || 0
+        last_365_days: parseInt(timeBasedStats?.yearly_count) || 0,
       },
 
       distributions: {
-        by_land_use: (landUseStats || []).map(item => ({
-          land_use: item.land_use || 'Unknown',
+        by_land_use: (landUseStats || []).map((item) => ({
+          land_use: item.land_use || "Unknown",
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
-          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
         })),
 
-        by_ownership_type: (ownershipStats || []).map(item => ({
-          ownership_type: item.ownership_type || 'Unknown',
+        by_ownership_type: (ownershipStats || []).map((item) => ({
+          ownership_type: item.ownership_type || "Unknown",
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
-          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
         })),
 
-        by_zoning_type: (zoningStats || []).map(item => ({
-          zoning_type: item.zoning_type || 'Unknown',
+        by_zoning_type: (zoningStats || []).map((item) => ({
+          zoning_type: item.zoning_type || "Unknown",
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
-          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
         })),
 
-        by_land_level: (landLevelStats || []).map(item => ({
-          land_level: item.land_level || 'Unknown',
+        by_land_level: (landLevelStats || []).map((item) => ({
+          land_level: item.land_level || "Unknown",
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
-          percentage: totalRecords > 0 ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1) : 0
-        }))
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
       },
 
       trends: {
-        monthly: (monthlyTrends || []).map(item => ({
+        monthly: (monthlyTrends || []).map((item) => ({
           month: item.month,
           count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0
+          total_area: parseFloat(item.total_area) || 0,
         })),
-        
-        weekly: (weeklyTrends || []).map(item => ({
+
+        weekly: (weeklyTrends || []).map((item) => ({
           week: item.week,
           count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0
+          total_area: parseFloat(item.total_area) || 0,
         })),
-        
-        yearly: (yearlyTrends || []).map(item => ({
+
+        yearly: (yearlyTrends || []).map((item) => ({
           year: item.year,
           count: parseInt(item.count),
-          total_area: parseFloat(item.total_area) || 0
-        }))
+          total_area: parseFloat(item.total_area) || 0,
+        })),
       },
 
       lease_analytics: {
         summary: {
           total_lease_records: leaseStats?.length || 0,
-          lease_percentage: totalRecords > 0 ? ((leaseStats?.length || 0) / totalRecords * 100).toFixed(1) : 0
+          lease_percentage:
+            totalRecords > 0
+              ? (((leaseStats?.length || 0) / totalRecords) * 100).toFixed(1)
+              : 0,
         },
-        by_lease_type: (leaseStats || []).map(item => ({
-          lease_ownership_type: item.lease_ownership_type || 'Unknown',
-          lease_transfer_reason: item.lease_transfer_reason || 'Not Specified',
+        by_lease_type: (leaseStats || []).map((item) => ({
+          lease_ownership_type: item.lease_ownership_type || "Unknown",
+          lease_transfer_reason: item.lease_transfer_reason || "Not Specified",
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
-          average_area: parseFloat(item.average_area) || 0
+          average_area: parseFloat(item.average_area) || 0,
         })),
-        
+
         // Aggregated by lease type only
         aggregated_by_type: (leaseStats || []).reduce((acc, item) => {
-          const type = item.lease_ownership_type || 'Unknown';
+          const type = item.lease_ownership_type || "Unknown";
           if (!acc[type]) {
             acc[type] = {
               count: 0,
               total_area: 0,
-              transfer_reasons: {}
+              transfer_reasons: {},
             };
           }
           acc[type].count += parseInt(item.count);
           acc[type].total_area += parseFloat(item.total_area) || 0;
-          
-          const reason = item.lease_transfer_reason || 'Not Specified';
+
+          const reason = item.lease_transfer_reason || "Not Specified";
           if (!acc[type].transfer_reasons[reason]) {
             acc[type].transfer_reasons[reason] = 0;
           }
           acc[type].transfer_reasons[reason] += parseInt(item.count);
-          
+
           return acc;
-        }, {})
+        }, {}),
       },
 
-      recent_activity: (recentActivity || []).map(record => ({
+      recent_activity: (recentActivity || []).map((record) => ({
         id: record.id,
         parcel_number: record.parcel_number,
         land_use: record.land_use,
@@ -2417,26 +2701,40 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         zoning_type: record.zoning_type,
         land_level: record.land_level,
         created_at: record.createdAt,
-        owner_names: record.owners?.map(owner => 
-          `${owner.first_name} ${owner.last_name}`.trim()
-        ).filter(name => name) || []
+        owner_names:
+          record.owners
+            ?.map((owner) => `${owner.first_name} ${owner.last_name}`.trim())
+            .filter((name) => name) || [],
       })),
 
       // Essential calculated metrics only
       calculated_metrics: {
-        records_per_hectare: totalRecords > 0 && totalStats?.total_area > 0 ? 
-          (totalRecords / (parseFloat(totalStats.total_area) / 10000)).toFixed(2) : 0,
-        
-        average_land_level: landLevelStats?.length > 0 ? 
-          landLevelStats.reduce((sum, item) => sum + (parseInt(item.land_level) * parseInt(item.count)), 0) / 
-          landLevelStats.reduce((sum, item) => sum + parseInt(item.count), 0) : 0
-      }
+        records_per_hectare:
+          totalRecords > 0 && totalStats?.total_area > 0
+            ? (
+                totalRecords /
+                (parseFloat(totalStats.total_area) / 10000)
+              ).toFixed(2)
+            : 0,
+
+        average_land_level:
+          landLevelStats?.length > 0
+            ? landLevelStats.reduce(
+                (sum, item) =>
+                  sum + parseInt(item.land_level) * parseInt(item.count),
+                0
+              ) /
+              landLevelStats.reduce(
+                (sum, item) => sum + parseInt(item.count),
+                0
+              )
+            : 0,
+      },
     };
 
     return processedStats;
-
   } catch (error) {
-    console.error('Error generating land records stats:', error);
+    console.error("Error generating land records stats:", error);
     throw new Error(`Failed to generate statistics: ${error.message}`);
   }
 };
@@ -2716,7 +3014,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     }
 
     // ==================== QUICK FILTERS ====================
-    
+
     // Land characteristics
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
@@ -2741,7 +3039,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     }
 
     // ==================== RANGE FILTERS ====================
-    
+
     // Area range filter
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
@@ -2768,7 +3066,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     }
 
     // ==================== INCLUDE CONDITIONS ====================
-    
+
     const includeConditions = [
       {
         model: User,
@@ -2816,36 +3114,38 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     ];
 
     // ==================== ENHANCED GLOBAL SEARCH ====================
-    
+
     if (queryParams.search) {
       // Clean and prepare search term
       let searchTerm = queryParams.search.trim();
-      
+
       // Handle URL encoded characters
       try {
         searchTerm = decodeURIComponent(searchTerm);
       } catch (e) {
         // Continue with original term if decoding fails
       }
-      
-      searchTerm = searchTerm.replace(/%25/g, '%');
+
+      searchTerm = searchTerm.replace(/%25/g, "%");
 
       // Split search term by spaces to handle full names
-      const searchTerms = searchTerm.split(/\s+/).filter(term => term.length > 0);
+      const searchTerms = searchTerm
+        .split(/\s+/)
+        .filter((term) => term.length > 0);
 
       // SIMPLIFIED AND IMPROVED SEARCH LOGIC
       const searchConditions = {
         [Op.or]: [
           // LandRecord fields
           { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
-          
+
           // Document fields
-          { '$documents.plot_number$': { [Op.iLike]: `%${searchTerm}%` } },
-          
+          { "$documents.plot_number$": { [Op.iLike]: `%${searchTerm}%` } },
+
           // Owner national_id and phone (always include these)
-          { '$owners.national_id$': { [Op.iLike]: `%${searchTerm}%` } },
-          { '$owners.phone_number$': { [Op.iLike]: `%${searchTerm}%` } },
-        ]
+          { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
+          { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
+        ],
       };
 
       // ===== SIMPLIFIED NAME SEARCH =====
@@ -2854,19 +3154,19 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
         if (searchTerms.length === 1) {
           const term = searchTerms[0];
           searchConditions[Op.or].push(
-            { '$owners.first_name$': { [Op.iLike]: `%${term}%` } },
-            { '$owners.middle_name$': { [Op.iLike]: `%${term}%` } },
-            { '$owners.last_name$': { [Op.iLike]: `%${term}%` } }
+            { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
           );
-        } 
+        }
         // For multiple terms (full name), use more specific matching
         else {
           // Search for each term in any name field (OR logic)
-          searchTerms.forEach(term => {
+          searchTerms.forEach((term) => {
             searchConditions[Op.or].push(
-              { '$owners.first_name$': { [Op.iLike]: `%${term}%` } },
-              { '$owners.middle_name$': { [Op.iLike]: `%${term}%` } },
-              { '$owners.last_name$': { [Op.iLike]: `%${term}%` } }
+              { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
             );
           });
 
@@ -2874,11 +3174,11 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           searchConditions[Op.or].push(
             Sequelize.where(
               Sequelize.fn(
-                'CONCAT_WS',
-                ' ',
-                Sequelize.col('owners.first_name'),
-                Sequelize.col('owners.middle_name'),
-                Sequelize.col('owners.last_name')
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
               ),
               { [Op.iLike]: `%${searchTerm}%` }
             )
@@ -2887,25 +3187,26 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       }
 
       // Add search includes (make sure owners are included for search)
-      const ownerIncludeIndex = includeConditions.findIndex(inc => inc.as === "owners");
+      const ownerIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "owners"
+      );
       if (ownerIncludeIndex !== -1) {
         includeConditions[ownerIncludeIndex].required = false; // LEFT JOIN for search
       }
 
-      const documentIncludeIndex = includeConditions.findIndex(inc => inc.as === "documents");
+      const documentIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "documents"
+      );
       if (documentIncludeIndex !== -1) {
         includeConditions[documentIncludeIndex].required = false; // LEFT JOIN for search
       }
 
       // Apply search conditions
-      whereClause[Op.and] = [
-        ...(whereClause[Op.and] || []),
-        searchConditions
-      ];
+      whereClause[Op.and] = [...(whereClause[Op.and] || []), searchConditions];
     }
 
     // ==================== SPECIFIC TEXT FILTERS ====================
-    
+
     // Individual parcel number filter
     if (queryParams.parcel_number) {
       whereClause.parcel_number = {
@@ -2915,10 +3216,12 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
 
     // Individual plot number filter
     if (queryParams.plot_number) {
-      const documentInclude = includeConditions.find((inc) => inc.as === "documents");
+      const documentInclude = includeConditions.find(
+        (inc) => inc.as === "documents"
+      );
       if (documentInclude) {
         documentInclude.where = {
-          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` }
+          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` },
         };
         documentInclude.required = true;
       }
@@ -2928,7 +3231,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     if (queryParams.owner_name) {
       const ownerNameTerm = queryParams.owner_name.trim();
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
-      
+
       if (ownerInclude) {
         ownerInclude.where = {
           [Op.or]: [
@@ -2937,15 +3240,15 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
             { last_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
             Sequelize.where(
               Sequelize.fn(
-                'CONCAT_WS',
-                ' ',
-                Sequelize.col('owners.first_name'),
-                Sequelize.col('owners.middle_name'),
-                Sequelize.col('owners.last_name')
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
               ),
               { [Op.iLike]: `%${ownerNameTerm}%` }
-            )
-          ]
+            ),
+          ],
         };
         ownerInclude.required = true;
       }
@@ -2956,7 +3259,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
       if (ownerInclude) {
         ownerInclude.where = {
-          national_id: { [Op.iLike]: `%${queryParams.national_id}%` }
+          national_id: { [Op.iLike]: `%${queryParams.national_id}%` },
         };
         ownerInclude.required = true;
       }
@@ -2967,14 +3270,14 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
       if (ownerInclude) {
         ownerInclude.where = {
-          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` }
+          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` },
         };
         ownerInclude.required = true;
       }
     }
 
     // ==================== SORTING ====================
-    
+
     let order = [["createdAt", "DESC"]];
     if (queryParams.sortBy && queryParams.sortOrder) {
       const validSortFields = [
@@ -2999,25 +3302,27 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     }
 
     // ==================== COUNT TOTAL RECORDS ====================
-    
-    const countIncludes = includeConditions.map(inc => {
-      // For count, make sure we don't require the includes (to avoid INNER JOIN)
-      const includeCopy = { ...inc };
-      if (includeCopy.required) {
-        includeCopy.required = false;
-      }
-      return includeCopy;
-    }).filter(inc => inc.as !== "payments");
+
+    const countIncludes = includeConditions
+      .map((inc) => {
+        // For count, make sure we don't require the includes (to avoid INNER JOIN)
+        const includeCopy = { ...inc };
+        if (includeCopy.required) {
+          includeCopy.required = false;
+        }
+        return includeCopy;
+      })
+      .filter((inc) => inc.as !== "payments");
 
     const totalCount = await LandRecord.count({
       where: whereClause,
       include: countIncludes,
       distinct: true,
-      col: 'id'
+      col: "id",
     });
 
     // ==================== FETCH RECORDS ====================
-    
+
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -3049,7 +3354,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     const totalPages = Math.ceil(totalCount / pageSize);
 
     // ==================== PROCESS RECORDS ====================
-    
+
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
@@ -3098,7 +3403,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
     });
 
     // ==================== RETURN RESULT ====================
-    
+
     const result = {
       total: totalCount,
       page: parseInt(page),
@@ -3301,7 +3606,7 @@ const getLandRecordsByUserAdminUnitService = async (
     }
 
     // ==================== QUICK FILTERS ====================
-    
+
     // Land characteristics
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
@@ -3326,7 +3631,7 @@ const getLandRecordsByUserAdminUnitService = async (
     }
 
     // ==================== RANGE FILTERS ====================
-    
+
     // Area range filter
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
@@ -3353,7 +3658,7 @@ const getLandRecordsByUserAdminUnitService = async (
     }
 
     // ==================== INCLUDE CONDITIONS ====================
-    
+
     const includeConditions = [
       {
         model: User,
@@ -3401,36 +3706,36 @@ const getLandRecordsByUserAdminUnitService = async (
     ];
 
     // ==================== ENHANCED GLOBAL SEARCH ====================
-    
+
     if (queryParams.search) {
       // Clean and prepare search term
       let searchTerm = queryParams.search.trim();
-      
+
       // Handle URL encoded characters
       try {
         searchTerm = decodeURIComponent(searchTerm);
-      } catch (e) {
-      }
-      
-      searchTerm = searchTerm.replace(/%25/g, '%');
-      
+      } catch (e) {}
+
+      searchTerm = searchTerm.replace(/%25/g, "%");
 
       // Split search term by spaces to handle full names
-      const searchTerms = searchTerm.split(/\s+/).filter(term => term.length > 0);
+      const searchTerms = searchTerm
+        .split(/\s+/)
+        .filter((term) => term.length > 0);
 
       // SIMPLIFIED AND IMPROVED SEARCH LOGIC
       const searchConditions = {
         [Op.or]: [
           // LandRecord fields
           { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
-          
+
           // Document fields
-          { '$documents.plot_number$': { [Op.iLike]: `%${searchTerm}%` } },
-          
+          { "$documents.plot_number$": { [Op.iLike]: `%${searchTerm}%` } },
+
           // Owner national_id and phone (always include these)
-          { '$owners.national_id$': { [Op.iLike]: `%${searchTerm}%` } },
-          { '$owners.phone_number$': { [Op.iLike]: `%${searchTerm}%` } },
-        ]
+          { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
+          { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
+        ],
       };
 
       // ===== SIMPLIFIED NAME SEARCH =====
@@ -3439,19 +3744,19 @@ const getLandRecordsByUserAdminUnitService = async (
         if (searchTerms.length === 1) {
           const term = searchTerms[0];
           searchConditions[Op.or].push(
-            { '$owners.first_name$': { [Op.iLike]: `%${term}%` } },
-            { '$owners.middle_name$': { [Op.iLike]: `%${term}%` } },
-            { '$owners.last_name$': { [Op.iLike]: `%${term}%` } }
+            { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
           );
-        } 
+        }
         // For multiple terms (full name), use more specific matching
         else {
           // Search for each term in any name field (OR logic)
-          searchTerms.forEach(term => {
+          searchTerms.forEach((term) => {
             searchConditions[Op.or].push(
-              { '$owners.first_name$': { [Op.iLike]: `%${term}%` } },
-              { '$owners.middle_name$': { [Op.iLike]: `%${term}%` } },
-              { '$owners.last_name$': { [Op.iLike]: `%${term}%` } }
+              { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
             );
           });
 
@@ -3459,11 +3764,11 @@ const getLandRecordsByUserAdminUnitService = async (
           searchConditions[Op.or].push(
             Sequelize.where(
               Sequelize.fn(
-                'CONCAT_WS',
-                ' ',
-                Sequelize.col('owners.first_name'),
-                Sequelize.col('owners.middle_name'),
-                Sequelize.col('owners.last_name')
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
               ),
               { [Op.iLike]: `%${searchTerm}%` }
             )
@@ -3471,27 +3776,27 @@ const getLandRecordsByUserAdminUnitService = async (
         }
       }
 
-
       // Add search includes (make sure owners are included for search)
-      const ownerIncludeIndex = includeConditions.findIndex(inc => inc.as === "owners");
+      const ownerIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "owners"
+      );
       if (ownerIncludeIndex !== -1) {
         includeConditions[ownerIncludeIndex].required = false; // LEFT JOIN for search
       }
 
-      const documentIncludeIndex = includeConditions.findIndex(inc => inc.as === "documents");
+      const documentIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "documents"
+      );
       if (documentIncludeIndex !== -1) {
         includeConditions[documentIncludeIndex].required = false; // LEFT JOIN for search
       }
 
       // Apply search conditions
-      whereClause[Op.and] = [
-        ...(whereClause[Op.and] || []),
-        searchConditions
-      ];
+      whereClause[Op.and] = [...(whereClause[Op.and] || []), searchConditions];
     }
 
     // ==================== SPECIFIC TEXT FILTERS ====================
-    
+
     // Individual parcel number filter
     if (queryParams.parcel_number) {
       whereClause.parcel_number = {
@@ -3501,11 +3806,13 @@ const getLandRecordsByUserAdminUnitService = async (
 
     // Individual plot number filter
     if (queryParams.plot_number) {
-      const documentInclude = includeConditions.find((inc) => inc.as === "documents");
+      const documentInclude = includeConditions.find(
+        (inc) => inc.as === "documents"
+      );
       if (documentInclude) {
         documentInclude.where = {
           ...documentInclude.where,
-          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` }
+          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` },
         };
         documentInclude.required = true;
       }
@@ -3515,7 +3822,7 @@ const getLandRecordsByUserAdminUnitService = async (
     if (queryParams.owner_name) {
       const ownerNameTerm = queryParams.owner_name.trim();
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
-      
+
       if (ownerInclude) {
         ownerInclude.where = {
           ...ownerInclude.where,
@@ -3525,15 +3832,15 @@ const getLandRecordsByUserAdminUnitService = async (
             { last_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
             Sequelize.where(
               Sequelize.fn(
-                'CONCAT_WS',
-                ' ',
-                Sequelize.col('owners.first_name'),
-                Sequelize.col('owners.middle_name'),
-                Sequelize.col('owners.last_name')
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
               ),
               { [Op.iLike]: `%${ownerNameTerm}%` }
-            )
-          ]
+            ),
+          ],
         };
         ownerInclude.required = true;
       }
@@ -3545,7 +3852,7 @@ const getLandRecordsByUserAdminUnitService = async (
       if (ownerInclude) {
         ownerInclude.where = {
           ...ownerInclude.where,
-          national_id: { [Op.iLike]: `%${queryParams.national_id}%` }
+          national_id: { [Op.iLike]: `%${queryParams.national_id}%` },
         };
         ownerInclude.required = true;
       }
@@ -3557,14 +3864,14 @@ const getLandRecordsByUserAdminUnitService = async (
       if (ownerInclude) {
         ownerInclude.where = {
           ...ownerInclude.where,
-          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` }
+          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` },
         };
         ownerInclude.required = true;
       }
     }
 
     // ==================== SORTING ====================
-    
+
     let order = [["createdAt", "DESC"]];
     if (queryParams.sortBy && queryParams.sortOrder) {
       const validSortFields = [
@@ -3589,25 +3896,27 @@ const getLandRecordsByUserAdminUnitService = async (
     }
 
     // ==================== COUNT TOTAL RECORDS ====================
-    
-    const countIncludes = includeConditions.map(inc => {
-      // For count, make sure we don't require the includes (to avoid INNER JOIN)
-      const includeCopy = { ...inc };
-      if (includeCopy.required) {
-        includeCopy.required = false;
-      }
-      return includeCopy;
-    }).filter(inc => inc.as !== "payments");
+
+    const countIncludes = includeConditions
+      .map((inc) => {
+        // For count, make sure we don't require the includes (to avoid INNER JOIN)
+        const includeCopy = { ...inc };
+        if (includeCopy.required) {
+          includeCopy.required = false;
+        }
+        return includeCopy;
+      })
+      .filter((inc) => inc.as !== "payments");
 
     const totalCount = await LandRecord.count({
       where: whereClause,
       include: countIncludes,
       distinct: true,
-      col: 'id'
+      col: "id",
     });
 
     // ==================== FETCH RECORDS ====================
-    
+
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
@@ -3638,7 +3947,7 @@ const getLandRecordsByUserAdminUnitService = async (
     const totalPages = Math.ceil(totalCount / pageSize);
 
     // ==================== PROCESS RECORDS ====================
-    
+
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
@@ -3687,7 +3996,7 @@ const getLandRecordsByUserAdminUnitService = async (
     });
 
     // ==================== RETURN RESULT ====================
-    
+
     const result = {
       total: totalCount,
       page: parseInt(page),
@@ -4523,7 +4832,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
   try {
     const pLimit = (await import("p-limit")).default;
 
-    const limit = pLimit(8); 
+    const limit = pLimit(8);
 
     const baseWhere = { deletedAt: null };
     if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
@@ -4537,11 +4846,11 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       limit(() => LandRecord.count({ where: baseWhere })),
       limit(() => Document.count({ where: { deletedAt: null } })),
       limit(() =>
-      User.count({
-        where: adminUnitId
-        ? { administrative_unit_id: adminUnitId }
-        : { administrative_unit_id: { [Op.ne]: null } },
-      })
+        User.count({
+          where: adminUnitId
+            ? { administrative_unit_id: adminUnitId }
+            : { administrative_unit_id: { [Op.ne]: null } },
+        })
       ),
       limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
     ];
@@ -4743,10 +5052,10 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       administrative_unit: {
         by_status,
         by_zoning,
-        by_ownership, 
+        by_ownership,
         by_land_use,
-        by_lease_ownership_type, 
-        by_lease_transfer_reason, 
+        by_lease_ownership_type,
+        by_lease_transfer_reason,
         area_stats: {
           total_area,
           by_zoning: area_by_zoning,
