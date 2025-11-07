@@ -117,6 +117,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     if (!isImport) {
       await ActionLog.create({
         land_record_id: landRecord.id,
+        admin_unit_id:adminunit,
         performed_by: user.id,
         action_type: 'RECORD_CREATED',
         notes: 'የመሬት መዝገብ ተፈጥሯል',
@@ -973,53 +974,7 @@ function calculatePaymentStatus(row) {
     return "አልተከፈለም";
   }
 }
-// async function preloadExistingPlots(adminUnitId) {
-//   try {
-//     console.log(
-//       "Loading existing plot numbers from documents for admin unit:",
-//       adminUnitId
-//     );
-
-//     // Query the documents table for existing plot numbers
-//     const existingDocuments = await Document.findAll({
-//       include: [
-//         {
-//           model: LandRecord,
-//           as: "landRecord",
-//           where: {
-//             administrative_unit_id: adminUnitId,
-//             deletedAt: null,
-//           },
-//           attributes: [],
-//         },
-//       ],
-//       attributes: ["plot_number"],
-//       raw: true,
-//     });
-
-//     console.log(
-//       `Found ${existingDocuments.length} existing documents with plots`
-//     );
-
-//     // Create set of existing plot numbers
-//     const plotNumbers = new Set();
-//     existingDocuments.forEach((doc) => {
-//       if (doc.plot_number) {
-//         plotNumbers.add(String(doc.plot_number).trim());
-//       }
-//     });
-
-//     console.log(`Unique plot numbers found: ${plotNumbers.size}`);
-//     return plotNumbers;
-//   } catch (error) {
-//     console.error("Error loading existing plots from documents:", error);
-//     // Return empty set to allow import to continue
-//     return new Set();
-//   }
-// }
-
-// Draft Management Service
-
+// Service to save land record as draft
 const saveLandRecordAsDraftService = async (
   data,
   files,

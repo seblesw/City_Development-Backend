@@ -311,6 +311,10 @@ AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
   as: "leseagreements",
 });
+AdministrativeUnit.hasMany(ActionLog,{
+  foreignKey: 'admin_unit_id',
+  as: 'actionLogs'
+});
 
 // LandRecord associations
 LandRecord.belongsToMany(User, {
@@ -555,6 +559,10 @@ ActionLog.belongsTo(LandRecord, {
 ActionLog.hasMany(PushNotification, {
   foreignKey: 'action_log_id',
   as: 'notifications'
+});
+ActionLog.belongsTo(AdministrativeUnit, {
+  foreignKey: 'admin_unit_id',
+  as: 'administrativeUnit'
 });
 // Export Sequelize instance, models, and constants
 module.exports = {

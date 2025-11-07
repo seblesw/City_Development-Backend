@@ -769,7 +769,7 @@ const changeRecordStatus = async (req, res) => {
       { notes, rejection_reason }
     );
 
-    // Trigger ActionLog and Notification
+    // Trigger  and Notification
     try {
       const io = req.app.get('io');
       const { notifyNewAction } = require('../utils/notificationUtils');

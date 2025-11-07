@@ -1,4 +1,4 @@
-const { ActionLog, User } = require("../models");
+const { ActionLog, User, LandRecord } = require("../models");
 const { Op, Sequelize } = require("sequelize");
 
 const getActionLog = async (req, res) => {
@@ -47,13 +47,24 @@ const getAllActionLogs = async (req, res) => {
       search
     } = req.query;
 
+    // Get admin_unit_id from logged-in user
+    const userAdminUnitId = req.user.administrative_unit_id;
+    
+    if (!userAdminUnitId) {
+      return res.status(403).json({
+        message: 'Access denied. User does not belong to any administrative unit.'
+      });
+    }
+
     // Calculate pagination
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // Build where conditions
-    const whereConditions = {};
+    // Build where conditions - ALWAYS filter by admin_unit_id
+    const whereConditions = {
+      admin_unit_id: userAdminUnitId
+    };
 
     // Filter by performer
     if (performer) {
@@ -123,10 +134,10 @@ const getAllActionLogs = async (req, res) => {
     // Search in notes and additional_data
     if (search) {
       whereConditions[Op.or] = [
-        { notes: { [Op.like]: `%${search}%` } },
-        { '$additional_data.plot_number$': { [Op.like]: `%${search}%` } },
-        { '$additional_data.parcel_number$': { [Op.like]: `%${search}%` } },
-        { '$additional_data.changed_by_name$': { [Op.like]: `%${search}%` } }
+        { notes: { [Op.iLike]: `%${search}%` } }, 
+        { '$additional_data.plot_number$': { [Op.iLike]: `%${search}%` } },
+        { '$additional_data.parcel_number$': { [Op.iLike]: `%${search}%` } },
+        { '$additional_data.changed_by_name$': { [Op.iLike]: `%${search}%` } }
       ];
     }
 
@@ -143,6 +154,12 @@ const getAllActionLogs = async (req, res) => {
           model: User,
           as: 'performedBy',
           attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        // Optional: Include LandRecord if needed
+        {
+          model: LandRecord,
+          as: 'landRecord',
+          attributes: ['id', 'parcel_number']
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -150,24 +167,30 @@ const getAllActionLogs = async (req, res) => {
       offset: offset
     });
 
-    // Get unique performers for filter dropdown - FIXED QUERY
+    // Get unique performers for filter dropdown - ONLY from same admin unit
     const performers = await User.findAll({
-      attributes: ['id', 'first_name', 'last_name'],
+      attributes: ['id', 'first_name', 'last_name'], // Fixed: removed middle_name if not needed
       include: [
         {
           model: ActionLog,
           as: 'performedActions',
           attributes: [],
-          required: true 
+          required: true,
+          where: {
+            admin_unit_id: userAdminUnitId
+          }
         }
       ],
-      group: ['User.id', 'User.first_name', 'User.last_name'],
+      group: ['User.id', 'User.first_name', 'User.last_name'], // Fixed: use last_name instead of middle_name
       raw: true
     });
 
-    // Get unique action types for filter dropdown
+    // Get unique action types for filter dropdown - ONLY from same admin unit
     const actionTypes = await ActionLog.findAll({
       attributes: ['action_type'],
+      where: {
+        admin_unit_id: userAdminUnitId
+      },
       group: ['action_type'],
       raw: true
     });
@@ -201,12 +224,22 @@ const getAllActionLogs = async (req, res) => {
   }
 };
 
-// Get action log statistics - FIXED VERSION
 const getActionLogStats = async (req, res) => {
   try {
     const { time_filter, performer } = req.query;
 
-    const whereConditions = {};
+    // Get admin_unit_id from logged-in user
+    const userAdminUnitId = req.user.administrative_unit_id;
+    
+    if (!userAdminUnitId) {
+      return res.status(403).json({
+        message: 'Access denied. User does not belong to any administrative unit.'
+      });
+    }
+
+    const whereConditions = {
+      admin_unit_id: userAdminUnitId
+    };
     
     // Apply time filter if provided
     if (time_filter) {
@@ -319,23 +352,42 @@ const getActionLogStats = async (req, res) => {
   }
 };
 
-// Alternative simplified version without complex grouping
+// Alternative simplified version without complex grouping - UPDATED with admin unit filter
 const getActionLogFilters = async (req, res) => {
   try {
-    // Get all performers who have action logs
+    // Get admin_unit_id from logged-in user
+    const userAdminUnitId = req.user.administrative_unit_id;
+    
+    if (!userAdminUnitId) {
+      return res.status(403).json({
+        message: 'Access denied. User does not belong to any administrative unit.'
+      });
+    }
+
+    // Get all performers who have action logs in the same admin unit
     const performers = await User.findAll({
       attributes: ['id', 'first_name', 'last_name'],
-      where: {
-        id: {
-          [Op.in]: Sequelize.literal(`(SELECT DISTINCT performed_by FROM action_logs)`)
+      include: [
+        {
+          model: ActionLog,
+          as: 'performedActions',
+          attributes: [],
+          where: {
+            admin_unit_id: userAdminUnitId
+          },
+          required: true
         }
-      },
+      ],
+      group: ['User.id', 'User.first_name', 'User.last_name'],
       raw: true
     });
 
-    // Get all action types
+    // Get all action types from the same admin unit
     const actionTypes = await ActionLog.findAll({
       attributes: ['action_type'],
+      where: {
+        admin_unit_id: userAdminUnitId
+      },
       group: ['action_type'],
       raw: true
     });

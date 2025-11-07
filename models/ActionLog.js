@@ -16,6 +16,14 @@ module.exports = (db, DataTypes) => {
           key: 'id',
         },
       },
+      admin_unit_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'administrative_units',
+          key: 'id',
+        },
+      },
       performed_by: {
         type: DataTypes.INTEGER,
         allowNull: false,

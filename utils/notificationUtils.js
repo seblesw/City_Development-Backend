@@ -155,6 +155,7 @@ const notifyNewAction = async (io, actionData) => {
 
     // 1. FIRST CREATE ACTION LOG
     const actionLog = await ActionLog.create({
+      admin_unit_id: administrative_unit_id || landRecord?.administrative_unit_id,
       land_record_id: landRecordId,
       performed_by: performed_by,
       action_type: action_type,
@@ -172,13 +173,6 @@ const notifyNewAction = async (io, actionData) => {
       administrative_unit_id || landRecord?.administrative_unit_id, 
       performed_by
     );
-
-    console.log(`🔔 Notifying ${usersToNotify.length} users for action: ${action_type}`);
-    console.log(`🔔 Users:`, usersToNotify.map(u => ({
-      id: u.id, 
-      name: `${u.first_name} ${u.middle_name || ''} ${u.last_name}`.trim(),
-      role: u.role?.name
-    })));
 
     // Create push notification records for each user
     const notificationPromises = usersToNotify.map(async (user) => {
