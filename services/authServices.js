@@ -10,95 +10,93 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sendPasswordResetEmail } = require("../utils/mailService");
 const nodemailer = require('nodemailer');
-// Create reusable email transporter (create once, use everywhere)
-const emailTransporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE,
-  auth: {
-    user: process.env.EMAIL_USERNAME,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
-
-// Verify transporter on startup
-emailTransporter.verify((error) => {
-  if (error) {
-    console.error('Email transporter error:', error);
-  } else {
-    console.log('Email transporter ready');
-  }
-});
 
 const registerOfficial = async (data, options = {}) => {
   const { transaction } = options;
   let t = transaction;
 
   try {
-    // Validation
-    if (!data.first_name || !data.last_name || !data.phone_number || 
-        !data.national_id || !data.role_id) {
-      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።");
+    if (
+      !data.first_name ||
+      !data.last_name ||
+      !data.phone_number ||
+      !data.national_id ||
+      !data.role_id
+    ) {
+      throw new Error(
+        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
+      );
     }
 
     t = t || (await sequelize.transaction());
-
-    // Batch all existence checks in parallel
-    const [office, administrativeUnit, existingRecords] = await Promise.all([
-      // Check office existence only if provided
-      data.oversight_office_id 
-        ? OversightOffice.findByPk(data.oversight_office_id, { transaction: t })
-        : Promise.resolve(null),
-      
-      // Check administrative unit only if provided
-      data.administrative_unit_id
-        ? AdministrativeUnit.findByPk(data.administrative_unit_id, { transaction: t })
-        : Promise.resolve(null),
-      
-      // Check for duplicate data in single query
-      User.findOne({
-        where: {
-          [Op.or]: [
-            data.email ? { email: data.email } : null,
-            { phone_number: data.phone_number },
-            { national_id: data.national_id }
-          ].filter(Boolean), // Remove null entries
-          deletedAt: { [Op.eq]: null }
-        },
-        attributes: ['email', 'phone_number', 'national_id'],
-        transaction: t
-      })
-    ]);
-
-    // Validate results
-    if (data.oversight_office_id && !office) {
-      throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
+    
+    if (data.oversight_office_id) {
+      const office = await OversightOffice.findByPk(data.oversight_office_id, {
+        transaction: t,
+      });
+      if (!office) {
+        throw new Error("ትክክለኛ የቁጥጥር ቢሮ ይምረጡ።");
+      }
+    }
+    
+    if (data.administrative_unit_id) {
+      const administrativeUnit = await AdministrativeUnit.findByPk(
+        data.administrative_unit_id,
+        {
+          transaction: t,
+        }
+      );
+      if (!administrativeUnit) {
+        throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
+      }
     }
 
-    if (data.administrative_unit_id && !administrativeUnit) {
-      throw new Error("ትክክለኛ የአስተዳደር ክፍል ይምረጡ።");
-    }
-
-    // Check for duplicates
-    if (existingRecords) {
-      if (data.email && existingRecords.email === data.email) {
+    
+    if (data.email) {
+      const existingEmail = await User.findOne({
+        where: { email: data.email, deletedAt: { [Op.eq]: null } },
+        transaction: t,
+      });
+      if (existingEmail) {
         throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
       }
-      if (existingRecords.phone_number === data.phone_number) {
+    }
+
+    
+    if (data.phone_number) {
+      const existingPhone = await User.findOne({
+        where: {
+          phone_number: data.phone_number,
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction: t,
+      });
+      if (existingPhone) {
         throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
-      }
-      if (existingRecords.national_id === data.national_id) {
-        throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
       }
     }
 
-    // Hash password
+    
+    const existingNationalId = await User.findOne({
+      where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
+      transaction: t,
+    });
+    if (existingNationalId) {
+      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
+    }
+
+    
     const rawPassword = data.password || "12345678";
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    // Create user
-    const official = await User.create({
-      ...data,
-      password: hashedPassword,
-    }, { transaction: t });
+    
+    const official = await User.create(
+      {
+        ...data,
+        password: hashedPassword,
+      },
+      { transaction: t }
+    );
 
     if (!transaction) await t.commit();
 
@@ -108,134 +106,109 @@ const registerOfficial = async (data, options = {}) => {
     throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
   }
 };
-const registerOfficialByManagerService = async (data, user) => {
+const registerOfficialByManagerService = async (data, user, options = {}) => {
+  const { transaction } = options;
+
   try {
-    // Fast validation - check most common failures first
+    if (
+      !data.first_name ||
+      !data.last_name ||
+      !data.phone_number ||
+      !data.national_id ||
+      !data.role_id
+    ) {
+      throw new Error(
+        "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
+      );
+    }
+
+    // Verify that the manager has an administrative unit
     if (!user.administrative_unit_id) {
       throw new Error("ማኔጅሩ አስተዳደራዊ ክፍል የለውም።");
     }
-
-    if (!data.first_name || !data.last_name || !data.phone_number || 
-        !data.national_id || !data.role_id) {
-      throw new Error("ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።");
-    }
-
-    const administrativeUnitId = user.administrative_unit_id;
-
-    // Single optimized query for all duplicate checks
-    const whereConditions = [
-      { phone_number: data.phone_number },
-      { national_id: data.national_id }
-    ];
-    
+      const administrativeUnitId = user.administrative_unit_id;
+    // Email validation (optional field)
     if (data.email) {
-      whereConditions.push({ email: data.email });
-    }
-
-    const existingUser = await User.findOne({
-      where: {
-        [Op.or]: whereConditions,
-        deletedAt: { [Op.eq]: null }
-      },
-      attributes: ['email', 'phone_number', 'national_id'],
-      logging: false, // Disable query logging for performance
-      benchmark: false
-    });
-
-    if (existingUser) {
-      if (existingUser.phone_number === data.phone_number) {
-        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
-      }
-      if (existingUser.national_id === data.national_id) {
-        throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
-      }
-      if (existingUser.email === data.email) {
+      const existingEmail = await User.findOne({
+        where: { email: data.email, deletedAt: { [Op.eq]: null } },
+        transaction,
+      });
+      if (existingEmail) {
         throw new Error("ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።");
       }
     }
 
-    // Optimized password hashing with cost adjustment
-    const rawPassword = data.password || "12345678";
-    const hashedPassword = await bcrypt.hash(rawPassword, 12); // Higher security for production
+    // Phone number validation
+    if (data.phone_number) {
+      const existingPhone = await User.findOne({
+        where: {
+          phone_number: data.phone_number,
+          deletedAt: { [Op.eq]: null },
+        },
+        transaction,
+      });
+      if (existingPhone) {
+        throw new Error("ይህ ስልክ ቁጥር ቀደም ሲል ተመዝግቧል።");
+      }
+    }
 
-    // Prepare data with only necessary fields
+    // National ID validation
+    const existingNationalId = await User.findOne({
+      where: { national_id: data.national_id, deletedAt: { [Op.eq]: null } },
+      transaction,
+    });
+    if (existingNationalId) {
+      throw new Error("ይህ ብሔራዊ መታወቂያ ቁጥር ቀደም ሲል ተመዝግቧል።");
+    }
+
+    // Hash password
+    const rawPassword = data.password || "12345678";
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    // Create official with explicit administrative_unit_id
     const officialData = {
-      first_name: data.first_name,
-      last_name: data.last_name,
-      middle_name: data.middle_name || null,
-      email: data.email || null,
-      phone_number: data.phone_number,
+      ...data,
       password: hashedPassword,
-      role_id: data.role_id,
       administrative_unit_id: administrativeUnitId,
-      oversight_office_id: data.oversight_office_id || null,
-      national_id: data.national_id,
-      address: data.address || null,
-      gender: data.gender,
-      profile_picture: data.profile_picture || null,
-      relationship_type: null,
-      marital_status: data.marital_status || null,
-      is_active: data.is_active !== undefined ? data.is_active : true,
-      created_by: user.id,
     };
 
-    // Create user with performance optimizations
-    const official = await User.create(officialData, {
-      logging: false,
-      benchmark: false,
-      returning: true // Ensure we get the created record
-    });
+    const official = await User.create(officialData, { transaction });
 
     return official;
-
   } catch (error) {
-    // More specific error handling for large datasets
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      throw new Error("የተደጋገመ መረጃ አልተገናኘም።");
-    }
-    if (error.name === 'SequelizeDatabaseError') {
-      throw new Error("የውሂብ ጎታ ስህተት። እባክዎ እንደገና ይሞክሩ።");
-    }
-    
     throw new Error(`ባለሥልጣን መፍጠር ስህተት: ${error.message}`);
   }
 };
 
 const login = async ({ email, password }, options = {}) => {
+  
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction; 
+
   try {
-    // Input validation
+    
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
     if (!password) throw new Error("የይለፍ ቃል ያስፈልጋል");
 
-    // Find user without transaction (read operation doesn't need transaction)
+    
     const user = await User.findOne({
-      where: { 
-        email, 
-        deletedAt: null, 
-        is_active: true 
-      },
-      include: [{ 
-        model: Role, 
-        as: "role", 
-        attributes: ["id", "name"] 
-      }],
-      attributes: [
-        'id', 'first_name', 'last_name', 'administrative_unit_id',
-        'oversight_office_id', 'phone_number', 'middle_name', 'email', 
-        'national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin',
-        'profile_picture', 'last_login'
-      ],
+      where: { email, deletedAt: null, is_active: true },
+      include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
+      transaction: t,
+      attributes: ['id', 'first_name', 'last_name', 'administrative_unit_id','oversight_office_id', 'phone_number', 'middle_name', 'email', 'national_id', 'password', 'otp', 'otpExpiry', 'isFirstLogin','profile_picture'],
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
 
-    // Verify password
+    
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new Error("የተሳሳተ የይለፍ ቃል");
 
-    // Handle first-time login
+    
     if (user.isFirstLogin) {
-      await sendOTP(user.email); // Remove transaction from OTP send
+      await sendOTP(user.email, { transaction: t });
+      
+      if (shouldCommit) await t.commit();
       return { 
         success: true, 
         message: "OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
@@ -243,10 +216,9 @@ const login = async ({ email, password }, options = {}) => {
       };
     }
 
-    // Update last login without transaction (single update operation)
-    await user.update({ last_login: new Date() });
+    
+    await user.update({ last_login: new Date() }, { transaction: t });
 
-    // Generate token
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -259,6 +231,8 @@ const login = async ({ email, password }, options = {}) => {
       { expiresIn: "1d" }
     );
 
+    
+    if (shouldCommit) await t.commit();
     return { 
       token, 
       user: {
@@ -278,39 +252,50 @@ const login = async ({ email, password }, options = {}) => {
       message: "በተሳካ ሁኔታ ገብተዋል"
     };
   } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
 
-const sendOTP = async (email) => {
+const sendOTP = async (email, options = {}) => {
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
+
   try {
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
+      transaction: t,
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check if existing OTP is still valid
+    
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
       const remainingMinutes = Math.floor(remainingSeconds / 60);
       const seconds = remainingSeconds % 60;
       throw new Error(
-        `እባክዎ ያለፈውን OTP ይጠቀሙ ወይም ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+      `እባክዎ ያለፈውን OTP ይጠቀሙ ወይም ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
       );
     }
 
-    // Generate new OTP
+    
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`Generated OTP for ${email}: ${otp}`);
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    
-    // Update user with new OTP (no transaction needed for single update)
-    await user.update({ otp, otpExpiry });
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); 
+    await user.update({ otp, otpExpiry }, { transaction: t });
 
-    // Send OTP email using reusable transporter
-    await emailTransporter.sendMail({
+    
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: {
+        user: process.env.EMAIL_USERNAME,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
       from: process.env.EMAIL_FROM,
       to: email,
       subject: 'የእርስዎ OTP ኮድ',
@@ -329,31 +314,37 @@ const sendOTP = async (email) => {
       `,
     });
 
+    if (shouldCommit) await t.commit();
     return { success: true, message: "OTP በትክክል ተልኳል" };
   } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
 
-const resendOTP = async (email) => {
+const resendOTP = async (email, options = {}) => {
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
+
   try {
     if (!email) throw new Error("ኢሜል ያስፈልጋል");
 
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
+      transaction: t,
       attributes: ['id', 'email', 'isFirstLogin', 'otp', 'otpExpiry']
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
     
-    // Check if existing OTP is still valid
+    
     const now = new Date();
     if (user.otpExpiry && user.otpExpiry > now) {
       const remainingSeconds = Math.ceil((user.otpExpiry - now) / 1000);
       const remainingMinutes = Math.floor(remainingSeconds / 60);
       const seconds = remainingSeconds % 60;
       throw new Error(
-        `ያለፈው OTP አሁንም የሚሰራ ነው። ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
+      `ያለፈው OTP አሁንም የሚሰራ ነው። ከ${remainingMinutes} ደቂቃና ${seconds} ሰከንድ በኋላ እንደገና ይሞክሩ`
       );
     }
 
@@ -361,37 +352,42 @@ const resendOTP = async (email) => {
       throw new Error("OTP የሚልክበት ለመጀመሪያ ጊዜ የገባ ተጠቃሚ ነው");
     }
 
-    // Use the optimized sendOTP function
-    await sendOTP(email);
+    await sendOTP(user.email, { transaction: t });
     
+    if (shouldCommit) await t.commit();
     return { 
       success: true, 
       message: "አዲስ OTP ወደ ኢሜልዎ ተልኳል። እባክዎ ያረጋግጡ።",
       requiresOTPVerification: true 
     };
   } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
     throw error;
   }
 };
-const verifyOTP = async ({ email, otp }) => {
+const verifyOTP = async ({ email, otp }, options = {}) => {
+  const t = options.transaction || await sequelize.transaction();
+  const shouldCommit = !options.transaction;
+
   try {
     const user = await User.findOne({
       where: { email, deletedAt: null, is_active: true },
       include: [{ model: Role, as: "role" }],
+      transaction: t,
     });
 
     if (!user) throw new Error("ተጠቃሚ አልተገኘም");
-    if (!user.otp) throw new Error("OTP አልተጠየቀም");
+    if (!user.otp ) throw new Error("OTP አልተጠየቀም");
     if (user.otpExpiry < new Date()) throw new Error("OTP ጊዜው አልፎታል");
     if (user.otp !== otp) throw new Error("የተሳሳተ OTP");
 
-    // Update user (no transaction needed for single atomic operation)
+    
     await user.update({
       isFirstLogin: false,
       last_login: new Date(),
       otp: null,
       otpExpiry: null
-    });
+    }, { transaction: t });
 
     const token = jwt.sign(
       {
@@ -405,6 +401,7 @@ const verifyOTP = async ({ email, otp }) => {
       { expiresIn: "1d" }
     );
 
+    if (shouldCommit) await t.commit();
     return {
       token,
       user: {
@@ -418,6 +415,8 @@ const verifyOTP = async ({ email, otp }) => {
       message: "OTP በትክክል ተረጋግጧል"
     };
   } catch (error) {
+    if (shouldCommit && !t.finished) await t.rollback();
+    
     throw error;
   }
 };

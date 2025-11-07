@@ -4720,9 +4720,17 @@ const getTrashItemsService = async (user, options = {}) => {
   const offset = (page - 1) * limit;
 
   try {
+    // Get admin_unit_id from logged-in user
+    const userAdminUnitId = user.administrative_unit_id;
+    
+    if (!userAdminUnitId) {
+      throw new Error("Access denied. User does not belong to any administrative unit.");
+    }
+
     const queryOptions = {
       where: {
         deletedAt: { [Op.ne]: null },
+        administrative_unit_id: userAdminUnitId
       },
       paranoid: false,
       order: [["deletedAt", "DESC"]],
@@ -4788,7 +4796,9 @@ const getTrashItemsService = async (user, options = {}) => {
     throw new Error(
       error.message.includes("timeout")
         ? "የመረጃ ምንጭ በጣም ተጭኗል። እባክዎ ቆይታ ካደረጉ እንደገና ይሞክሩ።"
-        : "የመጥፎ ቅርጫት ዝርዝር ማግኘት አልተቻለም።"
+        : error.message.includes("Access denied") 
+          ? error.message
+          : "የመጥፎ ቅርጫት ዝርዝር ማግኘት አልተቻለም።"
     );
   }
 };

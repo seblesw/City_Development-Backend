@@ -10,57 +10,36 @@ const {
   registerOfficialByManagerService,
 } = require("../services/authServices");
 const fs= require("fs")
-
-
-
-
-
 const registerOfficialController = async (req, res) => {
-  let profilePicturePath = null;
-  
   try {
     const { body } = req;
-    const creatorId = req.user?.id;
+       const creatorId = req.user.id;
     
     if (!creatorId) {
       return res.status(401).json({ 
         error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" 
       });
     }
-
-    // Validate required fields at controller level too
-    if (!body.first_name || !body.last_name || !body.phone_number || 
-        !body.national_id || !body.role_id) {
-      return res.status(400).json({
-        error: "ስም፣ የአባት ስም፣ ብሔራዊ መታወቂያ፣ ሚና፣ ስልክ ቁጥር መግለጽ አለባቸው።"
-      });
-    }
-
-    // Handle file upload
-    if (req.file) {
-      profilePicturePath = `uploads/pictures/${req.file.filename}`;
-    }
-
+    const profilePicture = req.file ? `uploads/pictures/${req.file.filename}` : null;
     const data = {
       first_name: body.first_name,
       last_name: body.last_name,
       middle_name: body.middle_name || null,
       email: body.email || null, 
       phone_number: body.phone_number,
-      password: body.password, 
+      password: body.password || "12345678",
       role_id: body.role_id,
       administrative_unit_id: body.administrative_unit_id || null,
       oversight_office_id: body.oversight_office_id || null,
       national_id: body.national_id,
       address: body.address || null,
       gender: body.gender,
-      profile_picture: profilePicturePath,
+      profile_picture:profilePicture,
       relationship_type: null,
       marital_status: body.marital_status || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
       created_by: creatorId,
     };
-
     // Call the service to register the official
     const official = await registerOfficial(data);
 
@@ -68,27 +47,10 @@ const registerOfficialController = async (req, res) => {
       message: "ባለሥልጣን በተሳካ ሁኔታ ተመዝግቧል።",
       data: official,
     });
-
   } catch (error) {
-    // Clean up uploaded file if error occurred
-    if (profilePicturePath && req.file) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (fileError) {
-        console.error('Error deleting uploaded file:', fileError);
-      }
-    }
-
-    // Handle specific error types
-    if (error.message.includes('ቀደም ሲል ተመዝግቧል')) {
-      return res.status(409).json({ error: error.message }); 
-    } else if (error.message.includes('ትክክለኛ') || error.message.includes('ያስፈልጋል')) {
-      return res.status(400).json({ error: error.message }); 
-    }
-
-    return res.status(500).json({ 
-      error: "የላክተው መረጃ አልተገናኘም። እባክዎ እንደገና ይሞክሩ።" 
-    });
+     if (req.file) fs.unlinkSync(req.file.path);
+    
+    return res.status(400).json({ error: error.message });
   }
 };
 const registerOfficialByManagerController = async (req, res) => {
@@ -139,52 +101,26 @@ const loginController = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Input validation
     if (!email) {
       return res.status(400).json({ error: "ኢሜይል መግለጽ አለበት።" });
-    }
-    if (!password) {
-      return res.status(400).json({ error: "የይለፍ ቃል መግለጽ አለበት።" });
     }
 
     const result = await login({ email, password });
 
-    // Handle OTP verification case
-    if (result.requiresOTPVerification) {
-      return res.status(200).json({
-        message: result.message,
-        requiresOTPVerification: true,
-        data: { email } 
-      });
-    }
-
-    // Successful login
     return res.status(200).json({
-      message: result.message || "መግባት ተሳክቷል።",
-      data: result
+      message: "መግባት ተሳክቷል።", 
+      data: result,
     });
-
   } catch (error) {
-    console.error("Login error:", error);
+    
+    
+    const errorMessage = error.message.includes("Invalid") || error.message.includes("Incorrect")
+      ? "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።"
+      : error.message.includes("User not found")
+      ? "ተጠቃሚ አልተገኙም"
+      : error.message;
 
-    // Enhanced error mapping
-    let errorMessage = error.message;
-    let statusCode = 400;
-
-    if (error.message.includes("ተጠቃሚ አልተገኘም") || error.message.includes("User not found")) {
-      errorMessage = "ተጠቃሚ አልተገኙም";
-      statusCode = 404;
-    } else if (error.message.includes("የተሳሳተ የይለፍ ቃል") || error.message.includes("Invalid") || error.message.includes("Incorrect")) {
-      errorMessage = "የኢሜይል ወይም የይለፍ ቃል ትክክል አይደለም።";
-      statusCode = 401;
-    } else if (error.message.includes("ማኔጅሩ አስተዳደራዊ ክፍል የለውም")) {
-      errorMessage = error.message;
-      statusCode = 403;
-    } else if (error.message.includes("OTP") || error.message.includes("እባክዎ ያለፈውን OTP")) {
-      statusCode = 429; // Too Many Requests for OTP errors
-    }
-
-    return res.status(statusCode).json({ 
+    return res.status(400).json({ 
       error: errorMessage 
     });
   }
@@ -204,14 +140,8 @@ const resendOTPController = async (req, res) => {
 
     return res.status(200).json(result);
   } catch (error) {
-    // Enhanced error mapping like other controllers
-    let statusCode = 400;
     
-    if (error.message.includes("OTP") || error.message.includes("ያለፈው OTP")) {
-      statusCode = 429; // Too Many Requests for OTP rate limiting
-    }
-
-    return res.status(statusCode).json({
+    return res.status(400).json({
       success: false,
       message: error.message || "የOTP እንደገና ላክ አልተሳካም", 
     });
@@ -235,22 +165,15 @@ const verifyOtpController = async (req, res) => {
       data: result
     });
   } catch (error) {
-    // Enhanced error mapping with proper status codes
-    let errorMessage = error.message;
-    let statusCode = 400;
+    
+    
+    const errorMessage = error.message.includes("Invalid") || error.message.includes("No OTP")
+      ? "የተሳሳተ ወይም ያልተገኘ OTP"
+      : error.message.includes("expired")
+      ? "OTP ጊዜው አልፎታል፣ እባክዎ አዲስ OTP ይጠይቁ"
+      : error.message;
 
-    if (error.message.includes("Invalid") || error.message.includes("No OTP") || error.message.includes("የተሳሳተ OTP")) {
-      errorMessage = "የተሳሳተ ወይም ያልተገኘ OTP";
-      statusCode = 401;
-    } else if (error.message.includes("expired") || error.message.includes("ጊዜው አልፎታል")) {
-      errorMessage = "OTP ጊዜው አልፎታል፣ እባክዎ አዲስ OTP ይጠይቁ";
-      statusCode = 410; // Gone - resource expired
-    } else if (error.message.includes("ተጠቃሚ አልተገኘም")) {
-      errorMessage = "ተጠቃሚ አልተገኙም";
-      statusCode = 404;
-    }
-
-    return res.status(statusCode).json({ 
+    return res.status(400).json({ 
       error: errorMessage 
     });
   }
