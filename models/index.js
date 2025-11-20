@@ -19,15 +19,13 @@ const User = require("./User")(db, DataTypes);
 const {
   LandRecord,
   RECORD_STATUSES,
-  NOTIFICATION_STATUSES,
   LAND_HISTORY,
   INFRASTRUCTURE_STATUS,
-  PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
-  LEASE_OWNERSHIP_TYPE,
   LEASE_TRANSFER_REASONS,
   ZONING_TYPES,
+  LAND_PREPARATION,
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
 const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
@@ -46,6 +44,7 @@ const {
   TRANSFER_TYPE,
 } = require("./OwnershipTransfer")(db, DataTypes);
 
+const { Organization, ORGANIZATION_TYPES, EIA_DOCUMENT } = require("./Organization")(db, DataTypes);
 // Role associations
 Role.hasMany(User, {
   foreignKey: "role_id",
@@ -164,13 +163,19 @@ User.hasMany(OwnershipTransfer, {
   onUpdate: "CASCADE",
 });
 User.hasMany(ActionLog, {
-  foreignKey: 'performed_by',
-  as: 'performedActions'
+  foreignKey: "performed_by",
+  as: "performedActions",
 });
 
 User.hasMany(PushNotification, {
-  foreignKey: 'user_id',
-  as: 'notifications'
+  foreignKey: "user_id",
+  as: "notifications",
+});
+User.hasMany(Organization, {
+  foreignKey: "user_id",
+  as: "organizations",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 // Region associations
 Region.hasMany(Zone, {
@@ -311,9 +316,9 @@ AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
   as: "leseagreements",
 });
-AdministrativeUnit.hasMany(ActionLog,{
-  foreignKey: 'admin_unit_id',
-  as: 'actionLogs'
+AdministrativeUnit.hasMany(ActionLog, {
+  foreignKey: "admin_unit_id",
+  as: "actionLogs",
 });
 
 // LandRecord associations
@@ -371,13 +376,19 @@ LandRecord.hasMany(LeaseAgreement, {
   as: "leasedlands",
 });
 LandRecord.hasMany(ActionLog, {
-  foreignKey: 'land_record_id',
-  as: 'actionLogs'
+  foreignKey: "land_record_id",
+  as: "actionLogs",
 });
 
 LandRecord.hasMany(PushNotification, {
-  foreignKey: 'land_record_id',
-  as: 'notifications'
+  foreignKey: "land_record_id",
+  as: "notifications",
+});
+LandRecord.belongsTo(Organization, {
+  foreignKey: "organization_id",
+  as: "organization",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
 });
 
 // LandPayment associations
@@ -511,18 +522,18 @@ LeaseUser.belongsTo(LeaseAgreement, {
 
 //push notification associations
 PushNotification.belongsTo(User, {
-  foreignKey: 'user_id',
-  as: 'user'
+  foreignKey: "user_id",
+  as: "user",
 });
 
 PushNotification.belongsTo(LandRecord, {
-  foreignKey: 'land_record_id',
-  as: 'landRecord'
+  foreignKey: "land_record_id",
+  as: "landRecord",
 });
 
 PushNotification.belongsTo(ActionLog, {
-  foreignKey: 'action_log_id',
-  as: 'actionLog'
+  foreignKey: "action_log_id",
+  as: "actionLog",
 });
 //ownership transfer association
 OwnershipTransfer.belongsTo(AdministrativeUnit, {
@@ -547,22 +558,33 @@ OwnershipTransfer.belongsTo(User, {
 });
 // ActionLog associations
 ActionLog.belongsTo(User, {
-  foreignKey: 'performed_by',
-  as: 'performedBy'
+  foreignKey: "performed_by",
+  as: "performedBy",
 });
 
 ActionLog.belongsTo(LandRecord, {
-  foreignKey: 'land_record_id',
-  as: 'landRecord'
+  foreignKey: "land_record_id",
+  as: "landRecord",
 });
 
 ActionLog.hasMany(PushNotification, {
-  foreignKey: 'action_log_id',
-  as: 'notifications'
+  foreignKey: "action_log_id",
+  as: "notifications",
 });
 ActionLog.belongsTo(AdministrativeUnit, {
-  foreignKey: 'admin_unit_id',
-  as: 'administrativeUnit'
+  foreignKey: "admin_unit_id",
+  as: "administrativeUnit",
+});
+//organization associations
+Organization.belongsTo(User, {
+  foreignKey: "user_id",
+  as: "manager",
+});
+Organization.hasMany(LandRecord, {
+  foreignKey: "organization_id",
+  as: "landRecords",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
 });
 // Export Sequelize instance, models, and constants
 module.exports = {
@@ -585,12 +607,10 @@ module.exports = {
   RECORD_STATUSES,
   LAND_HISTORY,
   INFRASTRUCTURE_STATUS,
-  NOTIFICATION_STATUSES,
-  PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
-  LEASE_OWNERSHIP_TYPE,
   ZONING_TYPES,
+  LAND_PREPARATION,
   PAYMENT_STATUSES,
   PAYMENT_TYPES,
   NOTIFICATION_TYPES,
@@ -607,4 +627,7 @@ module.exports = {
   INHERITANCE_RELATION,
   TRANSFER_TYPE,
   ActionLog,
+  Organization,
+  ORGANIZATION_TYPES,
+  EIA_DOCUMENT,
 };

@@ -2,8 +2,6 @@ const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
 };
 
-
-
 module.exports = (db, DataTypes) => {
   const Document = db.define(
     "Document",
@@ -36,7 +34,7 @@ module.exports = (db, DataTypes) => {
             msg: "የሰነድ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።",
           },
         },
-      }, 
+      },
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -45,7 +43,16 @@ module.exports = (db, DataTypes) => {
             args: [0, 50],
             msg: "የሰነድ አመላካች ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
-         
+        },
+      },
+      file_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ፋይል ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
         },
       },
       numebr_of_pages: {
@@ -65,9 +72,9 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      inactived_by:{
-        type:DataTypes.INTEGER,
-        allowNull:true,
+      inactived_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
         references: { model: "users", key: "id" },
       },
       files: {
@@ -94,25 +101,14 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.JSONB,
         allowNull: true,
       },
-      verified_plan_number:{
-        type:DataTypes.STRING,
-        allowNull:true,
-        validate:{
-          len:{args:[1,20], msg:"የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም"}
-        }
-      },
-      is_draft: {
-        type: DataTypes.BOOLEAN,
+      verified_plan_number: {
+        type: DataTypes.STRING,
         allowNull: true,
-        defaultValue: false,
         validate: {
-          isBoolean(value) {
-            if (typeof value !== "boolean") {
-              throw new Error("is_draft የተለያዩ እሴቶች መሆን አለበት (true ወይም false)።");
-            }
-          },
+          len: { args: [1, 20], msg: "የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም" },
         },
       },
+
       preparer_name: {
         type: DataTypes.STRING,
         allowNull: true,

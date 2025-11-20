@@ -1,36 +1,28 @@
 const RECORD_STATUSES = {
-  DRAFT: "ረቂቅ",
   SUBMITTED: "ተልኳል",
-  UNDER_REVIEW: "በግምገማ ላይ",
   APPROVED: "ጸድቋል",
   REJECTED: "ውድቅ ተደርጓል",
 };
-
-const PRIORITIES = {
-  LOW: "ዝቅተኛ",
-  MEDIUM: "መካከለኛ",
-  HIGH: "ከፍተኛ",
-};
-
-const NOTIFICATION_STATUSES = {
-  NOT_SENT: "አልተላከም",
-  SENT: "ተልኳል",
-  FAILED: "አልተሳካም",
-};
+LAND_PREPARATION= {
+  LEASE: "ሊዝ",
+  EXISTING: "ነባር"
+}
 
 const LAND_USE_TYPES = {
   RESIDENTIAL: "መኖሪያ",
+  ORGANIZATION: "ድርጅት",
   MIXED: "ድብልቅ",
   COMMERCIAL: "ንግድ",
   ADMINISTRATIVE: "ለ አስተዳደር",
-  SERVICE: "ማህበራዊ አገልግሎት",
+  INDUSTRIAL: "ኢንዱስትሪ",
   MANUFACTURING_STORAGE: "ማምረቻ እና ማከማቻ",
+  SERVICE: "ማህበራዊ አገልግሎት",
+  INVESTMENT: "ኢንቨስትመንት",
   TRANSPORT: "መንገዶች እና ትራንስፖርት",
   URBAN_AGRICULTURE: "ከተማ ግብርና",
   FOREST: "ደንና አረጓዴ ቦታወች",
   RECREATION: "መዝናኛ እና መጫዎቻ",
   PROTECTED_AREA: "የተጠበቀ ክልል",
-  INDUSTRIAL: "ኢንዱስትሪ",
   OTHER: "የተለየ አገልግሎት",
 };
 
@@ -41,23 +33,18 @@ const ZONING_TYPES = {
 };
 
 const OWNERSHIP_TYPES = {
-  NO_PRIOR_DOCUMENT: "በነባር ሰነድ አልባ የተያዘ ይዞታ",
-  COURT_ORDER: "በፍ/ቤት ትዛዝ የተያዘ ይዞታ",
-  DISPLACEMENT: "በትክና ልዩልዩ በነባር የተያዘ ይዞታ",
-  MERET_BANK: "መሬት ባንክ የተደረገ ይዞታ",
-  LEASE: "በሊዝ የተያዘ ይዞታ",
+  NO_PRIOR_DOCUMENT: "በሰነድ አልባ",
+  AUCTION: "በጨረታ",
+  ALLOCATION: "በምደባ",
+  TRANSFER: "በስመንብረት ዝውውር",
+  MERET_BANK: "መሬት ባንክ",
+  COURT_ORDER: "በፍ/ቤት ትዛዝ",
+  DISPLACEMENT: "በትክና ልዩልዩ",
 };
 
-const LEASE_OWNERSHIP_TYPE = {
-  LEASE_ALLOCATION: "በማህበር ምሪት በምደባ የተያዘ ይዞታ",
-  MENORIYA_DRJIT: "በመኖሪያና ድርጅት በጨረታ የተያዘ ይዞታ",
-  TRANSFER: "በስመ ንብረት ዝውውር የተያዘ ይዞታ",
-  DISPLACEMENT_ALLOCATION: "በትክና ልዩልዩ በምደባ የተያዙ ይዞታወች",
-  INVESTMENT_ALLOCATION: "በኢንቨስትመንት በምደባ የተያዘ ይዞታ",
-};
 const LEASE_TRANSFER_REASONS = {
   INHERITANCE: "በውርስ",
-  SALE: "በሽያጭ",
+  BUY: "በግዥ",
   GIFT: "በስጦታ",
 };
 
@@ -105,8 +92,8 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: {
-            args: [["የግል", "የጋራ"]],
-            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ) ውስጥ አንዱ መሆን አለበት።",
+            args: [["የግል", "የጋራ", "የመንግስት", "የድርጅት"]],
+            msg: "የባለቤትነት ክፍል ከተፈቀዱት (የግል, የጋራ,የመንግስት,የድርጅት) ውስጥ አንዱ መሆን አለበት።",
           },
         },
       },
@@ -213,6 +200,20 @@ module.exports = (db, DataTypes) => {
           len: { args: [0, 500], msg: "የአድራሻ መረጃ ከ0 እስከ 500 መሆን አለበት።" },
         },
       },
+      address_kebele: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "የከተማ ክፍለ ከተማ መረጃ ከ0 እስከ 100 መሆን አለበት።" },
+        },
+      },
+      address_ketena: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "የቀጠና መረጃ ከ0 እስከ 100 መሆን አለበት።" },
+        },
+      },
       ownership_type: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -221,18 +222,6 @@ module.exports = (db, DataTypes) => {
             args: [Object.values(OWNERSHIP_TYPES)],
             msg: `የይዞታ አግባብ አይነት ከተፈቀዱት እሴቶች (${Object.values(
               OWNERSHIP_TYPES
-            ).join(", ")}) ውስጥ መሆን አለበት።`,
-          },
-        },
-      },
-      lease_ownership_type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isIn: {
-            args: [Object.values(LEASE_OWNERSHIP_TYPE)],
-            msg: `የሊዝ ይዞታ አግባብ አይነት ከተፈቀዱቷ (${Object.values(
-              LEASE_OWNERSHIP_TYPE
             ).join(", ")}) ውስጥ መሆን አለበት።`,
           },
         },
@@ -247,6 +236,18 @@ module.exports = (db, DataTypes) => {
               LEASE_TRANSFER_REASONS
             ).join(", ")}) ውስጥ መሆን አለበት።`,
           },
+        },
+      },
+      land_preparation:{
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isIn: {
+            args: [Object.values(LAND_PREPARATION)],
+            msg: `የመሬት አዘጋጅት አይነት ከተፈቀዱት እሴቶች (${Object.values(
+              LAND_PREPARATION
+            ).join(", ")}) ውስጥ መሆን አለበት።`,
+          },            
         },
       },
       //landbank specific attributes
@@ -270,12 +271,6 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
-
-      //instituetion specific attributes
-      institution_name: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       remark: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -286,7 +281,7 @@ module.exports = (db, DataTypes) => {
       record_status: {
         type: DataTypes.STRING,
         allowNull: false,
-        defaultValue: RECORD_STATUSES.DRAFT,
+        defaultValue: RECORD_STATUSES.SUBMITTED,
         validate: {
           isIn: {
             args: [Object.values(RECORD_STATUSES)],
@@ -328,40 +323,9 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      priority: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        defaultValue: PRIORITIES.MEDIUM,
-        validate: {
-          isIn: {
-            args: [Object.values(PRIORITIES)],
-            msg: `ቅድሚያ ከተፈቀዱቷ እሴቶች (${Object.values(PRIORITIES).join(
-              ", "
-            )}) ውስጥ መሆን አለበት።`,
-          },
-        },
-      },
-      is_draft: {
-        type: DataTypes.BOOLEAN,
-        allowNull: true,
-        defaultValue: false,
-      },
       rejection_reason: {
         type: DataTypes.TEXT,
         allowNull: true,
-      },
-      notification_status: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        defaultValue: NOTIFICATION_STATUSES.NOT_SENT,
-        validate: {
-          isIn: {
-            args: [Object.values(NOTIFICATION_STATUSES)],
-            msg: `የማሳወቂያ ሁኔታ ከተፈቀዱቷ እሴቶች (${Object.values(
-              NOTIFICATION_STATUSES
-            ).join(", ")}) ውስጥ መሆን አለበት።`,
-          },
-        },
       },
       created_by: {
         type: DataTypes.INTEGER,
@@ -383,6 +347,11 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "users", key: "id" },
       },
+      organization_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "organizations", key: "id" },
+      },
     },
     {
       tableName: "land_records",
@@ -394,15 +363,12 @@ module.exports = (db, DataTypes) => {
         { fields: ["administrative_unit_id"] },
         { fields: ["land_use"] },
         { fields: ["ownership_type"] },
-        { fields: ["lease_ownership_type"] },
         { fields: ["infrastructure_status"] },
         { fields: ["land_history"] },
         { fields: ["land_level"] },
         { fields: ["lease_transfer_reason"] },
         { fields: ["block_number"] },
         { fields: ["record_status"] },
-        { fields: ["priority"] },
-        { fields: ["notification_status"] },
         { fields: ["created_by"] },
         { fields: ["approved_by"] },
       ],
@@ -411,10 +377,8 @@ module.exports = (db, DataTypes) => {
   return {
     LandRecord,
     RECORD_STATUSES,
-    LEASE_OWNERSHIP_TYPE,
-    NOTIFICATION_STATUSES,
-    PRIORITIES,
     LAND_USE_TYPES,
+    LAND_PREPARATION,
     ZONING_TYPES,
     OWNERSHIP_TYPES,
     INFRASTRUCTURE_STATUS,

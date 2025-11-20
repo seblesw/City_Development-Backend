@@ -9,10 +9,6 @@ const {
   updateLandRecordService,
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
-  saveLandRecordAsDraftService,
-  getDraftLandRecordService,
-  submitDraftLandRecordService,
-  updateDraftLandRecordService,
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
   changeRecordStatusService,
@@ -37,6 +33,7 @@ const createLandRecord = async (req, res) => {
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
+    const organization_info = JSON.parse(req.body.organization_info || "{}"); // New organization data
 
     const result = await createLandRecordService(
       {
@@ -44,6 +41,7 @@ const createLandRecord = async (req, res) => {
         land_record,
         documents,
         land_payment,
+        organization_info, // Pass organization info to service
       },
       req.files,
       user
@@ -79,7 +77,13 @@ const createLandRecord = async (req, res) => {
                 documents_count: documents.length,
                 changed_by_name: `${user.first_name} ${user.middle_name || ''}`.trim(),
                 plot_number: plotNumber,
-                action_description: "የመሬት መዝገብ ተፈጥሯል"
+                action_description: "የመሬት መዝገብ ተፈጥሯል",
+                ownership_category: landRecord.ownership_category,
+                // Include organization info if applicable
+                ...(landRecord.ownership_category === 'የድርጅት' && result.organization && {
+                  organization_name: result.organization.name,
+                  organization_type: result.organization.organization_type
+                })
               }
             });
             
@@ -158,150 +162,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     });
   }
 };
-// Draft Management Controllers
-const saveLandRecordAsDraft = async (req, res) => {
-  try {
-    const user = req.user;
-
-    
-    
-    const primary_user = req.body.primary_user
-      ? JSON.parse(req.body.primary_user)
-      : {};
-    const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record
-      ? JSON.parse(req.body.land_record)
-      : {};
-    const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment
-      ? JSON.parse(req.body.land_payment)
-      : {};
-
-    const result = await saveLandRecordAsDraftService(
-      {
-        primary_user,
-        co_owners,
-        land_record,
-        documents,
-        land_payment,
-      },
-      req.files || [],
-      user
-    );
-
-    return res.status(201).json({
-      status: "success",
-      message: "የመሬት ረቂቅ መዝገብ በተሳካ ሁኔታ ተቀምጧል።",
-      data: result,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      status: "error",
-      message: `የረቂቅ መዝገብ ስህተት: ${error.message}`,
-    });
-  }
-};
-const getDraftLandRecord = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const draftId = req.params.id;
-
-    const result = await getDraftLandRecordService(draftId, userId);
-
-    res.status(200).json(result);
-  } catch (error) {
-    res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-const updateDraftLandRecord = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = req.user;
-
-    
-    const primary_user = req.body.primary_user
-      ? JSON.parse(req.body.primary_user)
-      : {};
-    const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record
-      ? JSON.parse(req.body.land_record)
-      : {};
-    const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment
-      ? JSON.parse(req.body.land_payment)
-      : {};
-
-    const result = await updateDraftLandRecordService(
-      id,
-      {
-        primary_user,
-        co_owners,
-        land_record,
-        documents,
-        land_payment,
-      },
-      req.files || [],
-      user
-    );
-
-    return res.status(200).json({
-      status: "success",
-      message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተዘምኗል።",
-      data: result,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-const submitDraftLandRecord = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = req.user;
-
-    
-    if (!id) {
-      return res.status(400).json({
-        status: "error",
-        message: "ድራፍት ውይም ረቂቅ መዝገብ ID ያስፈልጋል።",
-      });
-    }
-
-    const result = await submitDraftLandRecordService(id, user);
-
-    return res.status(200).json({
-      status: "success",
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    
-    if (error.message.includes("Validation failed")) {
-      return res.status(422).json({
-        status: "validation_error",
-        message: error.message.replace("Validation failed: ", ""),
-        details: error.message.split("; "),
-      });
-    } else if (error.message.includes("ተመዝግቧል")) {
-      return res.status(409).json({
-        status: "conflict",
-        message: error.message,
-      });
-    }
-
-    return res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-
-
 
 const getAllLandRecords = async (req, res) => {
   try {
@@ -936,7 +796,6 @@ module.exports = {
   getTrash,
   createLandRecord,
   importLandRecordsFromXLSX,
-  saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,
   getRejectedLandRecords,
@@ -945,9 +804,6 @@ module.exports = {
   getLandRecordByUserId,
   getLandRecordsByCreator,
   updateLandRecord,
-  getDraftLandRecord,
-  updateDraftLandRecord,
-  submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
   getRecentActions,
   getFilterOptions,

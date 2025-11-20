@@ -35,36 +35,6 @@ router.get(
 ),
 router.get("/land-banks", authMiddleware.protect, landRecordController.getLandBankRecords)
 router.get('/:landRecordId/action-logs', authMiddleware.protect, getActionLog);
-  // Draft Management Routes
-  router.post(
-    "/drafts",
-    authMiddleware.protect,
-    postLimiter,
-    upload.array("documents", 20),
-    landRecordController.saveLandRecordAsDraft
-  );
-
-router.get(
-  "/drafts/:id",
-  authMiddleware.protect,
-  getLimiter,
-  landRecordController.getDraftLandRecord
-);
-
-router.put(
-  "/drafts/:id",
-  authMiddleware.protect,
-  postLimiter,
-  upload.array("documents", 20),
-  landRecordController.updateDraftLandRecord
-);
-
-router.post(
-  "/drafts/:id/submit",
-  authMiddleware.protect,
-  postLimiter,
-  landRecordController.submitDraftLandRecord
-);
 
 // Main Land Record Routes
 router.post(

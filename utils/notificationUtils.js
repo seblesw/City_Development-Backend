@@ -23,11 +23,7 @@ const getUsersToNotify = async (action_type, administrative_unit_id, performed_b
       sameUnit: true,
       excludePerformer: true
     },
-    'STATUS_UNDER_REVIEW': {
-      roles: ['አስተዳደር'],
-      sameUnit: true,
-      excludePerformer: true
-    },
+  
     'STATUS_APPROVED': {
       roles: ['መዝጋቢ', 'አስተዳደር'],
       sameUnit: true,
@@ -247,10 +243,6 @@ const generateNotificationContent = (action_type, parcelNumber, additionalData, 
     },
     'STATUS_SUBMITTED': {
       title: 'የመሬት መዝገብ ቀርቧል',
-      message: `የ${identifier} መሬት መዝገብ ለግምገማ ቀርቧል\n(በ${changedByName} ቀርቧል)`
-    },
-    'STATUS_UNDER_REVIEW': {
-      title: 'የመሬት መዝገብ በግምገማ ላይ',
       message: `የ${identifier} መሬት መዝገብ ለግምገማ ቀርቧል\n(በ${changedByName} ቀርቧል)`
     },
     'STATUS_APPROVED': {
