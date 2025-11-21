@@ -4,7 +4,6 @@ const { Op, Sequelize } = require("sequelize");
 const getActionLog = async (req, res) => {
   try {
     const { landRecordId } = req.params;
-    
     const action_logs = await ActionLog.findAll({
       where: {
         land_record_id: landRecordId,
