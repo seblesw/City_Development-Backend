@@ -81,7 +81,6 @@ const createLandPaymentService = async (data, options = {}) => {
     const requiredFields = [
       "payment_type",
       "total_amount",
-      "paid_amount",
       "land_record_id",
     ];
     const missingFields = requiredFields.filter(
@@ -138,7 +137,6 @@ const createLandPaymentService = async (data, options = {}) => {
         description: data.description || null,
         payer_id: data.payer_id || null,
         created_by: data.created_by,
-        is_draft: false,
       },
       { transaction: t }
     );

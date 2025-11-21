@@ -14,7 +14,6 @@ const {
   User,
   LAND_USE_TYPES,
   LEASE_TRANSFER_REASONS,
-  LEASE_OWNERSHIP_TYPE,
 } = require("../models");
 const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
@@ -479,7 +478,6 @@ const initializeAdminUnitStats = (adminUnitIds) => {
   const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
-  const leaseOwnershipTypeValues = Object.values(LEASE_OWNERSHIP_TYPE || {});
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
 
   adminUnitIds.forEach(adminUnitId => {
@@ -528,7 +526,6 @@ const initializeGlobalStats = () => {
   const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
-  const leaseOwnershipTypeValues = Object.values(LEASE_OWNERSHIP_TYPE || {});
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
 
   return {
@@ -607,7 +604,6 @@ const updateAdminUnitStats = (unitStats, record, areaInSquareMeters, areaInHecta
   updateTypeDistribution(unitStats.ownershipTypes, record.ownership_type, areaInHectares);
   updateTypeDistribution(unitStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(unitStats.zoningTypes, record.zoning_type, areaInHectares);
-  updateTypeDistribution(unitStats.leaseOwnershipTypes, record.lease_ownership_type, areaInHectares);
   updateTypeDistribution(unitStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
   
   // Update landowners
@@ -643,7 +639,6 @@ const updateGlobalStats = (globalStats, record, areaInSquareMeters, areaInHectar
   updateTypeDistribution(globalStats.ownershipTypes, record.ownership_type, areaInHectares);
   updateTypeDistribution(globalStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(globalStats.zoningTypes, record.zoning_type, areaInHectares);
-  updateTypeDistribution(globalStats.leaseOwnershipTypes, record.lease_ownership_type, areaInHectares);
   updateTypeDistribution(globalStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
   
   // Update landowners

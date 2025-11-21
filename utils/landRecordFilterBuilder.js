@@ -19,7 +19,6 @@ const buildLandRecordFilters = (queryParams) => {
     land_level,
     land_use,
     ownership_type,
-    lease_ownership_type,
     
     // Status filters
     record_status,
@@ -108,10 +107,6 @@ const buildLandRecordFilters = (queryParams) => {
   if (ownership_type) {
     whereConditions.ownership_type = ownership_type;
     // console.log(`✅ Applied ownership_type filter: ${ownership_type}`);
-  }
-  if (lease_ownership_type) {
-    whereConditions.lease_ownership_type = lease_ownership_type;
-    // console.log(`✅ Applied lease_ownership_type filter: ${lease_ownership_type}`);
   }
   if (record_status) {
     whereConditions.record_status = record_status;
@@ -437,7 +432,7 @@ const buildLandRecordSorting = (queryParams) => {
     'record_status', 'land_use', 'block_number', 'block_special_name',
     'ownership_type', 'zoning_type', 'infrastructure_status',
     'land_bank_code', 'address', 'institution_name', 'landbank_registrer_name',
-    'priority', 'notification_status', 'is_draft'
+    'priority', 'notification_status',
   ];
   
   const sortField = validSortFields.includes(sort_by) ? sort_by : 'createdAt';
