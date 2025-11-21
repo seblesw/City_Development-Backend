@@ -1497,6 +1497,7 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         "land_use",
         "ownership_type",
         "lease_transfer_reason",
+        "land_preparation",
         "land_level",
         "record_status",
         "ownership_category",
@@ -1506,6 +1507,7 @@ const getFilterOptionsService = async (adminUnitId = null) => {
         "land_use",
         "ownership_type",
         "lease_transfer_reason",
+        "land_preparation",
         "land_level",
         "record_status",
         "ownership_category",
@@ -1607,6 +1609,7 @@ const getFilterOptionsService = async (adminUnitId = null) => {
       // ==================== QUICK FILTERS ====================
       land_use: getSortedUniqueValues("land_use"),
       ownership_type: getSortedUniqueValues("ownership_type"),
+      land_preparation: getSortedUniqueValues("land_preparation"),
       lease_transfer_reason: getSortedUniqueValues("lease_transfer_reason"),
       land_level: getSortedUniqueValues("land_level", "numerical"),
       record_status: getSortedUniqueValues("record_status"),
@@ -1722,6 +1725,7 @@ const getFilterOptionsService = async (adminUnitId = null) => {
           filters: [
             "land_use",
             "ownership_type",
+            "land_preparation",
             "lease_transfer_reason",
             "land_level",
           ],
@@ -3260,6 +3264,9 @@ const getLandRecordsByUserAdminUnitService = async (
     if (queryParams.lease_transfer_reason) {
       whereClause.lease_transfer_reason = queryParams.lease_transfer_reason;
     }
+    if (queryParams.land_preparation) {
+      whereClause.land_preparation = queryParams.land_preparation;
+    }
 
     // ==================== RANGE FILTERS ====================
 
@@ -3510,6 +3517,7 @@ const getLandRecordsByUserAdminUnitService = async (
         "area",
         "land_use",
         "ownership_type",
+        "land_preparation",
         "record_status",
         "land_level",
         "ownership_category",
@@ -3553,6 +3561,7 @@ const getLandRecordsByUserAdminUnitService = async (
         "id",
         "parcel_number",
         "land_use",
+        "land_preparation",
         "ownership_type",
         "lease_transfer_reason",
         "area",
