@@ -52,7 +52,7 @@ router.post(
   authMiddleware.protect,
   landRecordController.changeRecordStatus
 );
-//get the land records the primary owner
+//get the land records by owner
 router.get(
   "/my-land-records",
   authMiddleware.protect,

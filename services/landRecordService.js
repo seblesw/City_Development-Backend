@@ -1784,25 +1784,116 @@ const getFilterOptionsService = async (adminUnitId = null) => {
 
 const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
   try {
-    // Fixed date calculations without mutation
-    const now = new Date();
+    // Ethiopian calendar helper functions
+    const getEthiopianDate = (gregorianDate) => {
+      const date = new Date(gregorianDate);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const day = date.getDate();
+      
+      // Simple conversion (for accurate conversion, use a proper Ethiopian calendar library)
+      const ethiopianYear = year - 8;
+      let ethiopianMonth = month + 1;
+      let ethiopianDay = day;
+      
+      // Adjust for Ethiopian month starting on September 11 (approx)
+      if (month >= 8 && day >= 11) {
+        ethiopianMonth = month - 8;
+      } else {
+        ethiopianMonth = month + 4;
+        if (ethiopianMonth > 12) {
+          ethiopianMonth -= 12;
+          ethiopianYear += 1;
+        }
+      }
+      
+      return {
+        year: ethiopianYear,
+        month: ethiopianMonth,
+        day: ethiopianDay,
+        week: Math.ceil(ethiopianDay / 7)
+      };
+    };
 
+    const getEthiopianWeekStart = (weeksAgo = 0) => {
+      const now = new Date();
+      const ethiopianNow = getEthiopianDate(now);
+      
+      // Calculate target Ethiopian week
+      let targetWeek = ethiopianNow.week - weeksAgo;
+      let targetMonth = ethiopianNow.month;
+      let targetYear = ethiopianNow.year;
+      
+      while (targetWeek < 1) {
+        targetMonth -= 1;
+        if (targetMonth < 1) {
+          targetMonth = 13; 
+          targetYear -= 1;
+        }
+        // Approximate weeks per month
+        targetWeek += 4;
+      }
+      
+      // Convert back to Gregorian (approximate)
+      // This is a simplified conversion - for production, use a proper library
+      const gregorianMonth = targetMonth <= 4 ? targetMonth + 8 : targetMonth - 4;
+      const gregorianYear = targetMonth <= 4 ? targetYear + 8 : targetYear + 7;
+      
+      const startDate = new Date(gregorianYear, gregorianMonth - 1, 1);
+      startDate.setDate(startDate.getDate() + (targetWeek - 1) * 7);
+      
+      startDate.setHours(0, 0, 0, 0);
+      return startDate;
+    };
+
+    const getEthiopianMonthStart = (monthsAgo = 0) => {
+      const now = new Date();
+      const ethiopianNow = getEthiopianDate(now);
+      
+      let targetMonth = ethiopianNow.month - monthsAgo;
+      let targetYear = ethiopianNow.year;
+      
+      while (targetMonth < 1) {
+        targetMonth += 13;
+        targetYear -= 1;
+      }
+      
+      // Convert back to Gregorian (approximate)
+      const gregorianMonth = targetMonth <= 4 ? targetMonth + 8 : targetMonth - 4;
+      const gregorianYear = targetMonth <= 4 ? targetYear + 8 : targetYear + 7;
+      
+      const startDate = new Date(gregorianYear, gregorianMonth - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      return startDate;
+    };
+
+    const getEthiopianYearStart = (yearsAgo = 0) => {
+      const now = new Date();
+      const ethiopianNow = getEthiopianDate(now);
+      const targetYear = ethiopianNow.year - yearsAgo;
+      
+      // Ethiopian year starts on September 11 (approx)
+      const startDate = new Date(targetYear + 8, 8, 11); // September 11
+      startDate.setHours(0, 0, 0, 0);
+      return startDate;
+    };
+
+    // Fixed date calculations using Ethiopian calendar
+    const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
 
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - 7);
-    weekStart.setHours(0, 0, 0, 0);
+    // Ethiopian calendar periods
+    const ethiopianWeekStart = getEthiopianWeekStart(0); 
+    const ethiopianMonthStart = getEthiopianMonthStart(0); 
+    const ethiopianYearStart = getEthiopianYearStart(0); 
 
-    const monthStart = new Date(now);
-    monthStart.setDate(now.getDate() - 30);
-    monthStart.setHours(0, 0, 0, 0);
-
-    const yearStart = new Date(now);
-    yearStart.setFullYear(now.getFullYear() - 1);
-    yearStart.setHours(0, 0, 0, 0);
+    // For trends - last 12 Ethiopian months
+    const last12EthiopianMonthsStart = getEthiopianMonthStart(11);
+    const last12EthiopianWeeksStart = getEthiopianWeekStart(11);
+    const last3EthiopianYearsStart = getEthiopianYearStart(2);
 
     // Execute all essential queries in parallel
     const [
@@ -1812,10 +1903,14 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       ownershipStats,
       zoningStats,
       landLevelStats,
+      infrastructureStats,
+      landPreparationStats,
+      landHistoryStats,
       monthlyTrends,
       weeklyTrends,
       yearlyTrends,
       leaseStats,
+      recordStatusStats,
       recentActivity,
     ] = await Promise.all([
       // 1. Total Statistics
@@ -1827,15 +1922,16 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
           [Sequelize.fn("MAX", Sequelize.col("area")), "max_area"],
           [Sequelize.fn("MIN", Sequelize.col("area")), "min_area"],
+          [Sequelize.fn("SUM", Sequelize.literal("CASE WHEN has_debt THEN 1 ELSE 0 END")), "debt_count"],
         ],
         raw: true,
       }),
 
-      // 2. Time-based Statistics
+      // 2. Time-based Statistics (Ethiopian calendar)
       LandRecord.findOne({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.between]: [yearStart, todayEnd] },
+          createdAt: { [Op.between]: [ethiopianYearStart, todayEnd] },
         },
         attributes: [
           [
@@ -1851,7 +1947,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${weekStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${ethiopianWeekStart.toISOString()}' THEN 1 END`
               )
             ),
             "weekly_count",
@@ -1860,7 +1956,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${monthStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${ethiopianMonthStart.toISOString()}' THEN 1 END`
               )
             ),
             "monthly_count",
@@ -1869,7 +1965,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${yearStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${ethiopianYearStart.toISOString()}' THEN 1 END`
               )
             ),
             "yearly_count",
@@ -1934,11 +2030,50 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 7. Monthly Trends (Last 12 months)
+      // 7. Infrastructure Status Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "infrastructure_status",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["infrastructure_status"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 8. Land Preparation Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_preparation",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["land_preparation"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 9. Land History Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_history",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["land_history"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 10. Monthly Trends (Last 12 Ethiopian months)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: yearStart },
+          createdAt: { [Op.gte]: last12EthiopianMonthsStart },
         },
         attributes: [
           [
@@ -1960,11 +2095,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 8. Weekly Trends (Last 12 weeks)
+      // 11. Weekly Trends (Last 12 Ethiopian weeks)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: weekStart },
+          createdAt: { [Op.gte]: last12EthiopianWeeksStart },
         },
         attributes: [
           [
@@ -1984,11 +2119,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 9. Yearly Trends (Last 3 years)
+      // 12. Yearly Trends (Last 3 Ethiopian years)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: new Date(now.getFullYear() - 2, 0, 1) },
+          createdAt: { [Op.gte]: last3EthiopianYearsStart },
         },
         attributes: [
           [
@@ -2008,7 +2143,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 10. Lease Analytics - FIXED: Added GROUP BY clause
+      // 13. Lease Analytics
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
@@ -2019,12 +2154,25 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
           [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
         ],
-        group: ["lease_transfer_reason"], // Added GROUP BY
+        group: ["lease_transfer_reason"],
         order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
         raw: true,
       }),
 
-      // 11. Recent Activity (last 10 records)
+      // 14. Record Status Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "record_status",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["record_status"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 15. Recent Activity (last 10 records)
       LandRecord.findAll({
         where: { administrative_unit_id: adminUnitId },
         include: [
@@ -2039,10 +2187,17 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           "id",
           "parcel_number",
           "land_use",
+          "lease_transfer_reason",
+          "ownership_type",
+          "land_preparation",
           "area",
           "record_status",
           "zoning_type",
           "land_level",
+          "infrastructure_status",
+          "land_history",
+          "building_hight",
+          "has_debt",
           "createdAt",
         ],
         order: [["createdAt", "DESC"]],
@@ -2060,14 +2215,16 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         average_area: parseFloat(totalStats?.average_area) || 0,
         max_area: parseFloat(totalStats?.max_area) || 0,
         min_area: parseFloat(totalStats?.min_area) || 0,
+        debt_records: parseInt(totalStats?.debt_count) || 0,
         area_unit: "square_meters",
       },
 
       time_analytics: {
         today: parseInt(timeBasedStats?.today_count) || 0,
-        last_7_days: parseInt(timeBasedStats?.weekly_count) || 0,
-        last_30_days: parseInt(timeBasedStats?.monthly_count) || 0,
-        last_365_days: parseInt(timeBasedStats?.yearly_count) || 0,
+        this_week: parseInt(timeBasedStats?.weekly_count) || 0,
+        this_month: parseInt(timeBasedStats?.monthly_count) || 0,
+        this_year: parseInt(timeBasedStats?.yearly_count) || 0,
+        calendar_type: "ethiopian",
       },
 
       distributions: {
@@ -2109,6 +2266,46 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           count: parseInt(item.count),
           total_area: parseFloat(item.total_area) || 0,
           average_area: parseFloat(item.average_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_infrastructure_status: (infrastructureStats || []).map((item) => ({
+          infrastructure_status: item.infrastructure_status || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_land_preparation: (landPreparationStats || []).map((item) => ({
+          land_preparation: item.land_preparation || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_land_history: (landHistoryStats || []).map((item) => ({
+          land_history: item.land_history || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_record_status: (recordStatusStats || []).map((item) => ({
+          record_status: item.record_status || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
           percentage:
             totalRecords > 0
               ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
@@ -2169,38 +2366,17 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         record_status: record.record_status,
         zoning_type: record.zoning_type,
         land_level: record.land_level,
+        land_preparation: record.land_preparation,
+        infrastructure_status: record.infrastructure_status,
+        land_history: record.land_history,
+        building_hight: record.building_hight,
+        has_debt: record.has_debt,
         created_at: record.createdAt,
         owner_names:
           record.owners
             ?.map((owner) => `${owner.first_name} ${owner.last_name}`.trim())
             .filter((name) => name) || [],
       })),
-
-      // Essential calculated metrics only
-      calculated_metrics: {
-        records_per_hectare:
-          totalRecords > 0 && parseFloat(totalStats?.total_area) > 0
-            ? (
-                totalRecords /
-                (parseFloat(totalStats.total_area) / 10000)
-              ).toFixed(2)
-            : 0,
-
-        average_land_level:
-          landLevelStats?.length > 0
-            ? landLevelStats.reduce(
-                (sum, item) =>
-                  sum +
-                  (parseInt(item.land_level) || 0) *
-                    (parseInt(item.count) || 0),
-                0
-              ) /
-              landLevelStats.reduce(
-                (sum, item) => sum + (parseInt(item.count) || 0),
-                0
-              )
-            : 0,
-      },
     };
 
     return processedStats;

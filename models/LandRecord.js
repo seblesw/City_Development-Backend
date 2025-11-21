@@ -3,7 +3,7 @@ const RECORD_STATUSES = {
   APPROVED: "ጸድቋል",
   REJECTED: "ውድቅ ተደርጓል",
 };
-LAND_PREPARATION= {
+const LAND_PREPARATION= {
   LEASE: "ሊዝ",
   EXISTING: "ነባር"
 }
@@ -240,7 +240,7 @@ module.exports = (db, DataTypes) => {
       },
       land_preparation:{
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         validate: {
           isIn: {
             args: [Object.values(LAND_PREPARATION)],
