@@ -33,15 +33,14 @@ const createLandRecord = async (req, res) => {
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
-    const organization_info = JSON.parse(req.body.organization_info || "{}"); // New organization data
-
+    const organization_info = JSON.parse(req.body.organization_info || "{}"); 
     const result = await createLandRecordService(
       {
         owners,
         land_record,
         documents,
         land_payment,
-        organization_info, // Pass organization info to service
+        organization_info, 
       },
       req.files,
       user
@@ -79,7 +78,6 @@ const createLandRecord = async (req, res) => {
                 plot_number: plotNumber,
                 action_description: "የመሬት መዝገብ ተፈጥሯል",
                 ownership_category: landRecord.ownership_category,
-                // Include organization info if applicable
                 ...(landRecord.ownership_category === 'የድርጅት' && result.organization && {
                   organization_name: result.organization.name,
                   organization_type: result.organization.organization_type

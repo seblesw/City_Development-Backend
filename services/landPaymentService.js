@@ -78,24 +78,9 @@ const createLandPaymentService = async (data, options = {}) => {
 
   try {
     
-    const requiredFields = [
-      "payment_type",
-      "total_amount",
-      "land_record_id",
-    ];
-    const missingFields = requiredFields.filter(
-      (field) => data[field] === undefined || data[field] === null
-    );
-    if (missingFields.length > 0) {
-      throw new Error(`የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(", ")}`);
-    }
-
-    
     if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    
-    
     
     if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
       throw new Error(
@@ -104,16 +89,6 @@ const createLandPaymentService = async (data, options = {}) => {
         )}`
       );
     }
-    if (data.total_amount <= 0) {
-      throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
-    }
-    if ( data.paid_amount < 0) {
-      throw new Error("የተከፈለው መጠን ከ 0 በላይ ወይም እኩል ትክክለኛ ቁጥር መሆን አለበት።");
-    }
-    if (data.paid_amount > data.total_amount) {
-      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ አይችልም።");
-    }
-
     
     const payment_status =
       data.paid_amount >= data.total_amount
@@ -129,13 +104,13 @@ const createLandPaymentService = async (data, options = {}) => {
         payment_type: data.payment_type,
         total_amount: data.total_amount,
         paid_amount: data.paid_amount,
-        anual_payment: data.anual_payment || null,
-        initial_payment: data.initial_payment || null,
+        anual_payment: data.anual_payment || 0,
+        initial_payment: data.initial_payment || 0,
         currency: data.currency || "ETB",
         payment_status,
-        penalty_reason: data.penalty_reason || null,
-        description: data.description || null,
-        payer_id: data.payer_id || null,
+        penalty_reason: data.penalty_reason || 0,
+        description: data.description || 0,
+        payer_id: data.payer_id || 0,
         created_by: data.created_by,
       },
       { transaction: t }

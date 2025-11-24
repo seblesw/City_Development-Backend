@@ -13,6 +13,7 @@ const {
   Sequelize,
   ActionLog,
   Organization,
+  LAND_PREPARATION,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -21,6 +22,7 @@ const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const fs = require("fs");
+const path = require("path");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
   const { transaction: externalTransaction, isImport = false } = options;
@@ -37,9 +39,9 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     const adminunit = user.administrative_unit_id;
 
     // Validate required land_record fields
-    if (!land_record.parcel_number) {
-      throw new Error("የመሬት ቁጥር (parcel_number) መግለጽ አለበት።");
-    }
+    // if (!land_record.parcel_number) {
+    //   throw new Error("የመሬት ቁጥር (parcel_number) መግለጽ አለበት።");
+    // }
 
     if (!land_record.ownership_category) {
       throw new Error("የባለቤትነት ክፍል (ownership_category) መግለጽ አለበት።");
@@ -58,11 +60,11 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
-    // 🚀 OPTIMIZED: For imports, check plot_number in documents table
+    //   For imports, check plot_number in documents table
     if (isImport) {
       const plotNumber = documents[0]?.plot_number;
       if (!plotNumber) {
-        throw new Error("የመሬት ቁጥር (plot_number) ከሰነዶች አልተገኘም።");
+        throw new Error("የካርታ ሰነድ ቁጥር (plot_number) ከሰነዶች አልተገኘም።");
       }
 
       const existingDocument = await Document.findOne({
@@ -75,7 +77,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       });
 
       if (existingDocument) {
-        throw new Error(`ይህ የመሬት ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`);
+        throw new Error(`ይህ ካርታ ሰነድ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`);
       }
     } else {
       // Original duplicate check for normal operations
@@ -196,7 +198,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 
     const ownersWithPhotos = isImport ? owners : processOwnerPhotos();
 
-    // 🚀 OPTIMIZED: Skip status_history during import for performance
+    //   Skip status_history during import for performance
     const landRecordData = {
       ...land_record,
       administrative_unit_id: adminunit,
@@ -224,7 +226,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       transaction: t,
     });
 
-    // 🚀 OPTIMIZED: Skip ActionLog during import for performance
+    //   Skip ActionLog during import for performance
     if (!isImport) {
       await ActionLog.create(
         {
@@ -273,7 +275,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           { transaction: t }
         );
 
-        // 🚀 OPTIMIZED: Use bulkCreate for land owners during import
+        //   Use bulkCreate for land owners during import
         if (isImport && createdOwners.length > 0) {
           const landOwnerData = createdOwners.map((owner) => ({
             user_id: owner.id,
@@ -327,7 +329,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
-    // 🚀 OPTIMIZED: Document processing - FIXED FILE PATH HANDLING
+    //   Document processing - FIXED FILE PATH HANDLING
     let documentResults = [];
     if (documents.length > 0) {
       // Handle document files properly
@@ -361,7 +363,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           })
         );
       } else {
-        // 🚀 OPTIMIZED: Bulk create documents for imports
+        //   Bulk create documents for imports
         const documentData = documents.map((doc) => ({
           ...doc,
           land_record_id: landRecord.id,
@@ -467,7 +469,7 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       throw new Error("ሁሉም የተጻፉ ውሂቦች ስህተት አላቸው። ከላይ ያሉትን ስህተቶች ይመልከቱ።");
     }
 
-    // 🚀 OPTIMIZED: Remove preloadExistingPlots - let createLandRecordService handle duplicates
+    //    - let createLandRecordService handle duplicates
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -477,7 +479,7 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       processingTime: 0,
     };
 
-    // 🚀 OPTIMIZED: Just group by plot number without duplicate checking
+    //   Just group by plot number
     const uniquePlots = new Map();
     for (const row of validatedData) {
       const plotKey = String(row.plot_number).trim();
@@ -497,17 +499,10 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     if (uniquePlots.size === 0) {
       throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
     }
-
-    // 🚀 OPTIMIZED: Increase concurrency since we removed the bottleneck
-    const BATCH_SIZE = 100; // Smaller batches for better parallelization
-    const CONCURRENCY = 5; // More concurrent operations
-
+    //   Increase concurrency 
+    const BATCH_SIZE = 100; 
+    const CONCURRENCY = 5; 
     const plotEntries = Array.from(uniquePlots.entries());
-
-    console.log(
-      `🔄 Processing ${plotEntries.length} unique plots from ${validatedData.length} total rows`
-    );
-
     const batchResults = await processBatchesWithConcurrency(
       plotEntries,
       adminUnitId,
@@ -515,10 +510,8 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       BATCH_SIZE,
       CONCURRENCY
     );
-
     // Aggregate results
     Object.assign(results, batchResults);
-
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
     results.performance = {
@@ -534,22 +527,18 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     try {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
-      console.warn("⚠️ Could not delete temporary file:", cleanupError.message);
+      throw new Error(
+        "⚠️ Could not delete temporary file after import:", cleanupError.message
+      );
     }
-
-    console.log(
-      `✅ Import completed: ${results.createdCount} created, ${results.skippedCount} skipped in ${results.processingTime}s`
-    );
-
     return results;
   } catch (error) {
     // Cleanup file on error
     try {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
-      console.warn(
-        "⚠️ Could not delete temporary file on error:",
-        cleanupError.message
+      throw new Error(
+        "⚠️ Could not delete temporary file after import error:", cleanupError.message
       );
     }
 
@@ -608,7 +597,7 @@ async function streamAndParseXLSX(filePath) {
 
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
-        rowCount = i + 2; // +2 because Excel rows start at 1 and header is row 1
+        rowCount = i + 2; 
 
         try {
           // Store original row number for error reporting
@@ -649,9 +638,11 @@ async function streamAndParseXLSX(filePath) {
           }
 
           // Numeric fields with validation
-          row.land_level = parseInt(row.land_level) || 1;
-          if (row.land_level < 1 || row.land_level > 10) {
-            throw new Error(`ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 10 መካከል መሆን አለበት።`);
+      row.land_level = parseInt(row.land_level) || 1;
+      if (row.land_level < 1 || row.land_level > 5) {
+        throw new Error(
+          `ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`
+        );
           }
 
           row.area = parseFloat(row.area) || 0;
@@ -704,42 +695,6 @@ async function streamAndParseXLSX(filePath) {
     }
   });
 }
-// function filterUniquePlots(xlsxData, existingPlots) {
-//   const uniquePlots = new Map();
-//   let stats = { skippedExisting: 0, skippedInvalid: 0 };
-
-//   for (const row of xlsxData) {
-//     const plotKey = String(row.plot_number).trim();
-
-//     // Skip invalid plot numbers
-//     if (!plotKey || plotKey === "null" || plotKey === "undefined") {
-//       stats.skippedInvalid++;
-//       continue;
-//     }
-
-//     // Skip existing plots
-//     if (existingPlots.has(plotKey)) {
-//       stats.skippedExisting++;
-//       continue;
-//     }
-
-//     // Group by plot number
-//     if (!uniquePlots.has(plotKey)) {
-//       uniquePlots.set(plotKey, [row]);
-//     } else {
-//       uniquePlots.get(plotKey).push(row);
-//     }
-//   }
-
-//   // Log summary for debugging
-//   if (stats.skippedExisting > 0 || stats.skippedInvalid > 0) {
-//     console.log(
-//       `📊 Filter stats: ${uniquePlots.size} unique, ${stats.skippedExisting} existing, ${stats.skippedInvalid} invalid`
-//     );
-//   }
-
-//   return uniquePlots;
-// }
 async function processBatchesWithConcurrency(
   plotEntries,
   adminUnitId,
@@ -871,6 +826,7 @@ async function processBatch(
           owners: transformedData.owners,
           documents: transformedData.documents,
           land_payment: transformedData.payments[0] || null,
+          organization_info: transformedData.organization_info || null,
         },
         [], // No files during import
         user,
@@ -943,7 +899,6 @@ async function processBatch(
 
   return batchResults;
 }
-
 // Helper function to extract clean error messages
 function getCleanErrorMessage(errorMessage, plotNumber) {
   // Remove redundant prefixes
@@ -1044,26 +999,107 @@ async function transformXLSXData(rows, adminUnitId) {
       throw new Error("የባለቤትነት ዓይነት ያስፈልጋል።");
     }
 
+    const normalizeString = (value) => {
+      if (value === undefined || value === null) return null;
+      const strValue = typeof value === "string" ? value : String(value);
+      const trimmed = strValue.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const parseBooleanValue = (value) => {
+      if (value === undefined || value === null || value === "") {
+        return null;
+      }
+      if (typeof value === "boolean") return value;
+
+      const normalized = String(value).trim().toLowerCase();
+      if (["true", "1", "yes", "አዎ", "አዎን", "ያለ"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "0", "no", "አይ", "የለም"].includes(normalized)) {
+        return false;
+      }
+      return null;
+    };
+
+    const parseDateValue = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const parseIntegerValue = (value, defaultValue = 0) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
+    };
+
+    const parseFloatValue = (value, defaultValue = 0) => {
+      const parsed = parseFloat(value);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
+    };
+
     const ownershipCategory = primaryRow.ownership_category || "የግል";
     let owners = [];
+    let organizationInfo = null;
 
-    if (ownershipCategory === "የጋራ") {
+    if (ownershipCategory === "የድርጅት") {
+      // Organization ownership - extract organization info and manager (first owner)
+      if (!primaryRow.organization_name && !primaryRow.name) {
+        throw new Error("የድርጅቱ ስም ያስፈልጋል። (organization_name or name column required)");
+      }
+
+      if (!primaryRow.organization_type) {
+        throw new Error("የድርጅቱ አይነት ያስፈልጋል። (organization_type column required)");
+      }
+
+      // Manager is the first owner (required for organization)
+      if (!primaryRow.first_name || !primaryRow.middle_name) {
+        throw new Error("የድርጅቱ መሪ (manager) ስም እና የአባት ስም ያስፈልጋል።");
+      }
+
+      // Extract organization information (matches Organization model fields)
+      organizationInfo = {
+        name:
+          normalizeString(
+            primaryRow.organization_name || primaryRow.name || ""
+          ) || "",
+        organization_type:
+          normalizeString(primaryRow.organization_type || "") || "",
+        eia_document: normalizeString(primaryRow.eia_document),
+        permit_number: normalizeString(
+          primaryRow.organization_permit_number || primaryRow.permit_number
+        ),
+        permit_issue_date: parseDateValue(
+          primaryRow.organization_permit_issue_date || primaryRow.permit_issue_date
+        ),
+      };
+
+      // Manager (first owner) - required for organization
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "Unknown",
+        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
+        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
+      });
+    } else if (ownershipCategory === "የጋራ") {
       // Shared ownership - multiple owners
       owners = rows.map((row, index) => {
-        // if (!row.first_name || !row.middle_name) {
-        //   throw new Error(`ተጋሪ ${index + 1} ስም እና የአባት ስም ያስፈልጋል።`);
-        // }
-
         return {
-          first_name: row.first_name || "Unknown",
-          middle_name: row.middle_name || "unknown",
-          last_name: row.last_name || "Unknown",
-          national_id: row.national_id ? String(row.national_id).trim() : null,
-          email: row.email?.trim() || null,
-          phone_number: row.phone_number || null,
-          gender: row.gender || null,
-          relationship_type: row.relationship_type || null,
-          address: row.address || null,
+          first_name: normalizeString(row.first_name) || "Unknown",
+          middle_name: normalizeString(row.middle_name) || "unknown",
+          last_name: normalizeString(row.last_name) || "Unknown",
+          national_id: normalizeString(row.national_id) || null,
+          email: normalizeString(row.email) || null,
+          phone_number: normalizeString(row.phone_number) || null,
+          gender: normalizeString(row.gender) || null,
+          relationship_type: normalizeString(row.relationship_type) || null,
+          address: normalizeString(row.address) || null,
         };
       });
     } else {
@@ -1071,68 +1107,111 @@ async function transformXLSXData(rows, adminUnitId) {
       if (!primaryRow.first_name || !primaryRow.middle_name) {
         throw new Error("ዋና ባለቤት ስም እና የአባት ስም ያስፈልጋል።");
       }
-
       owners.push({
-        first_name: primaryRow.first_name || "Unknown",
-        middle_name: primaryRow.middle_name || "unknown",
-        last_name: primaryRow.last_name || "Unknown",
-        national_id: primaryRow.national_id
-          ? String(primaryRow.national_id).trim()
-          : null,
-        email: primaryRow.email?.trim() || null,
-        gender: primaryRow.gender || null,
-        phone_number: primaryRow.phone_number || null,
-        relationship_type: primaryRow.relationship_type || null,
+        first_name: normalizeString(primaryRow.first_name) || "Unknown",
+        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
+        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type: normalizeString(primaryRow.relationship_type) || null,
       });
     }
 
     // Land record data - parcel_number can be null
+    const parsedLandLevel = parseInt(primaryRow.land_level, 10) || 1;
+    if (parsedLandLevel < 1 || parsedLandLevel > 5) {
+      throw new Error("የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።");
+    }
+
+    const parsedArea = parseFloat(primaryRow.area) || 0;
+    if (parsedArea < 0.1) {
+      throw new Error("የመሬት ስፋት ቢያንስ 0.1 ካሬ ሜትር መሆን አለበት።");
+    }
 
     const landRecordData = {
-      parcel_number: primaryRow.parcel_number,
-      land_level: parseInt(primaryRow.land_level) || 1,
-      area: parseFloat(primaryRow.area) || 0,
+      parcel_number: normalizeString(primaryRow.parcel_number) || null,
+      land_level: parsedLandLevel,
+      area: parsedArea,
       administrative_unit_id: adminUnitId,
-      north_neighbor: primaryRow.north_neighbor || null,
-      east_neighbor: primaryRow.east_neighbor || null,
-      south_neighbor: primaryRow.south_neighbor || null,
-      west_neighbor: primaryRow.west_neighbor || null,
+      north_neighbor: normalizeString(primaryRow.north_neighbor) || null,
+      east_neighbor: normalizeString(primaryRow.east_neighbor) || null,
+      south_neighbor: normalizeString(primaryRow.south_neighbor) || null,
+      west_neighbor: normalizeString(primaryRow.west_neighbor) || null,
       land_use: primaryRow.land_use,
       ownership_type: primaryRow.ownership_type,
-      zoning_type: primaryRow.zoning_type || null,
-      block_number: primaryRow.block_number || null,
-      block_special_name: primaryRow.block_special_name || null,
+      zoning_type: normalizeString(primaryRow.zoning_type) || null,
+      block_number: normalizeString(primaryRow.block_number),
+      block_special_name: normalizeString(primaryRow.block_special_name) || null,
       ownership_category: ownershipCategory,
-      remark: primaryRow.remark || null,
+      remark: normalizeString(primaryRow.remark) || null,
+      building_hight: normalizeString(primaryRow.building_hight),
+      notes: normalizeString(primaryRow.notes) || null,
+      plan: normalizeString(primaryRow.plan) || null  ,
+      land_preparation: normalizeString(primaryRow.land_preparation) || null,
+      lease_transfer_reason: normalizeString(primaryRow.lease_transfer_reason) || null,
+      infrastructure_status: normalizeString(primaryRow.infrastructure_status) || null,
+      land_bank_code: normalizeString(primaryRow.land_bank_code) || null,
+      land_history: normalizeString(primaryRow.land_history) || null,
+      other_land_history: normalizeString(primaryRow.other_land_history) || null,
+      landbank_registrer_name: normalizeString(
+        primaryRow.landbank_registrer_name
+      ) || null,
+      has_debt: parseBooleanValue(primaryRow.has_debt) ?? false,
+      address: normalizeString(primaryRow.address) || null,
+      address_kebele: normalizeString(primaryRow.address_kebele) || null,
+      address_ketena: normalizeString(primaryRow.address_ketena) || null,
     };
 
     // Documents - use all rows for shared ownership, primary row for single
     const documentRows = ownershipCategory === "የጋራ" ? rows : [primaryRow];
     const documents = documentRows.map((row) => ({
       document_type: DOCUMENT_TYPES.TITLE_DEED,
-      plot_number: row.plot_number,
-      approver_name: row.approver_name || null,
-      preparer_name: row.preparer_name || null,
-      reference_number: row.reference_number || null,
-      description: row.description || null,
-      issue_date: row.issue_date ? new Date(row.issue_date) : null,
+      plot_number: normalizeString(row.plot_number) || row.plot_number,
+      approver_name: normalizeString(row.approver_name) || null,
+      preparer_name: normalizeString(row.preparer_name) || null,
+      reference_number: normalizeString(row.reference_number) || null,
+      description: normalizeString(row.description) || null,
+      issue_date: parseDateValue(row.issue_date) || null,
       files: [],
     }));
 
     // Payments
     const paymentRows = ownershipCategory === "የጋራ" ? rows : [primaryRow];
-    const payments = paymentRows
-      .filter((row) => row.payment_type)
-      .map((row) => ({
-        payment_type: row.payment_type || PAYMENT_TYPES.TAX,
-        total_amount: parseFloat(row.total_amount) || 0,
-        paid_amount: parseFloat(row.paid_amount) || 0,
-        currency: row.currency || "ETB",
-        payment_status: calculatePaymentStatus(row),
-        description: row.payment_description || "ከ Excel ፋይል ክፍያ",
-      }));
+    const derivedPaymentType =
+      landRecordData.land_preparation === LAND_PREPARATION.LEASE
+        ? PAYMENT_TYPES.LEASE_PAYMENT
+        : landRecordData.land_preparation === LAND_PREPARATION.EXISTING
+        ? PAYMENT_TYPES.TAX
+        : null;
+    const payments = paymentRows.map((row) => ({
+      payment_type:
+        derivedPaymentType ||
+        normalizeString(row.payment_type) ||
+        PAYMENT_TYPES.TAX,
+      total_amount: parseFloatValue(row.total_amount, 0),
+      paid_amount: parseFloatValue(row.paid_amount, 0),
+      lease_year: parseIntegerValue(row.lease_year, 0),
+      lease_payment_year: parseIntegerValue(row.lease_payment_year, 0),
+      annual_payment: parseFloatValue(row.annual_payment, 0),
+      initial_payment: parseFloatValue(row.initial_payment, 0),
+      penalty_rate: parseFloatValue(row.penalty_rate, 0),
+      remaining_amount: parseFloatValue(row.remaining_amount, 0),
+      receipt_number: normalizeString(row.receipt_number) || null,
+      payment_date: parseDateValue(row.payment_date) || null,
+      currency: normalizeString(row.currency) || "ETB",
+      payment_status: calculatePaymentStatus(row),
+      description: normalizeString(row.description) || null,
+    }));
 
-    return { owners, landRecordData, documents, payments };
+    return { 
+      owners, 
+      landRecordData, 
+      documents, 
+      payments,
+      organization_info: organizationInfo 
+    };
   } catch (error) {
     throw new Error(`ውሂብ ማቀናበር አልተቻለም: ${error.message}`);
   }

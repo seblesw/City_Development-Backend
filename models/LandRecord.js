@@ -75,7 +75,7 @@ module.exports = (db, DataTypes) => {
       },
       parcel_number: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: {
           notEmpty: { msg: "የመሬት ቁጥር ባዶ መሆን አይችልም።" },
