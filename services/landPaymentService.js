@@ -7,8 +7,22 @@ const {
   User,
   Role,
   ActionLog,
+  LAND_PREPARATION,
 } = require("../models");
 const { Op } = require("sequelize");
+
+const derivePaymentTypeFromLandPreparation = (
+  landPreparation,
+  fallbackType = null
+) => {
+  if (landPreparation === LAND_PREPARATION.LEASE) {
+    return PAYMENT_TYPES.LEASE_PAYMENT;
+  }
+  if (landPreparation === LAND_PREPARATION.EXISTING) {
+    return PAYMENT_TYPES.TAX;
+  }
+  return fallbackType || PAYMENT_TYPES.PENALTY;
+};
 const addNewPaymentService = async (landRecordId, user, data) => {
   const {
     payment_type,
@@ -32,7 +46,7 @@ const addNewPaymentService = async (landRecordId, user, data) => {
   
   const payment = await LandPayment.create({
     land_record_id: landRecordId,
-    payment_type,
+    payment_type: resolvedPaymentType,
     total_amount,
     paid_amount,
     annual_payment: annual_payment || null,
@@ -54,7 +68,7 @@ const addNewPaymentService = async (landRecordId, user, data) => {
       payment_id: payment.id,
       amount: payment.paid_amount,
       currency: payment.currency,
-      payment_type: payment.payment_type,
+      payment_type: resolvedPaymentType,
       changed_by: {
         id: user.id,
         first_name: user.first_name,
@@ -81,12 +95,25 @@ const createLandPaymentService = async (data, options = {}) => {
     if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    
-    if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
+      transaction: t,
+      lock: transaction ? undefined : t.LOCK.UPDATE,
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    const resolvedPaymentType = derivePaymentTypeFromLandPreparation(
+      landRecord.land_preparation,
+      data.payment_type
+    );
+
+    if (!Object.values(PAYMENT_TYPES).includes(resolvedPaymentType)) {
       throw new Error(
-        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(
-          ", "
-        )}`
+        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(
+          PAYMENT_TYPES
+        ).join(", ")}`
       );
     }
     
@@ -101,7 +128,7 @@ const createLandPaymentService = async (data, options = {}) => {
     const payment = await LandPayment.create(
       {
         land_record_id: data.land_record_id,
-        payment_type: data.payment_type,
+        payment_type: resolvedPaymentType,
         total_amount: data.total_amount,
         paid_amount: data.paid_amount,
         anual_payment: data.anual_payment || 0,
@@ -115,16 +142,6 @@ const createLandPaymentService = async (data, options = {}) => {
       },
       { transaction: t }
     );
-
-    
-    const landRecord = await LandRecord.findByPk(data.land_record_id, {
-      transaction: t,
-      lock: transaction ? undefined : t.LOCK.UPDATE,
-    });
-
-    if (!landRecord) {
-      throw new Error("Land record not found");
-    }
 
     //  Get creator info for ActionLog
     let creator = null;
@@ -143,7 +160,7 @@ const createLandPaymentService = async (data, options = {}) => {
       notes: `ክፍያ ተጨምሯል - አጠቃላይ: ${data.total_amount} ${data.currency || 'ETB'}, የተከፈለ: ${data.paid_amount} ${data.currency || 'ETB'}`,
       additional_data: {
         payment_id: payment.id,
-        payment_type: data.payment_type,
+        payment_type: resolvedPaymentType,
         total_amount: data.total_amount,
         paid_amount: data.paid_amount,
         currency: data.currency || "ETB",

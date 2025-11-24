@@ -38,10 +38,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     } = data;
     const adminunit = user.administrative_unit_id;
 
-    // Validate required land_record fields
-    // if (!land_record.parcel_number) {
-    //   throw new Error("የመሬት ቁጥር (parcel_number) መግለጽ አለበት።");
-    // }
 
     if (!land_record.ownership_category) {
       throw new Error("የባለቤትነት ክፍል (ownership_category) መግለጽ አለበት።");
@@ -436,7 +432,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           }
         } catch (cleanupError) {
           // Silent fail - log but don't throw
-          console.error("File cleanup error:", cleanupError.message);
         }
       });
     }
@@ -479,16 +474,13 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       processingTime: 0,
     };
 
-    //   Just group by plot number
+    // Group by plot number
     const uniquePlots = new Map();
     for (const row of validatedData) {
       const plotKey = String(row.plot_number).trim();
-
-      // Skip invalid plot numbers only
       if (!plotKey || plotKey === "null" || plotKey === "undefined") {
         continue;
       }
-
       if (!uniquePlots.has(plotKey)) {
         uniquePlots.set(plotKey, [row]);
       } else {
@@ -499,19 +491,62 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     if (uniquePlots.size === 0) {
       throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
     }
-    //   Increase concurrency 
-    const BATCH_SIZE = 100; 
-    const CONCURRENCY = 5; 
+
+    const CONCURRENCY = 5;
     const plotEntries = Array.from(uniquePlots.entries());
-    const batchResults = await processBatchesWithConcurrency(
-      plotEntries,
-      adminUnitId,
-      user,
-      BATCH_SIZE,
-      CONCURRENCY
+    const pLimit = (await import("p-limit")).default;
+    const limiter = pLimit(CONCURRENCY);
+
+    const creationResults = await Promise.all(
+      plotEntries.map(([plotNumber, rows]) =>
+        limiter(async () => {
+          try {
+            const transformedData = await transformXLSXData(rows, adminUnitId);
+
+            await createLandRecordService(
+              {
+                land_record: transformedData.landRecordData,
+                owners: transformedData.owners,
+                documents: transformedData.documents,
+                land_payment: transformedData.payments[0],
+                organization_info: transformedData.organization_info || null,
+              },
+              [],
+              user,
+              { isImport: true }
+            );
+
+            return { success: true, plotNumber };
+          } catch (error) {
+            const detailedError = extractDetailedError(error, plotNumber);
+            return {
+              success: false,
+              plotNumber,
+              error: detailedError,
+              row_data: rows[0],
+            };
+          }
+        })
+      )
     );
-    // Aggregate results
-    Object.assign(results, batchResults);
+
+    creationResults.forEach((result, index) => {
+      if (result.success) {
+        results.createdCount++;
+      } else {
+        results.skippedCount++;
+        const errorMessage = `ካርታ ${result.plotNumber}: ${result.error}`;
+        results.errors.push(errorMessage);
+        results.errorDetails.push({
+          plot_number: result.plotNumber,
+          error: result.error,
+          row_data: result.row_data,
+          index,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
     results.performance = {
@@ -563,7 +598,6 @@ async function streamAndParseXLSX(filePath) {
     let rowCount = 0;
 
     try {
-      console.log(`📖 Reading Excel file: ${filePath}`);
 
       const workbook = XLSX.readFile(filePath, {
         cellDates: true,
@@ -694,230 +728,6 @@ async function streamAndParseXLSX(filePath) {
       }
     }
   });
-}
-async function processBatchesWithConcurrency(
-  plotEntries,
-  adminUnitId,
-  user,
-  batchSize = 200,
-  concurrency = 3
-) {
-  const results = {
-    createdCount: 0,
-    skippedCount: 0,
-    errors: [],
-    errorDetails: [],
-  };
-
-  const totalBatches = Math.ceil(plotEntries.length / batchSize);
-  console.log(
-    `🔄 Processing ${plotEntries.length} plots in ${totalBatches} batches`
-  );
-
-  // Process with controlled concurrency using a simple semaphore
-  const processWithConcurrency = async () => {
-    const semaphore = new Semaphore(concurrency);
-    const promises = [];
-
-    for (let i = 0; i < plotEntries.length; i += batchSize) {
-      const batch = plotEntries.slice(i, i + batchSize);
-      const batchNumber = Math.floor(i / batchSize) + 1;
-
-      promises.push(
-        semaphore.acquire().then(async () => {
-          try {
-            console.log(
-              `📦 Starting batch ${batchNumber}/${totalBatches} (${batch.length} plots)`
-            );
-            const batchResult = await processBatch(
-              batch,
-              adminUnitId,
-              user,
-              batchNumber
-            );
-
-            results.createdCount += batchResult.createdCount;
-            results.skippedCount += batchResult.skippedCount;
-            results.errors.push(...batchResult.errors);
-            results.errorDetails.push(...batchResult.errorDetails);
-
-            console.log(
-              `  ✅ Batch ${batchNumber} completed: ${batchResult.createdCount} created, ${batchResult.skippedCount} skipped`
-            );
-
-            return batchResult;
-          } catch (error) {
-            console.error(`  ❌ Batch ${batchNumber} failed:`, error.message);
-            results.skippedCount += batch.length;
-            results.errors.push(
-              `Batch ${batchNumber} failed: ${error.message}`
-            );
-            return null;
-          } finally {
-            semaphore.release();
-          }
-        })
-      );
-    }
-
-    await Promise.allSettled(promises);
-  };
-
-  await processWithConcurrency();
-
-  console.log(
-    `✅ All batches completed: ${results.createdCount} created, ${results.skippedCount} skipped`
-  );
-  return results;
-}
-// Simple semaphore implementation
-class Semaphore {
-  constructor(max) {
-    this.max = max;
-    this.current = 0;
-    this.queue = [];
-  }
-
-  async acquire() {
-    if (this.current < this.max) {
-      this.current++;
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-      this.queue.push(resolve);
-    });
-  }
-
-  release() {
-    if (this.queue.length > 0) {
-      const next = this.queue.shift();
-      next();
-    } else {
-      this.current--;
-    }
-  }
-}
-async function processBatch(
-  batchEntries,
-  adminUnitId,
-  user,
-  batchNumber = null
-) {
-  const batchResults = {
-    createdCount: 0,
-    skippedCount: 0,
-    errors: [],
-    errorDetails: [],
-  };
-
-  const batchInfo = batchNumber ? `Batch ${batchNumber}` : "Current batch";
-  console.log(`🔧 ${batchInfo}: Processing ${batchEntries.length} plots`);
-
-  const processPromises = batchEntries.map(async ([plotNumber, rows]) => {
-    try {
-      // Transform data with enhanced error context
-      const transformedData = await transformXLSXData(rows, adminUnitId);
-
-      // Call your existing service WITHOUT transaction - let createLandRecordService handle it
-      await createLandRecordService(
-        {
-          land_record: transformedData.landRecordData,
-          owners: transformedData.owners,
-          documents: transformedData.documents,
-          land_payment: transformedData.payments[0] || null,
-          organization_info: transformedData.organization_info || null,
-        },
-        [], // No files during import
-        user,
-        {
-          isImport: true,
-          // REMOVED: transaction: t - let createLandRecordService handle its own transactions
-        }
-      );
-
-      console.log(`✅ Successfully created plot: ${plotNumber}`);
-      return { success: true, plotNumber };
-    } catch (error) {
-      // Extract detailed error information
-      const detailedError = extractDetailedError(error, plotNumber);
-
-      console.warn(`⚠️ Failed to create plot ${plotNumber}:`, detailedError);
-
-      return {
-        success: false,
-        error: new Error(detailedError),
-        plotNumber,
-        primaryRow: rows[0],
-      };
-    }
-  });
-
-  const results = await Promise.allSettled(processPromises);
-
-  // Process results with better error extraction
-  results.forEach((result, index) => {
-    const [plotNumber, rows] = batchEntries[index];
-
-    if (result.status === "fulfilled" && result.value.success) {
-      batchResults.createdCount++;
-    } else {
-      batchResults.skippedCount++;
-
-      let error;
-      let row;
-
-      if (result.status === "rejected") {
-        error = result.reason;
-        row = { plot_number: plotNumber };
-      } else {
-        error = result.value.error;
-        row = result.value.primaryRow;
-      }
-
-      // Create a clean error message without the generic wrapper
-      const cleanErrorMessage = getCleanErrorMessage(error.message, plotNumber);
-      const errorMsg = `ካርታ ${plotNumber}: ${cleanErrorMessage}`;
-
-      batchResults.errors.push(errorMsg);
-      batchResults.errorDetails.push({
-        plot_number: plotNumber,
-        error: cleanErrorMessage,
-        row_data: row,
-        batch_number: batchNumber,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  });
-
-  // Log batch summary
-  if (batchResults.createdCount > 0 || batchResults.skippedCount > 0) {
-    console.log(
-      `📊 ${batchInfo} results: ${batchResults.createdCount} created, ${batchResults.skippedCount} skipped`
-    );
-  }
-
-  return batchResults;
-}
-// Helper function to extract clean error messages
-function getCleanErrorMessage(errorMessage, plotNumber) {
-  // Remove redundant prefixes
-  let cleanMessage = errorMessage
-    .replace(`ካርታ ${plotNumber}: `, "")
-    .replace(`ረድፍ ${plotNumber}: `, "")
-    .replace("የመዝገብ መፍጠር ስህተት: ", "")
-    .replace("የሰነድ መፍጠር ስህተት: ", "")
-    .trim();
-
-  // If it's still a generic validation error, try to extract more details
-  if (
-    cleanMessage === "Validation error" &&
-    errorMessage.includes("Validation error")
-  ) {
-    return "የውሂብ ማረጋገጫ ስህተት። አንዳንድ መስኮች ትክክለኛ አይደሉም።";
-  }
-
-  return cleanMessage;
 }
 // Enhanced error extraction function
 function extractDetailedError(error, plotNumber) {
@@ -1184,12 +994,9 @@ async function transformXLSXData(rows, adminUnitId) {
         ? PAYMENT_TYPES.LEASE_PAYMENT
         : landRecordData.land_preparation === LAND_PREPARATION.EXISTING
         ? PAYMENT_TYPES.TAX
-        : null;
+        : PAYMENT_TYPES.PENALTY;
     const payments = paymentRows.map((row) => ({
-      payment_type:
-        derivedPaymentType ||
-        normalizeString(row.payment_type) ||
-        PAYMENT_TYPES.TAX,
+      payment_type:derivedPaymentType ,
       total_amount: parseFloatValue(row.total_amount, 0),
       paid_amount: parseFloatValue(row.paid_amount, 0),
       lease_year: parseIntegerValue(row.lease_year, 0),
