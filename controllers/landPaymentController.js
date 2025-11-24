@@ -5,6 +5,7 @@ const {
   deleteLandPaymentService,
   getPaymentsByLandRecordId,
   updateLandPaymentsService,
+  addNewPaymentService,
   
 } = require("../services/landPaymentService");
 
@@ -18,47 +19,94 @@ const getAllPaymentsController = async (req, res) => {
   }
 };
 
-const addNewPaymentController = async (req, res) => {
+const addNewPaymentController = async (req, res) => {  
   try {
     const land_record_id = parseInt(req.params.landId, 10); 
     
     if (isNaN(land_record_id)) {
-      return res.status(400).json({ error: "የተሳሳተ የ መዝገብ ቁጥር" });
+      return res.status(400).json({ 
+        status: "error",
+        message: "የተሳሳተ የመሬት መዝገብ ቁጥር" 
+      });
     }  
 
-     const landRecord = await LandRecord.findByPk(land_record_id, {
+    // Validate payment amount
+    const { paid_amount } = req.body;
+    
+    if (!paid_amount || paid_amount <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "የክፍያ መጠን መግለጽ አለበት እና ከዜሮ በላይ መሆን አለበት"
+      });
+    }
+
+    // Find land record with owners
+    const landRecord = await LandRecord.findByPk(land_record_id, {
       include: [
         {
           model: User,
           through: { attributes: [] },
           as: "owners", 
-          attributes: ["id", "first_name", "middle_name","last_name","phone_number", "email"],
-        },
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number", "email"],
+        }
       ],
     });
 
-    if (!landRecord || !landRecord.owners || landRecord.owners.length === 0) {
-      return res.status(404).json({ error: "በዚህ መዝገብ ባለቤት አይገኝም" });
+    if (!landRecord) {
+      return res.status(404).json({ 
+        status: "error",
+        message: "የመሬት መዝገብ አልተገኘም" 
+      });
     }
 
-    const payer_id = landRecord.owners[0].id; 
+    // Check if there are owners
+    if (!landRecord.owners || landRecord.owners.length === 0) {
+      return res.status(404).json({ 
+        status: "error",
+        message: "ለዚህ የመሬት መዝገብ ባለቤት አልተገኘም" 
+      });
+    }
+
+    // Always use the first owner as payer
+    const payer_id = landRecord.owners[0].id;
     const user = req.user;
 
-    const paymentData = {
-      ...req.body,
-      land_record_id,
-      payer_id,
-      created_by: user.id
-    };
-
-    const payment = await createLandPaymentService(paymentData);
+    // Call the service with only the required parameters
+    const result = await addNewPaymentService(land_record_id, paid_amount, user);
 
     return res.status(201).json({
-      message: "ተጨማሪ የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
-      data: payment,
+      status: "success",
+      message: "ተጨማሪ የመሬት ክፍያ በተሳካ ሁኔታ ታክሏል።",
+      data: {
+        payment: result.additionalPayment,
+        summary: result.summary,
+        updatedPayment: result.originalPayment
+      }
     });
+
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    
+    console.error("Add payment error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("የክፍያ መጠን ከጠቅላላ መጠን መብለጥ")) {
+      return res.status(400).json({
+        status: "error",
+        message: error.message
+      });
+    }
+    
+    if (error.message.includes("የቀድሞ ክፍያ አልተገኘም")) {
+      return res.status(404).json({
+        status: "error",
+        message: error.message
+      });
+    }
+
+    return res.status(400).json({ 
+      status: "error",
+      message: error.message || "የክፍያ መጨመር አልተሳካም"
+    });
   }
 };
 

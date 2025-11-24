@@ -38,7 +38,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     } = data;
     const adminunit = user.administrative_unit_id;
 
-
     if (!land_record.ownership_category) {
       throw new Error("የባለቤትነት ክፍል (ownership_category) መግለጽ አለበት።");
     }
@@ -374,36 +373,53 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
+    // ALWAYS CREATE LAND PAYMENT BASED ON LAND_PREPARATION TYPE
     let landPayment = null;
-    if (
-      land_payment &&
-      (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
-    ) {
-      if (!land_payment.payment_type) {
-        throw new Error("የክፍያ አይነት መግለጽ አለበት።");
-      }
-
-      // For organization, use organization manager as payer
-      const payerId =
-        land_record.ownership_category === "የድርጅት" && organization
-          ? organization.user_id
-          : createdOwners[0]?.id;
-
-      if (!payerId) {
-        throw new Error("የክፍያ አዳሪ መለያ አልተገኘም።");
-      }
-
-      landPayment = await landPaymentService.createLandPaymentService(
-        {
-          ...land_payment,
-          land_record_id: landRecord.id,
-          payer_id: payerId,
-          created_by: user.id,
-          payment_status: calculatePaymentStatus(land_payment),
-        },
-        { transaction: t }
-      );
+    
+    // Determine payment type based on LAND_PREPARATION
+    let paymentType;
+    if (land_record.land_preparation === 'ሊዝ') {
+      paymentType = 'የሊዝ ክፍያ';
+    } else if (land_record.land_preparation === 'ነባር') {
+      paymentType = 'የግብር ክፍያ';
+    } else {
+      // Default fallback if land_preparation is not specified
+      paymentType = 'የግብር ክፍያ';
     }
+
+    // For organization, use organization manager as payer
+    const payerId =
+      land_record.ownership_category === "የድርጅት" && organization
+        ? organization.user_id
+        : createdOwners[0]?.id;
+
+    if (!payerId) {
+      throw new Error("የክፍያ አዳሪ መለያ አልተገኘም።");
+    }
+
+    // Create payment data - use provided values or defaults
+    const paymentData = {
+      payment_type: paymentType,
+      total_amount: land_payment?.total_amount || 0,
+      paid_amount: land_payment?.paid_amount || 0,
+      payment_date: land_payment?.payment_date || new Date(),
+      due_date: land_payment?.due_date || new Date(),
+      receipt_number: land_payment?.receipt_number || null,
+      notes: land_payment?.notes || `Auto-generated ${paymentType} payment`,
+      land_record_id: landRecord.id,
+      payer_id: payerId,
+      created_by: user.id,
+      payment_status: calculatePaymentStatus({
+        total_amount: land_payment?.total_amount || 0,
+        paid_amount: land_payment?.paid_amount || 0
+      }),
+      ...land_payment
+    };
+
+    landPayment = await landPaymentService.createLandPaymentService(
+      paymentData,
+      { transaction: t }
+    );
 
     if (!externalTransaction) {
       await t.commit();
