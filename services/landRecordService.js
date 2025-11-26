@@ -375,26 +375,36 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 
     // ALWAYS CREATE LAND PAYMENT BASED ON LAND_PREPARATION TYPE
     let landPayment = null;
-    
+
     // Determine payment type based on LAND_PREPARATION
-    let paymentType;
-    if (land_record.land_preparation === 'ሊዝ') {
-      paymentType = 'የሊዝ ክፍያ';
-    } else if (land_record.land_preparation === 'ነባር') {
-      paymentType = 'የግብር ክፍያ';
+    let paymentType = null;
+    if (land_record.land_preparation) {
+      if (land_record.land_preparation === "ሊዝ") {
+      paymentType = "የሊዝ ክፍያ";
+      } else if (land_record.land_preparation === "ነባር") {
+      paymentType = "የግብር ክፍያ";
+      } else {
+      // Unknown preparation -> keep null (explicitly treat as not specified)
+      paymentType = null;
+      }
     } else {
-      // Default fallback if land_preparation is not specified
-      paymentType = 'የግብር ክፍያ';
+      // Not specified -> payment type must be null
+      paymentType = null;
     }
 
     // For organization, use organization manager as payer
     const payerId =
       land_record.ownership_category === "የድርጅት" && organization
-        ? organization.user_id
-        : createdOwners[0]?.id;
+      ? organization.user_id
+      : createdOwners[0]?.id || null;
 
-    if (!payerId) {
-      throw new Error("የክፍያ አዳሪ መለያ አልተገኘም።");
+    // If ownership is government, payerId can be null. Otherwise require payerId.
+    if (
+      !payerId &&
+      land_record.ownership_category !== "የመንግስት" &&
+      land_record.ownership_category !== "የድርጅት"
+    ) {
+      throw new Error("የከፋይ መለያ አልተገኘም።");
     }
 
     // Create payment data - use provided values or defaults
@@ -405,21 +415,19 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       payment_date: land_payment?.payment_date || new Date(),
       due_date: land_payment?.due_date || new Date(),
       receipt_number: land_payment?.receipt_number || null,
-      notes: land_payment?.notes || `Auto-generated ${paymentType} payment`,
       land_record_id: landRecord.id,
       payer_id: payerId,
       created_by: user.id,
       payment_status: calculatePaymentStatus({
-        total_amount: land_payment?.total_amount || 0,
-        paid_amount: land_payment?.paid_amount || 0
+      total_amount: land_payment?.total_amount || 0,
+      paid_amount: land_payment?.paid_amount || 0,
       }),
-      ...land_payment
+      ...land_payment,
     };
 
-    landPayment = await landPaymentService.createLandPaymentService(
-      paymentData,
-      { transaction: t }
-    );
+    landPayment = await landPaymentService.createLandPaymentService(paymentData, {
+      transaction: t,
+    });
 
     if (!externalTransaction) {
       await t.commit();

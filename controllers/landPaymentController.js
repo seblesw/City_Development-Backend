@@ -1,4 +1,4 @@
-const { User, LandRecord, LandPayment } = require("../models");
+const { User, LandRecord, LandPayment, PAYMENT_TYPES } = require("../models");
 const {
   createLandPaymentService,
   getLandPaymentByIdService,
@@ -9,7 +9,113 @@ const {
   
 } = require("../services/landPaymentService");
 
+const createNewPaymentController = async (req, res) => {  
+  try {
+    const land_record_id = parseInt(req.params.landId, 10); 
+    
+    if (isNaN(land_record_id)) {
+      return res.status(400).json({ 
+        status: "error",
+        message: "የተሳሳተ የመሬት መዝገብ ቁጥር" 
+      });
+    }  
 
+    // Validate payment data
+    const { total_amount, paid_amount, payment_type,initial_payment,anual_payment, lease_year,lease_payment_year } = req.body;
+
+
+    // Find land record with owners
+    const landRecord = await LandRecord.findByPk(land_record_id, {
+      include: [
+        {
+          model: User,
+          through: { attributes: [] },
+          as: "owners", 
+          attributes: ["id", "first_name", "middle_name", "last_name", "phone_number", "email"],
+        }
+      ],
+    });
+
+    if (!landRecord) {
+      return res.status(404).json({ 
+        status: "error",
+        message: "የመሬት መዝገብ አልተገኘም" 
+      });
+    }
+
+    // Always use the first owner as payer
+    const payer_id = landRecord.owners[0].id;
+    const user = req.user;
+
+    // Prepare payment data for service
+    const paymentData = {
+      land_record_id: land_record_id,
+      initial_payment: parseFloat(initial_payment) || 0,
+      anual_payment: parseFloat(anual_payment) || 0,
+      lease_year: lease_year ? parseInt(lease_year) : null,
+      currency: "ETB",
+      total_amount: parseFloat(total_amount),
+      lease_payment_year: lease_payment_year ? parseInt(lease_payment_year) : null,
+      paid_amount: parseFloat(paid_amount),
+      payment_type: payment_type,
+      payer_id: payer_id,
+      created_by: user.id
+    };
+
+    // Call the existing service to create payment
+    const newPayment = await createLandPaymentService(paymentData);
+
+    // Calculate remaining amount
+    const remaining_amount = paymentData.total_amount - paymentData.paid_amount;
+
+    return res.status(201).json({
+      status: "success",
+      message: "አዲስ የመሬት ክፍያ በተሳካ ሁኔታ ተፈጥሯል።",
+      data: {
+        payment: newPayment,
+        summary: {
+          totalAmount: paymentData.total_amount,
+          paidAmount: paymentData.paid_amount,
+          remainingAmount: remaining_amount,
+          currency: paymentData.currency,
+          paymentStatus: newPayment.payment_status,
+          paymentType: paymentData.payment_type
+        }
+      }
+    });
+
+  } catch (error) {
+    
+    console.error("Create payment error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት")) {
+      return res.status(400).json({
+        status: "error",
+        message: error.message
+      });
+    }
+    
+    if (error.message.includes("Land record not found")) {
+      return res.status(404).json({
+        status: "error",
+        message: "የመሬት መዝገብ አልተገኘም"
+      });
+    }
+
+    if (error.message.includes("ክፍያ ቀድሞውኑ አለ")) {
+      return res.status(400).json({
+        status: "error",
+        message: error.message
+      });
+    }
+
+    return res.status(400).json({ 
+      status: "error",
+      message: error.message || "አዲስ ክፍያ መፍጠር አልተሳካም"
+    });
+  }
+};
 const getAllPaymentsController = async (req, res) => {
   try {
     const payments = await LandPayment.findAll();
@@ -218,6 +324,7 @@ const deleteLandPaymentController = async (req, res) => {
 
 
 module.exports = {
+  createNewPaymentController,
   getAllPaymentsController,
   addNewPaymentController,
   getPaymentsByLandRecordIdController,
