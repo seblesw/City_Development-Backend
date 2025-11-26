@@ -23,24 +23,27 @@ const derivePaymentTypeFromLandPreparation = (
   }
   return fallbackType || PAYMENT_TYPES.PENALTY;
 };
-const addNewPaymentService = async (landRecordId, paidAmount, user) => {
+const addNewPaymentService = async (landRecordId, user, paymentData = {}) => {
+  const t = await sequelize.transaction();
+
   try {
     // Validate land record
-    const landRecord = await LandRecord.findByPk(landRecordId);
+    const landRecord = await LandRecord.findByPk(landRecordId, { transaction: t });
     if (!landRecord) {
       throw new Error("የመሬት መዝገብ አልተገኘም።");
     }
 
     // Validate payment amount
-    const newPaidAmount = parseFloat(paidAmount);
-    if (newPaidAmount <= 0) {
-      throw new Error("የክፍያ መጠን ከዜሮ በላይ መሆን አለበት።");
+    const newPaidAmount = parseFloat(paymentData.paid_amount);
+    if (!paymentData.paid_amount || newPaidAmount <= 0) {
+      throw new Error("የክፍያ መጠን መግለጽ አለበት እና ከዜሮ በላይ መሆን አለበት።");
     }
 
     // Find the existing payment
     const existingPayment = await LandPayment.findOne({
       where: { land_record_id: landRecordId },
       order: [['createdAt', 'DESC']],
+      transaction: t
     });
 
     if (!existingPayment) {
@@ -48,25 +51,92 @@ const addNewPaymentService = async (landRecordId, paidAmount, user) => {
     }
 
     // Get current amounts
-    const totalAmount = parseFloat(existingPayment.total_amount);
+    const existingTotal = parseFloat(existingPayment.total_amount);
     const currentPaid = parseFloat(existingPayment.paid_amount);
-    const currentRemaining = parseFloat(existingPayment.remaining_amount) || totalAmount - currentPaid;
+    
+    let totalAmount = existingTotal;
+    let updatedPaymentData = {};
 
-    // Check if payment is already completed
-    if (currentRemaining <= 0) {
-      throw new Error("ክፍያው ቀድሞውኑ ሙሉ በሙሉ ተከፍሏል። ተጨማሪ ክፍያ ማከል አይቻልም።");
+    // If existing total is 0 and new total is provided, update the total amount and other fields
+    if (existingTotal === 0) {
+      // Validate that total_amount is provided when existing total is 0
+      if (!paymentData.total_amount || paymentData.total_amount <= 0) {
+        throw new Error("የጠቅላላ ክፍያ መጠን መግለጽ አለበት እና ከዜሮ በላይ መሆን አለበት");
+      }
+
+      totalAmount = parseFloat(paymentData.total_amount);
+      
+      // Update payment with new total amount and additional fields
+      updatedPaymentData = {
+        total_amount: totalAmount,
+        paid_amount: currentPaid + newPaidAmount,
+        remaining_amount: totalAmount - (currentPaid + newPaidAmount)
+      };
+
+      // Add lease-specific fields if payment type is lease
+      if (existingPayment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT) {
+        if (paymentData.initial_payment) {
+          updatedPaymentData.initial_payment = parseFloat(paymentData.initial_payment);
+        }
+        if (paymentData.anual_payment) {
+          updatedPaymentData.anual_payment = parseFloat(paymentData.anual_payment);
+        }
+        if (paymentData.lease_year) {
+          updatedPaymentData.lease_year = paymentData.lease_year;
+        }
+        if (paymentData.lease_payment_year) {
+          updatedPaymentData.lease_payment_year = paymentData.lease_payment_year;
+        }
+      }
+
+      // Add penalty reason for penalty type
+      if (existingPayment.payment_type === PAYMENT_TYPES.PENALTY && paymentData.penalty_reason) {
+        updatedPaymentData.penalty_reason = paymentData.penalty_reason;
+      }
+
+      // Add description for all types
+      if (paymentData.description) {
+        updatedPaymentData.description = paymentData.description;
+      }
+    } else {
+      // Normal case - existing total amount is valid
+      const currentRemaining = parseFloat(existingPayment.remaining_amount) || totalAmount - currentPaid;
+
+      // Check if payment is already completed
+      if (currentRemaining <= 0) {
+        throw new Error("ክፍያው ቀድሞውኑ ሙሉ በሙሉ ተከፍሏል። ተጨማሪ ክፍያ ማከል አይቻልም።");
+      }
+
+      // Check if new payment exceeds remaining amount
+      if (newPaidAmount > currentRemaining) {
+        throw new Error(`የክፍያ መጠን ከቀረው መጠን መብለጥ አይችልም። ከፍተኛ የሚከፈለው: ${currentRemaining} ${existingPayment.currency}`);
+      }
+
+      // Calculate new amounts for normal case
+      updatedPaymentData = {
+        paid_amount: currentPaid + newPaidAmount,
+        remaining_amount: totalAmount - (currentPaid + newPaidAmount)
+      };
+
+      // For tax and penalty payments when total > 0, also update total amount if provided
+      if (existingPayment.payment_type === PAYMENT_TYPES.TAX || existingPayment.payment_type === PAYMENT_TYPES.PENALTY) {
+        if (paymentData.total_amount && paymentData.total_amount > 0) {
+          updatedPaymentData.total_amount = parseFloat(paymentData.total_amount);
+          updatedPaymentData.remaining_amount = parseFloat(paymentData.total_amount) - (currentPaid + newPaidAmount);
+          totalAmount = parseFloat(paymentData.total_amount);
+        }
+      }
+
+      // Add penalty reason for penalty type when total > 0
+      if (existingPayment.payment_type === PAYMENT_TYPES.PENALTY && paymentData.penalty_reason) {
+        updatedPaymentData.penalty_reason = paymentData.penalty_reason;
+      }
     }
-
-    // Check if new payment exceeds remaining amount
-    if (newPaidAmount > currentRemaining) {
-      throw new Error(`የክፍያ መጠን ከቀረው መጠን መብለጥ አይችልም። ከፍተኛ የሚከፈለው: ${currentRemaining} ${existingPayment.currency}`);
-    }
-
-    // Calculate new amounts
-    const updatedPaid = currentPaid + newPaidAmount;
-    const updatedRemaining = totalAmount - updatedPaid;
 
     // Determine payment status
+    const updatedPaid = updatedPaymentData.paid_amount;
+    const updatedRemaining = updatedPaymentData.remaining_amount;
+    
     let paymentStatus;
     if (updatedRemaining <= 0) {
       paymentStatus = PAYMENT_STATUSES.COMPLETED;
@@ -76,12 +146,48 @@ const addNewPaymentService = async (landRecordId, paidAmount, user) => {
       paymentStatus = existingPayment.payment_status;
     }
 
+    updatedPaymentData.payment_status = paymentStatus;
+
     // Update the existing payment
-    await existingPayment.update({
-      paid_amount: updatedPaid,
-      remaining_amount: updatedRemaining,
-      payment_status: paymentStatus,
-    });
+    await existingPayment.update(updatedPaymentData, { transaction: t });
+
+    // Get creator info for ActionLog
+    let creator = null;
+    if (user.id) {
+      creator = await User.findByPk(user.id, { 
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t 
+      });
+    }
+
+    // Create ActionLog entry for payment update
+    await ActionLog.create({
+      land_record_id: landRecordId,
+      performed_by: user.id,
+      action_type: 'PAYMENT_UPDATED',
+      notes: `ክፍያ ታክሏል - አዲስ ክፍያ: ${newPaidAmount} ${existingPayment.currency}, አጠቃላይ የተከፈለ: ${updatedPaid} ${existingPayment.currency}`,
+      additional_data: {
+        payment_id: existingPayment.id,
+        payment_type: existingPayment.payment_type,
+        previous_paid_amount: currentPaid,
+        new_payment_amount: newPaidAmount,
+        updated_paid_amount: updatedPaid,
+        total_amount: totalAmount,
+        remaining_amount: updatedRemaining,
+        payment_status: paymentStatus,
+        currency: existingPayment.currency,
+        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
+        parcel_number: landRecord.parcel_number,
+        ...(existingTotal === 0 && {
+          initial_payment: updatedPaymentData.initial_payment,
+          anual_payment: updatedPaymentData.anual_payment,
+          lease_year: updatedPaymentData.lease_year,
+          lease_payment_year: updatedPaymentData.lease_payment_year
+        })
+      }
+    }, { transaction: t });
+
+    await t.commit();
 
     return {
       success: true,
@@ -91,10 +197,12 @@ const addNewPaymentService = async (landRecordId, paidAmount, user) => {
       remaining: updatedRemaining,
       totalAmount: totalAmount,
       paymentStatus: paymentStatus,
-      currency: existingPayment.currency
+      currency: existingPayment.currency,
+      updatedFields: existingTotal === 0 ? 'total_amount and lease fields updated' : 'paid_amount updated'
     };
 
   } catch (error) {
+    await t.rollback();
     throw new Error(`የክፋያ መጨመር ስህተት: ${error.message}`);
   }
 };
@@ -153,7 +261,7 @@ const createLandPaymentService = async (data, options = {}) => {
         payment_status,
         penalty_reason: data.penalty_reason || 0,
         description: data.description || 0,
-        payer_id: data.payer_id || 0,
+        payer_id: data.payer_id || null,
         created_by: data.created_by,
       },
       { transaction: t }

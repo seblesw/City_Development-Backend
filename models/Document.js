@@ -35,6 +35,26 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
+      shelf_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ሸልፍ ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
+      box_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ሳጥን ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,

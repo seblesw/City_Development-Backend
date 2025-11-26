@@ -21,7 +21,7 @@ const createNewPaymentController = async (req, res) => {
     }  
 
     // Validate payment data
-    const { total_amount, paid_amount, payment_type,initial_payment,anual_payment, lease_year,lease_payment_year } = req.body;
+    const { total_amount, paid_amount,initial_payment,anual_payment, lease_year,lease_payment_year } = req.body;
 
 
     // Find land record with owners
@@ -136,9 +136,19 @@ const addNewPaymentController = async (req, res) => {
       });
     }  
 
+    // Get all payment data from request body
+    const { 
+      paid_amount, 
+      total_amount, 
+      initial_payment, 
+      anual_payment, 
+      lease_year, 
+      lease_payment_year,
+      description,
+      penalty_reason 
+    } = req.body;
+
     // Validate payment amount
-    const { paid_amount } = req.body;
-    
     if (!paid_amount || paid_amount <= 0) {
       return res.status(400).json({
         status: "error",
@@ -177,8 +187,22 @@ const addNewPaymentController = async (req, res) => {
     const payer_id = landRecord.owners[0].id;
     const user = req.user;
 
-    // Call the service with only the required parameters
-    const result = await addNewPaymentService(land_record_id, paid_amount, user);
+    // Call the service with all payment data from request body
+    const result = await addNewPaymentService(
+      land_record_id, 
+      user,
+      {
+        paid_amount,
+        total_amount,
+        initial_payment,
+        anual_payment,
+        lease_year,
+        lease_payment_year,
+        description,
+        penalty_reason,
+        payer_id
+      }
+    );
 
     return res.status(201).json({
       status: "success",
@@ -215,7 +239,6 @@ const addNewPaymentController = async (req, res) => {
     });
   }
 };
-
 const getLandPaymentByIdController = async (req, res) => {
   try {
     const { id } = req.params;
