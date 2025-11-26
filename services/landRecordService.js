@@ -2634,6 +2634,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           "email",
           "phone_number",
           "national_id",
+          "profile_picture"
         ],
       },
       {
@@ -3220,6 +3221,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "email",
           "phone_number",
           "national_id",
+          "profile_picture"
         ],
       },
       {
@@ -3584,6 +3586,7 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
             "email",
             "phone_number",
             "national_id",
+            "profile_picture"
           ],
         },
         {
@@ -4330,6 +4333,7 @@ const getTrashItemsService = async (user, options = {}) => {
             "email",
             "phone_number",
             "national_id",
+            "profile_picture"
           ],
         },
         {
