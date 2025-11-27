@@ -349,7 +349,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
               {
                 ...doc,
                 land_record_id: landRecord.id,
-                file_path: relativePath, // Use relative path here
+                file_path: relativePath, 
               },
               file ? [file] : [],
               user.id,
@@ -363,7 +363,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           ...doc,
           land_record_id: landRecord.id,
           created_by: user.id,
-          created_at: new Date(),
+          createdAt: new Date(),
         }));
 
         const createdDocs = await Document.bulkCreate(documentData, {

@@ -66,7 +66,6 @@ const createTaxSchedules = async (dueDate, description = '') => {
         attributes: ['id', 'unit_level', 'name'] 
       }
     ],
-    limit: 10 // Increased to get more records
   });
 
   

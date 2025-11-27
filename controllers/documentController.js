@@ -35,10 +35,10 @@ const createDocumentController = async (req, res) => {
       inActived_reason: body.inActived_reason || null,
       plot_number: body.plot_number || null,
     };
-    const document = await createDocumentService(data, files, user.id);
+    const result = await createDocumentService(data, files, user.id);
     return res.status(201).json({
       message: "ሰነድ በተሳካ ሁኔታ ተፈጥሯል።",
-      data: document,
+      data: result,
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
