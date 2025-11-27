@@ -1004,10 +1004,14 @@ async function transformXLSXData(rows, adminUnitId) {
       document_type: DOCUMENT_TYPES.TITLE_DEED,
       plot_number: normalizeString(row.plot_number) || row.plot_number,
       approver_name: normalizeString(row.approver_name) || null,
+      verifier_name: normalizeString(row.verifier_name) || null,
       preparer_name: normalizeString(row.preparer_name) || null,
+      shelf_number: normalizeString(row.shelf_number) || null,
+      box_number: normalizeString(row.box_number) || null,
+      file_number: normalizeString(row.file_number) || null,
       reference_number: normalizeString(row.reference_number) || null,
       description: normalizeString(row.description) || null,
-      issue_date: parseDateValue(row.issue_date) || null,
+      issue_date: normalizeString(row.issue_date) || null,
       files: [],
     }));
 
