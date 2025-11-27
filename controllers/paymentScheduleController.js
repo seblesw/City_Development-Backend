@@ -1,4 +1,13 @@
-const { createTaxSchedules, createLeaseSchedules, checkOverdueSchedules } = require('../services/paymentScheduleService');
+const { createTaxSchedules, createLeaseSchedules, checkOverdueSchedules, getSchedulesService } = require('../services/paymentScheduleService');
+
+const getSchedulesController = async (req, res) => {
+  try {
+    const schedules = await getSchedulesService();
+    res.status(200).json({ success: true, schedules });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
 const createTaxSchedulesController = async (req, res) => {
   try {
@@ -54,8 +63,10 @@ const checkOverdueSchedulesController = async (req, res) => {
   }
 };
 
+
 module.exports = {
   createTaxSchedulesController,
   createLeaseSchedulesController,
   checkOverdueSchedulesController,
+  getSchedulesController
 };

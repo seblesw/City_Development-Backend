@@ -14,6 +14,8 @@ const LAND_USE_TYPES = {
   MIXED: "ድብልቅ",
   COMMERCIAL: "ንግድ",
   ADMINISTRATIVE: "ለ አስተዳደር",
+  GOVERNMENT_ORGANIZATION: "መንግስታዊ ተቋማት",
+  KEBELE_HOUSE: "የቀበሌ ቤት",
   INDUSTRIAL: "ኢንዱስትሪ",
   MANUFACTURING_STORAGE: "ማምረቻ እና ማከማቻ",
   SERVICE: "ማህበራዊ አገልግሎት",
