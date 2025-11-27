@@ -22,7 +22,10 @@ const createDocumentController = async (req, res) => {
     const data = {
       map_number: body.map_number,
       document_type: body.document_type || null,
+      shelf_number: body.shelf_number || null,
+      box_number: body.box_number || null,
       reference_number: body.reference_number || null,
+      file_number: body.file_number || null,
       description: body.description || null,
       issue_date: body.issue_date || null,
       land_record_id: Number(body.land_record_id) || null,
@@ -216,7 +219,10 @@ const updateDocumentController = async (req, res) => {
     const data = {
       plot_number: body.plot_number,
       document_type: body.document_type,
-      reference_number: body.reference_number,
+      shelf_number: body.shelf_number || null,
+      box_number: body.box_number || null,
+      reference_number: body.reference_number || null,
+      file_number: body.file_number || null,
       description: body.description,
       issue_date: body.issue_date,
       land_record_id: body.land_record_id,
