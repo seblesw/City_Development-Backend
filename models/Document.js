@@ -103,7 +103,7 @@ module.exports = (db, DataTypes) => {
         defaultValue: [],
       },
       issue_date: {
-        type: DataTypes.DATE,
+        type: DataTypes.STRING,
         allowNull: true,
       },
       description: {

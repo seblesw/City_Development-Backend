@@ -1,5 +1,6 @@
 const { LandPayment, PaymentSchedule, LandRecord, User, sequelize,PAYMENT_TYPES, PAYMENT_STATUSES  } = require('../models');
 const {Op} = require('sequelize');
+
 const createTaxSchedules = async (dueDate, description = '') => {
   const landRecords = await LandRecord.findAll({
     include: [

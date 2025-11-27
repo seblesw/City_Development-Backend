@@ -2,6 +2,7 @@ const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_T
 const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/statusEmail');
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 const createReminderNotifications = async () => {
   const today = new Date();
   const reminderDate = new Date(today);
