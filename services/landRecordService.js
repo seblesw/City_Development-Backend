@@ -3238,7 +3238,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "files",
           "plot_number",
           "createdAt",
-          "issue_date",
+          "issue_date"
         ],
       },
       {
