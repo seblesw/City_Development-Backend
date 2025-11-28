@@ -1,4 +1,4 @@
-const { createTaxSchedules, createLeaseSchedules, checkOverdueSchedules, getSchedulesService } = require('../services/paymentScheduleService');
+const { createTaxSchedules, createLeaseSchedules, checkOverdueSchedules, getSchedulesService, deleteSchedule } = require('../services/paymentScheduleService');
 
 const getSchedulesController = async (req, res) => {
   try {
@@ -89,10 +89,24 @@ const checkOverdueSchedulesController = async (req, res) => {
   }
 };
 
+const deleteScheduleController = async (req, res) => {
+  try {
+    const scheduleId = req.params.id;
+    const deleted = await deleteSchedule(scheduleId);
+    if (deleted) {
+      res.status(200).json({ success: true, message: 'Payment schedule deleted successfully' });
+    } else {
+      res.status(404).json({ error: 'Payment schedule not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
 module.exports = {
   createTaxSchedulesController,
   createLeaseSchedulesController,
   checkOverdueSchedulesController,
-  getSchedulesController
+  getSchedulesController,
+  deleteScheduleController
 };

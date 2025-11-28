@@ -114,7 +114,7 @@ const createReminderNotifications = async () => {
         // Enhanced message template with all context
         const dueDateFormatted = schedule.due_date.toLocaleDateString('am-ET');
         const amount = schedule.expected_amount.toLocaleString('en-ET');
-        const payerName = firstOwner.full_name || firstOwner.first_name;
+        const payerName =firstOwner.first_name && firstOwner.middle_name;
         const adminUnitName = adminUnit.name;
         const paymentType = landPayment.payment_type;
         
@@ -637,8 +637,9 @@ const sendPendingNotifications = async () => {
 
 // Email sending function
 const sendEmailNotification = async (notification, email) => {
+
   const subject = notification.notification_type === NOTIFICATION_TYPES.REMINDER 
-    ? `የክፍያ ማሳዎቂያ - ${notification.reminder_days_before} ቀናት የቀረው` 
+    ? `የክፍያ ማንቂያ - ${notification.reminder_days_before} ቀናት በፊት` 
     : 'ማስታወቂያ';
 
   const emailHtml = `
@@ -647,24 +648,18 @@ const sendEmailNotification = async (notification, email) => {
         <h2 style="color: #2e7d32; margin-bottom: 16px; border-bottom: 2px solid #2e7d32; padding-bottom: 8px;">
           ${subject}
         </h2>
-        <div style="font-size: 16px; color: #333; line-height: 1.6; margin-bottom: 24px;">
-          ${notification.message.replace(/\n/g, '<br>')}
-        </div>
-        <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; border-left: 4px solid #2e7d32;">
-          <strong>የክፍያ መረጃ፡</strong><br>
-          የማጠናቀቂያ ቀን፡ ${notification.metadata?.due_date ? new Date(notification.metadata.due_date).toLocaleDateString('am-ET') : 'N/A'}<br>
-          የክፍያ መጠን፡ ${notification.metadata?.expected_amount ? notification.metadata.expected_amount.toLocaleString('en-ET') : 'N/A'} ETB
+        <div style="font-size: 16px; color: #333; line-height: 1.6; margin-bottom: 24px; white-space: pre-line;">
+          ${notification.message}
         </div>
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
         <p style="font-size: 13px; color: #888;">
-          ይህ መልእክት ከከተማ ልማት አገልግሎት ተልኳል<br>
-          This message was sent by City Development Service.
+          ይህ መልእክት ከ ከተማና መሰረተ ልማት ተልኳል<br>
+          This message was sent by ${adminUnit} Service.
         </p>
       </div>
     </div>
   `;
 
-  // Replace with your email service
   await sendEmail({
     to: email,
     subject: subject,

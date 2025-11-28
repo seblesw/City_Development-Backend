@@ -561,9 +561,20 @@ const getSchedulesService = async () => {
   return schedules;
 };
 
+const deleteSchedule = async (scheduleId) => {
+  const schedule = await PaymentSchedule.findByPk(scheduleId);
+  if (!schedule) {
+    throw new Error('Payment schedule not found');
+  }
+  await schedule.update({ is_active: false });
+  return schedule;
+}
+
+
 module.exports = {
   createTaxSchedules,
   createLeaseSchedules,
   checkOverdueSchedules,
-  getSchedulesService
+  getSchedulesService,
+  deleteSchedule
 };
