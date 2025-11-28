@@ -52,13 +52,19 @@ const createTaxSchedulesController = async (req, res) => {
 const createLeaseSchedulesController = async (req, res) => {
   try {
     const { dueDate, description } = req.body;
+    const userAdminUnitId = req.user.administrative_unit_id;
+
     if (!dueDate) {
       return res.status(400).json({ error: 'የማጠናቀቂያ ጊዜ ያስገቡ' });
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return res.status(400).json({ error: 'የማጠናቀቂያ ጊዜ በ YYYY-MM-DD ቅርጸት መሆን አለበት' });
     }
-    const schedules = await createLeaseSchedules(dueDate, description || '');
+    if (!userAdminUnitId) {
+      return res.status(403).json({ error: 'የተጠቃሚ አስተዳደራዊ ክፍል አልተገኘም' });
+    }
+
+    const schedules = await createLeaseSchedules(dueDate, description || '', userAdminUnitId);
     res.status(201).json({
       success: true,
       message: `${schedules.length} የሊዝ ክፍያ ቀጠሮዎች ተፈጥሯል`,

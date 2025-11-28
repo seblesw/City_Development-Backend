@@ -109,7 +109,7 @@ const syncDatabase = async () => {
     // await db.sync({ force: });
     
     // Option 3: Alter sync (modifies tables to match model definitions)
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     
     console.log('Database synchronized successfully at', new Date().toISOString());
     return true;
@@ -181,15 +181,15 @@ const initializeCronJobs = () => {
   // });
 
   // Cron job for global notice notifications - Run daily at 10 AM
-  cron.schedule('* * * * *', async () => { 
-    try {
-      console.log('Running global notice notification creation at', new Date().toISOString());
-      const notifications = await createGlobalNoticeNotifications();
-      console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-    } catch (error) {
-      console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-    }
-  });
+  // cron.schedule('* * * * *', async () => { 
+  //   try {
+  //     console.log('Running global notice notification creation at', new Date().toISOString());
+  //     const notifications = await createGlobalNoticeNotifications();
+  //     console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+  //   } catch (error) {
+  //     console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+  //   }
+  // });
 
   // Cron job for sending notifications - Run every 5 minutes
   cron.schedule('* * * * *', async () => { 

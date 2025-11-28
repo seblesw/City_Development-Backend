@@ -4,7 +4,7 @@ const paymentScheduleController = require('../controllers/paymentScheduleControl
 const authMiddleware = require('../middlewares/authMiddleware');
 router.get('/', paymentScheduleController.getSchedulesController);
 router.post('/tax',authMiddleware.protect, paymentScheduleController.createTaxSchedulesController);
-router.post('/lease', paymentScheduleController.createLeaseSchedulesController);
+router.post('/lease',authMiddleware.protect, paymentScheduleController.createLeaseSchedulesController);
 router.post('/check-overdue', paymentScheduleController.checkOverdueSchedulesController);
 
 module.exports = router;

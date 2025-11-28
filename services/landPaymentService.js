@@ -78,8 +78,8 @@ const addNewPaymentService = async (landRecordId, user, paymentData = {}) => {
         if (paymentData.initial_payment) {
           updatedPaymentData.initial_payment = parseFloat(paymentData.initial_payment);
         }
-        if (paymentData.anual_payment) {
-          updatedPaymentData.anual_payment = parseFloat(paymentData.anual_payment);
+        if (paymentData.annual_payment) {
+          updatedPaymentData.annual_payment = parseFloat(paymentData.annual_payment);
         }
         if (paymentData.lease_year) {
           updatedPaymentData.lease_year = paymentData.lease_year;
@@ -180,7 +180,7 @@ const addNewPaymentService = async (landRecordId, user, paymentData = {}) => {
         parcel_number: landRecord.parcel_number,
         ...(existingTotal === 0 && {
           initial_payment: updatedPaymentData.initial_payment,
-          anual_payment: updatedPaymentData.anual_payment,
+          annual_payment: updatedPaymentData.annual_payment,
           lease_year: updatedPaymentData.lease_year,
           lease_payment_year: updatedPaymentData.lease_payment_year
         })
@@ -255,7 +255,7 @@ const createLandPaymentService = async (data, options = {}) => {
         remaining_amount: data.total_amount - data.paid_amount,
         lease_year: data.lease_year,
         lease_payment_year: data.lease_payment_year || 0,
-        anual_payment: data.anual_payment || 0,
+        annual_payment: data.annual_payment || 0,
         initial_payment: data.initial_payment || 0,
         currency: data.currency || "ETB",
         payment_status,

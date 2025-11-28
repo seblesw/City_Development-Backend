@@ -1,52 +1,151 @@
 const { LandPayment, PaymentSchedule, LandRecord, User, sequelize,PAYMENT_TYPES, PAYMENT_STATUSES, LAND_PREPARATION, LAND_USE_TYPES, AdministrativeUnit  } = require('../models');
 const {Op} = require('sequelize');
 
-const createLeaseSchedules = async (dueDate, description = '') => {
-  const landRecords = await LandRecord.findAll({
-    where: { ownership_type: 'LEASE' },
-    include: [
-      {
-        model: User,
-        as: 'owners',
-        through: { attributes: [] },
-      },
-    ],
-  });
-  if (!landRecords.length) {
-    throw new Error('በሊዝ ይዞታ የተያዘ የመሬት መዝገብ አልተገኘም');
+const createLeaseSchedules = async (dueDate, description = '', userAdminUnitId) => {
+  // Constants
+  const LEASE_CONSTANTS = {
+    GRACE_PERIOD_DAYS: 15,
+    PENALTY_RATE: 0.07,
+    CURRENCY: 'ETB'
+  };
+
+  // First, verify the user's administrative unit exists
+  const userAdminUnit = await AdministrativeUnit.findByPk(userAdminUnitId);
+  if (!userAdminUnit) {
+    throw new Error('የተጠቃሚው አስተዳደራዊ ክፍል አልተገኘም');
   }
 
-  const schedules = [];
-  for (const landRecord of landRecords) {
-    if (!landRecord.owners || !landRecord.owners.length) {
-      throw new Error(`የ መዝገብ ቁጥር ${landRecord.id} ለመሬት ባለቤት አልተገኘም`);
-    }
-    const firstOwner = landRecord.owners[0];
-    const leaseRate = 5;
-    const expectedAmount = Number((landRecord.area * leaseRate).toFixed(2));
-
-    const landPayment = await LandPayment.create({
-      land_record_id: landRecord.id,
+  // Get land payments directly for lease payments in the user's admin unit with annual_payment > 0
+  const landPayments = await LandPayment.findAll({
+    where: {
       payment_type: PAYMENT_TYPES.LEASE_PAYMENT,
-      total_amount: 0,
-      paid_amount: 0,
-      remaining_amount: 0,
-      payment_status: PAYMENT_STATUSES.PENDING,
-      currency: 'ETB',
-      payer_id: firstOwner.id,
-    });
+      annual_payment: { 
+        [Op.gt]: 0 
+      }
+    },
+    include: [
+      {
+        model: LandRecord,
+        as: 'landRecord',
+        where: {
+          administrative_unit_id: userAdminUnitId,
+          land_preparation: 'ሊዝ' 
+        },
+        required: true,
+        include: [
+          {
+            model: User,
+            as: 'owners',
+            through: { attributes: [] },
+            required: true,
+          },
+          {
+            model: AdministrativeUnit,
+            as: 'administrativeUnit',
+            attributes: ['id', 'unit_level', 'name']
+          }
+        ]
+      }
+    ]
+  });
 
-    const schedule = await PaymentSchedule.create({
-      land_payment_id: landPayment.id,
-      expected_amount: expectedAmount,
-      due_date: new Date(dueDate),
-      grace_period_days: 15,
-      penalty_rate: 0.07,
-      is_active: true,
-      description,
-    });
+  if (!landPayments.length) {
+    throw new Error(`በ${userAdminUnit.name} አስተዳደራዊ ክፍል ውስጥ የሊዝ ክፍያዎች ከዜሮ በላይ ዓመታዊ ክፍያ ያላቸው አልተገኙም`);
+  }
 
-    schedules.push(schedule);
+  console.log(`Found ${landPayments.length} lease payments with annual payment > 0 in ${userAdminUnit.name}`);
+
+  const schedules = [];
+  let processedCount = 0;
+  let skippedCount = 0;
+
+  for (const landPayment of landPayments) {
+    try {
+      const landRecord = landPayment.landRecord;
+      const firstOwner = landRecord.owners[0];
+      
+      // Use the annual_payment from the existing land payment
+      const expectedAmount = landPayment.annual_payment;
+
+      // Double-check that annual_payment is valid
+      if (!expectedAmount || expectedAmount <= 0) {
+        console.warn(`⏭️  Land Payment ${landPayment.id}: Invalid annual payment (${expectedAmount}), skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      // Check if there's already an active schedule for this payment to avoid duplicates
+      const existingSchedule = await PaymentSchedule.findOne({
+        where: {
+          land_payment_id: landPayment.id,
+          is_active: true,
+          due_date: new Date(dueDate) 
+        }
+      });
+
+      if (existingSchedule) {
+        console.warn(`⏭️  Land Payment ${landPayment.id}: Active schedule already exists for due date ${dueDate}, skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      // Update the land payment status to PENDING
+      await LandPayment.update({
+        payment_status: PAYMENT_STATUSES.PENDING,
+        last_updated: new Date()
+      }, {
+        where: { id: landPayment.id }
+      });
+
+      // Create PaymentSchedule record linked to existing land payment
+      const schedule = await PaymentSchedule.create({
+        land_payment_id: landPayment.id,
+        expected_amount: expectedAmount,
+        due_date: new Date(dueDate),
+        grace_period_days: LEASE_CONSTANTS.GRACE_PERIOD_DAYS,
+        penalty_rate: LEASE_CONSTANTS.PENALTY_RATE,
+        is_active: true,
+        description: description || `ዓመታዊ የሊዝ ክፍያ - ${userAdminUnit.name} - ዓመታዊ ክፍያ ${expectedAmount} ETB`,
+        calculation_metadata: {
+          source: 'existing_land_payment_annual',
+          annualPayment: expectedAmount,
+          landPreparation: landRecord.land_preparation,
+          administrativeUnit: {
+            id: userAdminUnit.id,
+            name: userAdminUnit.name,
+            level: userAdminUnit.unit_level
+          },
+          createdByAdminUnit: userAdminUnitId,
+          landRecordId: landRecord.id,
+          originalLandPaymentId: landPayment.id,
+          paymentDetails: {
+            initial_payment: landPayment.initial_payment,
+            total_amount: landPayment.total_amount,
+            paid_amount: landPayment.paid_amount
+          }
+        }
+      });
+
+      schedules.push(schedule);
+      processedCount++;
+      
+      console.log(`✅ Created lease schedule for land payment ${landPayment.id}: ETB ${expectedAmount}`);
+
+    } catch (error) {
+      console.error(`❌ Error creating lease schedule for land payment ${landPayment.id}:`, error.message);
+      skippedCount++;
+      continue;
+    }
+  }
+
+  console.log(`Lease schedule creation completed:
+    - Total valid lease payments: ${landPayments.length}
+    - Successfully processed: ${processedCount}
+    - Skipped: ${skippedCount}
+    - Admin Unit: ${userAdminUnit.name}`);
+
+  if (schedules.length === 0) {
+    throw new Error(`በ${userAdminUnit.name} አስተዳደራዊ ክፍል ውስጥ ምንም የሊዝ ክፍያ መርሃ ግብር አልተፈጠረም`);
   }
 
   return schedules;
