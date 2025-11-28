@@ -113,7 +113,7 @@ const createReminderNotifications = async () => {
             notification_type: NOTIFICATION_TYPES.REMINDER,
             message,
             recipients: recipient,
-            delivery_status: 'PENDING', // Changed to PENDING to be sent by sender
+            delivery_status: 'PENDING', 
             reminder_days_before: daysBefore,
             description: `የክፍያ መርሃ ግብር ማንቂያ (${daysBefore} ቀናት ቀደምት) - የመርሃ ግብር ቁጥር: ${schedule.id}`,
             metadata: {
@@ -512,8 +512,8 @@ const sendPendingNotifications = async () => {
         { retry_count: null }
       ]
     },
-    limit: 50, // Process in batches to avoid overload
-    order: [['createdAt', 'ASC']] // Process oldest first
+    limit: 50, 
+    order: [['createdAt', 'ASC']] 
   });
 
   console.log(`📤 Found ${notifications.length} pending notifications to send`);
@@ -573,7 +573,7 @@ const sendPendingNotifications = async () => {
 // Email sending function
 const sendEmailNotification = async (notification, email) => {
   const subject = notification.notification_type === NOTIFICATION_TYPES.REMINDER 
-    ? `የክፍያ ማስጠንቀቂያ - ${notification.reminder_days_before} ቀናት ቀደምት` 
+    ? `የክፍያ ማሳዎቂያ - ${notification.reminder_days_before} ቀናት የቀረው` 
     : 'ማስታወቂያ';
 
   const emailHtml = `
