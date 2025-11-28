@@ -1,4 +1,4 @@
-const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize, Sequelize, PAYMENT_STATUSES } = require('../models');
+const { PaymentNotification, PaymentSchedule, LandPayment, LandRecord, PAYMENT_TYPES, NOTIFICATION_TYPES, User, GlobalNoticeSchedule, sequelize, Sequelize, PAYMENT_STATUSES, AdministrativeUnit } = require('../models');
 const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/statusEmail');
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -53,6 +53,11 @@ const createReminderNotifications = async () => {
                     through: { attributes: [] },
                     required: true,
                   },
+                  {
+                    model: AdministrativeUnit,
+                    as: 'administrativeUnit',
+                    required: true,
+                  },
                 ],
               },
             ],
@@ -67,9 +72,15 @@ const createReminderNotifications = async () => {
         const landPayment = schedule.landPayment;
         const landRecord = landPayment.landRecord;
         const firstOwner = landRecord.owners[0];
+        const adminUnit = landRecord.administrativeUnit;
         
         if (!firstOwner) {
           console.warn(`⏭️ Schedule ${schedule.id}: No owner found, skipping`);
+          continue;
+        }
+
+        if (!adminUnit) {
+          console.warn(`⏭️ Schedule ${schedule.id}: No administrative unit found, skipping`);
           continue;
         }
 
@@ -100,11 +111,29 @@ const createReminderNotifications = async () => {
           continue;
         }
 
-        // Enhanced message template
+        // Enhanced message template with all context
         const dueDateFormatted = schedule.due_date.toLocaleDateString('am-ET');
         const amount = schedule.expected_amount.toLocaleString('en-ET');
+        const payerName = firstOwner.full_name || firstOwner.first_name;
+        const adminUnitName = adminUnit.name;
+        const paymentType = landPayment.payment_type;
         
-        const message = getReminderMessage(schedule, daysBefore, dueDateFormatted, amount);
+        // Include land record context for more detailed messages
+        const landRecordInfo = {
+          landUse: landRecord.land_use,
+          area: landRecord.area
+        };
+
+        const message = getReminderMessage(
+          schedule, 
+          daysBefore, 
+          dueDateFormatted, 
+          amount,
+          paymentType,
+          payerName,
+          adminUnitName,
+          landRecordInfo
+        );
 
         const notification = await PaymentNotification.create(
           {
@@ -120,15 +149,20 @@ const createReminderNotifications = async () => {
               reminder_type: `${daysBefore}_days_before`,
               due_date: schedule.due_date,
               expected_amount: schedule.expected_amount,
+              payment_type: paymentType,
+              payer_name: payerName,
+              administrative_unit: adminUnitName,
               land_use: landRecord.land_use,
-              administrative_unit: landRecord.administrativeUnit?.name || 'Unknown',
+              land_area: landRecord.area,
+              land_preparation: landRecord.land_preparation,
+              admin_unit_id: adminUnit.id
             }
           },
           { transaction }
         );
 
         notifications.push(notification);
-        console.log(`✅ Created reminder notification for schedule ${schedule.id} (${daysBefore} days before)`);
+        console.log(`✅ Created reminder notification for schedule ${schedule.id} (${daysBefore} days before) - ${paymentType} - ${payerName}`);
       }
     }
 
@@ -143,48 +177,79 @@ const createReminderNotifications = async () => {
 };
 
 // Helper function for message templates
-const getReminderMessage = (schedule, daysBefore, dueDateFormatted, amount) => {
-  const messages = {
-    30: `ውድ የከተማ ልማት አገልግሎት ተጠቃሚ፣
+const getReminderMessage = (schedule, daysBefore, dueDateFormatted, amount, paymentType, payerName, adminUnitName) => {
+  // Payment type translations
+  const paymentTypeAmharic = {
+    'TAX': 'ግብር',
+    'LEASE_PAYMENT': 'ሊዝ',
+    'LEASE': 'ሊዝ'
+  };
 
-የግብር ክፍያዎ በ${dueDateFormatted} (ከ30 ቀናት በኋላ) መክፈል አለበት። 
+  const paymentTypeText = paymentTypeAmharic[paymentType] || paymentType;
+  
+  // Format payer name for greeting
+  const greetingName = payerName ? ` ${payerName}` : ' ተጠቃሚ';
+
+  const messages = {
+    30: `ውድ${greetingName}፣
+
+የ${paymentTypeText} ክፍያዎ በ${dueDateFormatted} (ከ30 ቀናት በኋላ) መክፈል አለበት። 
 የክፍያ መጠን፡ ${amount} ብር።
 
-ለማንኛውም ጥያቄ ከአገልግሎት መስክ ያነጋግሩ።
+ለማንኛውም ጥያቄ ከ${adminUnitName} አስተዳደራዊ ክፍል ያነጋግሩ።
 
 ከሰላምታ ጋር፣
-ከተማ ልማት አገልግሎት`,
+${adminUnitName}`,
 
-    15: `ውድ ተጠቃሚ፣
+    15: `ውድ${greetingName}፣
 
-የግብር ክፍያዎ በ${dueDateFormatted} (ከ15 ቀናት በኋላ) መክፈል አለበት። 
+የ${paymentTypeText} ክፍያዎ በ${dueDateFormatted} (ከ15 ቀናት በኋላ) መክፈል አለበት። 
 የክፍያ መጠን፡ ${amount} ብር።
 
-እባክዎ ጊዜውን ያስታውሱ።`,
+እባክዎ ጊዜውን ያስታውሱ።
+
+${adminUnitName}`,
 
     7: `አስፈላጊ ማስታወሻ፡ 
 
-የግብር ክፍያዎ ከ7 ቀናት በኋላ በ${dueDateFormatted} ይጠናቀቃል። 
+ውድ${greetingName}፣
+
+የ${paymentTypeText} ክፍያዎ ከ7 ቀናት በኋላ በ${dueDateFormatted} ይጠናቀቃል። 
 የክፍያ መጠን፡ ${amount} ብር።
 
-እባክዎ ክፍያውን በጊዜው ያከናውኑ።`,
+እባክዎ ክፍያውን በጊዜው ያከናውኑ።
+
+${adminUnitName}`,
 
     3: `አጽንኦት ማስታወሻ፡ 
 
-የግብር ክፍያዎ ከ3 ቀናት በኋላ በ${dueDateFormatted} ይጠናቀቃል። 
+ውድ${greetingName}፣
+
+የ${paymentTypeText} ክፍያዎ ከ3 ቀናት በኋላ በ${dueDateFormatted} ይጠናቀቃል። 
 የክፍያ መጠን፡ ${amount} ብር።
 
-ጊዜ ካለፈ ቅጣት ይተገበራል።`,
+ጊዜ ካለፈ ቅጣት ይተገበራል።
+
+${adminUnitName}`,
 
     1: `የመጨረሻ ማስጠንቀቂያ፡ 
 
-የግብር ክፍያዎ ነገ በ${dueDateFormatted} ይጠናቀቃል! 
+ውድ${greetingName}፣
+
+የ${paymentTypeText} ክፍያዎ ነገ በ${dueDateFormatted} ይጠናቀቃል! 
 የክፍያ መጠን፡ ${amount} ብር። 
 
-ጊዜ ካለፈ ቅጣት ይተገበራል። እባክዎ ዛሬ በማክናውን ያከናውኑ።`
+ጊዜ ካለፈ ቅጣት ይተገበራል። እባክዎ ዛሬ በማክናውን ያከናውኑ።
+
+${adminUnitName}`
   };
   
-  return messages[daysBefore] || `የግብር ክፍያዎ በ${dueDateFormatted} መክፈል አለበት። የክፍያ መጠን፡ ${amount} ብር።`;
+  return messages[daysBefore] || `ውድ${greetingName}፣
+
+የ${paymentTypeText} ክፍያዎ በ${dueDateFormatted} መክፈል አለበት። 
+የክፍያ መጠን፡ ${amount} ብር።
+
+${adminUnitName}`;
 };
 
 const createOverdueNotifications = async () => {
