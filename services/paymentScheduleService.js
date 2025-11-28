@@ -52,31 +52,18 @@ const createLeaseSchedules = async (dueDate, description = '') => {
   return schedules;
 };
 
-const createTaxSchedules = async (dueDate, description = '') => {
-  const landRecords = await LandRecord.findAll({
-    include: [
-      {
-        model: User,
-        as: 'owners',
-        through: { attributes: [] },
-      },
-      {
-        model: AdministrativeUnit,
-        as: 'administrativeUnit',
-        attributes: ['id', 'unit_level', 'name'] 
-      }
-    ],
-  });
+const createTaxSchedules = async (dueDate, description = '', userAdminUnitId) => {
+  // Constants
+  const TAX_CONSTANTS = {
+    GRACE_PERIOD_DAYS: 15,
+    PENALTY_RATE: 0.07,
+    CURRENCY: 'ETB',
+    LAND_PREPARATION_EXISTING: "ነባር"
+  };
 
-  
-  if (!landRecords.length) {
-    throw new Error('የመሬት መዝገብ አልተገኘም');
-  }
-  const schedules = [];
-  
-  // Define tax rate tables per square meter (ETB) - USING AMHARIC LAND USE TYPES
+  // Define tax rate tables per square meter (ETB)
   const TAX_RATES = {
-    "መኖሪያ": { // RESIDENTIAL
+    "መኖሪያ": {
       1: { 1: 4.0, 2: 3.0, 3: 2.5, 4: 2.0, 5: 1.5 },
       2: { 1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0 },
       3: { 1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0 },
@@ -84,8 +71,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       5: { 1: 2.0, 2: 2.0, 3: 1.5, 4: 1.0, 5: 1.0 },
       6: { 1: 2.0, 2: 2.0, 3: 1.0, 4: 1.0, 5: 1.0 }
     },
-    
-    "ንግድ": { // COMMERCIAL
+    "ንግድ": {
       1: { 1: 8.0, 2: 6.0, 3: 5.0, 4: 4.0, 5: 3.0 },
       2: { 1: 6.0, 2: 5.0, 3: 4.0, 4: 3.0, 5: 2.0 },
       3: { 1: 6.0, 2: 5.0, 3: 4.0, 4: 3.0, 5: 2.0 },
@@ -93,8 +79,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       5: { 1: 4.0, 2: 4.0, 3: 3.0, 4: 2.0, 5: 2.0 },
       6: { 1: 4.0, 2: 4.0, 3: 2.0, 4: 2.0, 5: 2.0 }
     },
-    
-    "ኢንዱስትሪ": { // INDUSTRIAL
+    "ኢንዱስትሪ": {
       1: { 1: 6.0, 2: 5.0, 3: 4.0, 4: 3.0, 5: 2.5 },
       2: { 1: 5.0, 2: 4.0, 3: 3.0, 4: 2.5, 5: 2.0 },
       3: { 1: 5.0, 2: 4.0, 3: 3.0, 4: 2.5, 5: 2.0 },
@@ -102,8 +87,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       5: { 1: 3.0, 2: 3.0, 3: 2.5, 4: 2.0, 5: 2.0 },
       6: { 1: 3.0, 2: 3.0, 3: 2.0, 4: 2.0, 5: 2.0 }
     },
-    
-    "መንግስታዊ ተቋማት": { // GOVERNMENT_ORGANIZATION
+    "መንግስታዊ ተቋማት": {
       1: { 1: 2.0, 2: 1.5, 3: 1.0, 4: 0.8, 5: 0.5 },
       2: { 1: 1.5, 2: 1.0, 3: 0.8, 4: 0.5, 5: 0.3 },
       3: { 1: 1.5, 2: 1.0, 3: 0.8, 4: 0.5, 5: 0.3 },
@@ -111,8 +95,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       5: { 1: 1.0, 2: 1.0, 3: 0.5, 4: 0.3, 5: 0.3 },
       6: { 1: 1.0, 2: 1.0, 3: 0.3, 4: 0.3, 5: 0.3 }
     },
-    
-    "ማህበራዊ አገልግሎት": { // SERVICE
+    "ማህበራዊ አገልግሎት": {
       1: { 1: 5.0, 2: 4.0, 3: 3.5, 4: 3.0, 5: 2.5 },
       2: { 1: 4.0, 2: 3.5, 3: 3.0, 4: 2.5, 5: 2.0 },
       3: { 1: 4.0, 2: 3.5, 3: 3.0, 4: 2.5, 5: 2.0 },
@@ -120,8 +103,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       5: { 1: 3.0, 2: 3.0, 3: 2.5, 4: 2.0, 5: 2.0 },
       6: { 1: 3.0, 2: 3.0, 3: 2.0, 4: 2.0, 5: 2.0 }
     },
-    
-    "ከተማ ግብርና": { // URBAN_AGRICULTURE
+    "ከተማ ግብርና": {
       1: { 1: 1.0, 2: 0.8, 3: 0.6, 4: 0.5, 5: 0.4 },
       2: { 1: 0.8, 2: 0.6, 3: 0.5, 4: 0.4, 5: 0.3 },
       3: { 1: 0.8, 2: 0.6, 3: 0.5, 4: 0.4, 5: 0.3 },
@@ -130,6 +112,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
       6: { 1: 0.6, 2: 0.6, 3: 0.3, 4: 0.3, 5: 0.3 }
     }
   };
+
   // Helper function to get effective unit level for rate grouping
   const getEffectiveUnitLevel = (unitLevel) => {
     switch (unitLevel) {
@@ -137,10 +120,10 @@ const createTaxSchedules = async (dueDate, description = '') => {
         return 1;
       case 2:
       case 3:
-        return 2; 
+        return 2;
       case 4:
       case 5:
-        return 4; 
+        return 4;
       case 6:
         return 6;
       default:
@@ -151,7 +134,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
   // Helper function to calculate amount per area
   const getAmountPerArea = (landRecord) => {
     const { land_use, land_level, administrativeUnit } = landRecord;
-        
+
     if (!administrativeUnit) {
       throw new Error('Administrative unit information is required');
     }
@@ -164,7 +147,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
     }
 
     // Handle unit level grouping
-    const effectiveUnitLevel = getEffectiveUnitLevel(unitLevel);    
+    const effectiveUnitLevel = getEffectiveUnitLevel(unitLevel);
     const levelRates = landUseRates[effectiveUnitLevel];
 
     if (!levelRates) {
@@ -172,7 +155,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
     }
 
     const amount = levelRates[land_level];
-    
+
     if (amount === undefined) {
       throw new Error(`No tax rate for land level ${land_level}, unit level ${effectiveUnitLevel}, land use ${land_use}`);
     }
@@ -182,9 +165,8 @@ const createTaxSchedules = async (dueDate, description = '') => {
 
   // Helper function to calculate expected amount
   const calculateExpectedAmount = (landRecord) => {
-    
     // Only calculate for "ነባር" (existing) land preparations
-    if (landRecord.land_preparation !== "ነባር") {
+    if (landRecord.land_preparation !== TAX_CONSTANTS.LAND_PREPARATION_EXISTING) {
       return 0;
     }
 
@@ -193,31 +175,89 @@ const createTaxSchedules = async (dueDate, description = '') => {
     const result = Number(annualTax.toFixed(2));
     return result;
   };
-  
+
+  // Helper function to handle land record errors
+  const handleLandRecordError = (landRecordId, error, operation) => {
+    console.error(`Failed to ${operation} for land record ${landRecordId}:`, error.message);
+  };
+
+  // Start processing
+  console.log(`Starting tax schedule creation for admin unit: ${userAdminUnitId}`);
+
+  // First, verify the user's administrative unit exists and get its details
+  const userAdminUnit = await AdministrativeUnit.findByPk(userAdminUnitId);
+  if (!userAdminUnit) {
+    throw new Error('የተጠቃሚው አስተዳደራዊ ክፍል አልተገኘም');
+  }
+
+  // Get land records only from the user's administrative unit
+  const landRecords = await LandRecord.findAll({
+    where: {
+      administrative_unit_id: userAdminUnitId
+    },
+    include: [
+      {
+        model: User,
+        as: 'owners',
+        through: { attributes: [] },
+      },
+      {
+        model: AdministrativeUnit,
+        as: 'administrativeUnit',
+        attributes: ['id', 'unit_level', 'name']
+      }
+    ],
+  });
+
+  if (!landRecords.length) {
+    throw new Error(`በ${userAdminUnit.name} አስተዳደራዊ ክፍል ውስጥ የመሬት መዝገብ አልተገኘም`);
+  }
+
+  console.log(`Found ${landRecords.length} land records in ${userAdminUnit.name}`);
+
+  const schedules = [];
+  let processedCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  // Process each land record
   for (const landRecord of landRecords) {
-    
-    if (!landRecord.owners || !landRecord.owners.length) {
-      console.warn(`⏭️  Record ${landRecord.id}: No owner, skipping`);
-      continue;
-    }
-
-    if (!landRecord.administrativeUnit) {
-      continue;
-    }
-
-    const firstOwner = landRecord.owners[0];
-    
     try {
+      // Skip records without owners
+      if (!landRecord.owners || !landRecord.owners.length) {
+        console.warn(`⏭️  Record ${landRecord.id}: No owner, skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      // Double-check admin unit match (should already be filtered by query)
+      if (landRecord.administrative_unit_id !== userAdminUnitId) {
+        console.warn(`⏭️  Record ${landRecord.id}: Admin unit mismatch, skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      if (!landRecord.administrativeUnit) {
+        console.warn(`⏭️  Record ${landRecord.id}: No administrative unit, skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      const firstOwner = landRecord.owners[0];
+
       // Calculate expected amount using the robust calculation
       const expectedAmount = calculateExpectedAmount(landRecord);
-      
+
       // Skip if no tax is applicable (non-existing land preparation)
       if (expectedAmount <= 0) {
+        console.log(`⏭️  Record ${landRecord.id}: No tax applicable (land preparation: ${landRecord.land_preparation}), skipping`);
+        skippedCount++;
         continue;
       }
 
       const amountPerArea = getAmountPerArea(landRecord);
-      
+
+      // Create LandPayment record
       const landPayment = await LandPayment.create({
         land_record_id: landRecord.id,
         payment_type: PAYMENT_TYPES.TAX,
@@ -225,7 +265,7 @@ const createTaxSchedules = async (dueDate, description = '') => {
         paid_amount: 0,
         remaining_amount: expectedAmount,
         payment_status: PAYMENT_STATUSES.PENDING,
-        currency: 'ETB',
+        currency: TAX_CONSTANTS.CURRENCY,
         payer_id: firstOwner.id,
         calculation_details: {
           area: landRecord.area,
@@ -235,18 +275,24 @@ const createTaxSchedules = async (dueDate, description = '') => {
           amountPerArea: amountPerArea,
           landPreparation: landRecord.land_preparation,
           calculationDate: new Date(),
-          formula: 'area * amount_per_area'
+          formula: 'area * amount_per_area',
+          administrativeUnit: {
+            id: userAdminUnit.id,
+            name: userAdminUnit.name,
+            level: userAdminUnit.unit_level
+          }
         }
       });
 
+      // Create PaymentSchedule record
       const schedule = await PaymentSchedule.create({
         land_payment_id: landPayment.id,
         expected_amount: expectedAmount,
         due_date: new Date(dueDate),
-        grace_period_days: 15,
-        penalty_rate: 0.07,
+        grace_period_days: TAX_CONSTANTS.GRACE_PERIOD_DAYS,
+        penalty_rate: TAX_CONSTANTS.PENALTY_RATE,
         is_active: true,
-        description: description || `ዓመታዊ የመሬት ግብር - ${landRecord.land_use} - ደረጃ ${landRecord.land_level}`,
+        description: description || `ዓመታዊ የመሬት ግብር - ${userAdminUnit.name} - ${landRecord.land_use} - ደረጃ ${landRecord.land_level}`,
         calculation_metadata: {
           area: landRecord.area,
           landUse: landRecord.land_use,
@@ -255,22 +301,38 @@ const createTaxSchedules = async (dueDate, description = '') => {
           amountPerArea: amountPerArea,
           effectiveUnitLevel: getEffectiveUnitLevel(landRecord.administrativeUnit.unit_level),
           formula: 'area * amount_per_area',
-          landPreparation: landRecord.land_preparation
+          landPreparation: landRecord.land_preparation,
+          administrativeUnit: {
+            id: userAdminUnit.id,
+            name: userAdminUnit.name,
+            level: userAdminUnit.unit_level
+          },
+          createdByAdminUnit: userAdminUnitId
         }
       });
 
       schedules.push(schedule);
-      
+      processedCount++;
+
+      console.log(`✅ Created tax schedule for land record ${landRecord.id}: ETB ${expectedAmount}`);
 
     } catch (error) {
+      errorCount++;
+      handleLandRecordError(landRecord.id, error, 'create tax schedule');
       continue;
     }
   }
 
-  
-  if (schedules.length === 0) {
+  // Final summary
+  console.log(`Tax schedule creation completed:
+    - Total land records: ${landRecords.length}
+    - Successfully processed: ${processedCount}
+    - Skipped: ${skippedCount}
+    - Errors: ${errorCount}
+    - Admin Unit: ${userAdminUnit.name}`);
 
-    throw new Error('ምንም የክፍያ መርሃ ግብር አልተፈጠረም');
+  if (schedules.length === 0) {
+    throw new Error(`በ${userAdminUnit.name} አስተዳደራዊ ክፍል ውስጥ ምንም የክፍያ መርሃ ግብር አልተፈጠረም`);
   }
 
   return schedules;

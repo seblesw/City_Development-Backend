@@ -12,19 +12,39 @@ const getSchedulesController = async (req, res) => {
 const createTaxSchedulesController = async (req, res) => {
   try {
     const { dueDate, description } = req.body;
+    const userAdminUnitId = req.user.administrative_unit_id;
+
+    // Input validation
     if (!dueDate) {
       return res.status(400).json({ error: 'የማጠናቀቂያ ጊዜ ያስገቡ' });
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return res.status(400).json({ error: 'የማጠናቀቂያ ጊዜ በ YYYY-MM-DD ቅርጸት መሆን አለበት' });
     }
-    const schedules = await createTaxSchedules(dueDate, description || '');
+    if (!userAdminUnitId) {
+      return res.status(403).json({ error: 'የተጠቃሚ አስተዳደራዊ ክፍል አልተገኘም' });
+    }
+
+    // Validate due date is in the future
+    const dueDateObj = new Date(dueDate);
+    if (dueDateObj <= new Date()) {
+      return res.status(400).json({ error: 'የማጠናቀቂያ ጊዜ የወደፊት ቀን መሆን አለበት' });
+    }
+
+    const schedules = await createTaxSchedules(dueDate, description || '', userAdminUnitId);
+    
     res.status(201).json({
       success: true,
-      message: `${schedules.length} የግብር ክፍያ ቀጠሮዎች ተፈጥሯል`,
-      schedules,
+      message: `${schedules.length} የግብር ክፍያ ቀጠሮዎች በ${req.user.administrativeUnit?.name || 'የእርስዎ'} አስተዳደራዊ ክፍል ተፈጥሯል`,
+      schedules: schedules.map(schedule => ({
+        id: schedule.id,
+        expected_amount: schedule.expected_amount,
+        due_date: schedule.due_date,
+        description: schedule.description
+      })),
     });
   } catch (error) {
+    console.error('Tax schedule creation error:', error);
     res.status(500).json({ error: error.message });
   }
 };
