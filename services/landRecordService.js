@@ -2328,6 +2328,9 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "phone_number",
             "profile_picture",
             "address",
+            "gender",
+            "marital_status",
+            "relationship_type"
           ],
           paranoid: !includeDeleted,
         },
@@ -2368,6 +2371,10 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "issue_date",
             "isActive",
             "files",
+            "verified_plan_number",
+            "preparer_name",
+            "verifier_name",
+            "approver_name",
             "createdAt",
           ],
           where: includeDeleted ? {} : { deletedAt: null },
@@ -2641,7 +2648,8 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           "email",
           "phone_number",
           "national_id",
-          "profile_picture"
+          "profile_picture",
+          "address"
         ],
       },
       {

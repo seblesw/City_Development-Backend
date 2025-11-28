@@ -139,7 +139,7 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      verifyer_name: {
+      verifier_name: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
