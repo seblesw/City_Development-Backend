@@ -69,7 +69,6 @@ const createLeaseSchedules = async (dueDate, description = '', userAdminUnitId) 
 
       // Double-check that annual_payment is valid
       if (!expectedAmount || expectedAmount <= 0) {
-        console.warn(`⏭️  Land Payment ${landPayment.id}: Invalid annual payment (${expectedAmount}), skipping`);
         skippedCount++;
         continue;
       }
@@ -84,7 +83,6 @@ const createLeaseSchedules = async (dueDate, description = '', userAdminUnitId) 
       });
 
       if (existingSchedule) {
-        console.warn(`⏭️  Land Payment ${landPayment.id}: Active schedule already exists for due date ${dueDate}, skipping`);
         skippedCount++;
         continue;
       }
@@ -324,20 +322,17 @@ const createTaxSchedules = async (dueDate, description = '', userAdminUnitId) =>
     try {
       // Skip records without owners
       if (!landRecord.owners || !landRecord.owners.length) {
-        console.warn(`⏭️  Record ${landRecord.id}: No owner, skipping`);
         skippedCount++;
         continue;
       }
 
       // Double-check admin unit match (should already be filtered by query)
       if (landRecord.administrative_unit_id !== userAdminUnitId) {
-        console.warn(`⏭️  Record ${landRecord.id}: Admin unit mismatch, skipping`);
         skippedCount++;
         continue;
       }
 
       if (!landRecord.administrativeUnit) {
-        console.warn(`⏭️  Record ${landRecord.id}: No administrative unit, skipping`);
         skippedCount++;
         continue;
       }
@@ -349,7 +344,6 @@ const createTaxSchedules = async (dueDate, description = '', userAdminUnitId) =>
 
       // Skip if no tax is applicable (non-existing land preparation)
       if (expectedAmount <= 0) {
-        console.log(`⏭️  Record ${landRecord.id}: No tax applicable (land preparation: ${landRecord.land_preparation}), skipping`);
         skippedCount++;
         continue;
       }
@@ -440,102 +434,162 @@ const createTaxSchedules = async (dueDate, description = '', userAdminUnitId) =>
 const checkOverdueSchedules = async (testDate = null) => {
   const today = testDate ? new Date(testDate) : new Date();  
   
-  const maxDueDate = new Date(today);
-  maxDueDate.setDate(maxDueDate.getDate() - 15); 
+  console.log(`🔍 [PENALTY CHECK] Starting at: ${today.toISOString()}`);
   
+  // Remove the 15-day filter - check ALL schedules past due date
   const schedules = await PaymentSchedule.findAll({
     where: {
       is_active: true,
-      due_date: { [Op.lt]: maxDueDate },
+      due_date: { [Op.lt]: today }, // All schedules with due date in the past
+      related_schedule_id: { [Op.is]: null } // Only original schedules, not penalties
     },
     include: [
       {
         model: LandPayment,
         as: 'landPayment',
+        required: true,
+        where: {
+          payment_status: { [Op.in]: [PAYMENT_STATUSES.PENDING, PAYMENT_STATUSES.PARTIAL] }
+        },
         include: [
           {
             model: LandRecord,
             as: 'landRecord',
-            include: [{ model: User, as: 'owners', through: { attributes: [] } }],
+            required: true,
+            include: [
+              { 
+                model: User, 
+                as: 'owners', 
+                through: { attributes: [] },
+                required: true 
+              }
+            ],
           },
         ],
       },
     ],
   });
-  
+
+  console.log(`🔍 [PENALTY CHECK] Found ${schedules.length} schedules with past due dates`);
 
   const penaltySchedules = [];
   const transaction = await sequelize.transaction();
+  
   try {
     for (const schedule of schedules) {
-      const existingPenalty = await PaymentSchedule.findOne({
-        where: { related_schedule_id: schedule.id, is_active: true },
-        transaction,
-      });
-      if (existingPenalty) {
-        
-        continue;
-      }
-
       const graceEnd = new Date(schedule.due_date);
       graceEnd.setDate(graceEnd.getDate() + schedule.grace_period_days);
       
+      // Skip if still within grace period
+      if (today <= graceEnd) {
+        continue;
+      }
+
+      // Check if penalty already exists for this schedule
+      const existingPenalty = await PaymentSchedule.findOne({
+        where: { 
+          related_schedule_id: schedule.id, 
+          is_active: true 
+        },
+        transaction,
+      });
+      
+      if (existingPenalty) {
+        continue;
+      }
 
       const landPayment = schedule.landPayment;
       const landRecord = landPayment.landRecord;
       const firstOwner = landRecord.owners[0];
-      if (!firstOwner) {
-        
-        continue;
-      }
-
-      const remaining = Number(schedule.expected_amount) - Number(landPayment.paid_amount);
-      if (remaining <= 0) {
-        
-        continue;
-      }
-
-      const overdueDays = Math.floor((today - graceEnd) / (1000 * 60 * 60 * 24));
-      const overdueMonths = Math.max(1, Math.floor(overdueDays / 30));
-      const penalty = Number((remaining * schedule.penalty_rate * overdueMonths).toFixed(2));
       
-
-      if (penalty > 0) {
-        const penaltyPayment = await LandPayment.create({
-          land_record_id: landRecord.id,
-          payment_type: PAYMENT_TYPES.PENALTY,
-          total_amount: 0,
-          paid_amount: 0,
-          remaining_amount: 0,
-          penality_amount: penalty,
-          penality_rate: schedule.penalty_rate,
-          penalty_reason: `Overdue schedule ID ${schedule.id} (${landPayment.payment_type})`,
-          payment_status: PAYMENT_STATUSES.PENDING,
-          currency: 'ETB',
-          payer_id: firstOwner.id,
-        }, { transaction });
-
-        const penaltySchedule = await PaymentSchedule.create({
-          land_payment_id: penaltyPayment.id,
-          expected_amount: penalty,
-          due_date: new Date(),
-          grace_period_days: 15,
-          penalty_rate: 0.07,
-          is_active: true,
-          related_schedule_id: schedule.id,
-          description: `ቅጣት ለመዘግየት ${landPayment.payment_type}`,
-        }, { transaction });
-
-        penaltySchedules.push(penaltySchedule);
+      if (!firstOwner) {
+        continue;
       }
+
+      // FIXED: Use correct calculation for lease payments
+      let baseAmount;
+      if (landPayment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT) {
+        baseAmount = Number(schedule.expected_amount); // Use annual payment for lease
+        console.log(`💰 [PENALTY CHECK] Schedule ${schedule.id}: Lease payment - Using annual payment: ${baseAmount}`);
+      } else {
+        baseAmount = Number(schedule.expected_amount) - Number(landPayment.paid_amount); // Normal calculation for tax
+        console.log(`💰 [PENALTY CHECK] Schedule ${schedule.id}: Tax payment - Base amount: ${baseAmount}`);
+      }
+      
+      if (baseAmount <= 0) {
+        continue;
+      }
+
+      // Calculate penalty
+      const overdueDays = Math.max(0, Math.floor((today - graceEnd) / (1000 * 60 * 60 * 24)));
+      const overdueMonths = Math.max(1, Math.ceil(overdueDays / 30));
+      const penalty = Number((baseAmount * schedule.penalty_rate * overdueMonths).toFixed(2));
+
+      if (penalty <= 0) {
+        continue;
+      }
+
+      console.log(`💰 [PENALTY CHECK] Schedule ${schedule.id}: Creating penalty - ${penalty} ETB (${overdueDays} days overdue)`);
+
+      // FIXED: Create penalty payment with correct fields
+      const penaltyPayment = await LandPayment.create({
+        land_record_id: landRecord.id,
+        payment_type: PAYMENT_TYPES.PENALTY,
+        total_amount: penalty,
+        paid_amount: 0,
+        remaining_amount: penalty,
+        penalty_amount: penalty, // Fixed typo
+        penalty_rate: schedule.penalty_rate, // Fixed typo
+        penalty_reason: `Overdue payment for schedule ID ${schedule.id} (${landPayment.payment_type}) - ${overdueDays} days overdue`,
+        payment_status: PAYMENT_STATUSES.PENDING,
+        currency: 'ETB',
+        payer_id: firstOwner.id,
+        calculation_details: {
+          original_schedule_id: schedule.id,
+          original_payment_type: landPayment.payment_type,
+          base_amount: baseAmount,
+          overdue_days: overdueDays,
+          penalty_rate: schedule.penalty_rate,
+          penalty_months: overdueMonths,
+          calculation_date: new Date()
+        }
+      }, { transaction });
+
+      // Create penalty schedule
+      const penaltySchedule = await PaymentSchedule.create({
+        land_payment_id: penaltyPayment.id,
+        expected_amount: penalty,
+        due_date: new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000), // 15 days from now
+        grace_period_days: 7,
+        penalty_rate: 0.10, // Higher penalty rate for penalty payments
+        is_active: true,
+        related_schedule_id: schedule.id,
+        description: `ቅጣት - ለዘግየተው የ${landPayment.payment_type === 'TAX' ? 'ግብር' : 'ሊዝ'} ክፍያ`,
+        calculation_metadata: {
+          type: 'PENALTY',
+          original_schedule_id: schedule.id,
+          original_due_date: schedule.due_date,
+          overdue_days: overdueDays,
+          penalty_calculation: {
+            base_amount: baseAmount,
+            penalty_rate: schedule.penalty_rate,
+            overdue_months: overdueMonths,
+            calculated_penalty: penalty
+          }
+        }
+      }, { transaction });
+
+      penaltySchedules.push(penaltySchedule);
+      console.log(`✅ [PENALTY CHECK] Created penalty for schedule ${schedule.id}: ETB ${penalty}`);
     }
 
     await transaction.commit();
-    
+    console.log(`🎯 [PENALTY CHECK] Completed: ${penaltySchedules.length} penalty schedules created`);
     return penaltySchedules;
+    
   } catch (error) {
     await transaction.rollback();
-    
+    console.error('❌ [PENALTY CHECK] Transaction failed:', error);
     throw error;
   }
 };

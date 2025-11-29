@@ -75,12 +75,10 @@ const createReminderNotifications = async () => {
         const adminUnit = landRecord.administrativeUnit;
         
         if (!firstOwner) {
-          console.warn(`⏭️ Schedule ${schedule.id}: No owner found, skipping`);
           continue;
         }
 
         if (!adminUnit) {
-          console.warn(`⏭️ Schedule ${schedule.id}: No administrative unit found, skipping`);
           continue;
         }
 
@@ -96,7 +94,6 @@ const createReminderNotifications = async () => {
         });
 
         if (existingNotification) {
-          console.log(`⏭️ Schedule ${schedule.id}: Reminder already sent for ${daysBefore} days before, skipping`);
           continue;
         }
 
@@ -107,7 +104,6 @@ const createReminderNotifications = async () => {
         };
 
         if (!recipient.email && !recipient.phone) {
-          console.warn(`⏭️ Schedule ${schedule.id}: No email or phone for owner, skipping`);
           continue;
         }
 
@@ -654,13 +650,14 @@ const sendEmailNotification = async (notification, email) => {
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
         <p style="font-size: 13px; color: #888;">
           ይህ መልእክት ከ ከተማና መሰረተ ልማት ተልኳል<br>
-          This message was sent by ${adminUnit} Service.
+          This message was sent by city development Service.
         </p>
       </div>
     </div>
   `;
 
   await sendEmail({
+    from:"City Development Service",
     to: email,
     subject: subject,
     html: emailHtml,
