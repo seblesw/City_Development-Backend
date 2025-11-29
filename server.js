@@ -148,26 +148,26 @@ const initializeCronJobs = () => {
   // console.log('Initializing cron jobs at', new Date().toISOString());
   
   // // Cron job for overdue schedules (penalties) - Run daily at 2 AM
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running overdue schedule check at', new Date().toISOString());
-  //     const penaltySchedules = await checkOverdueSchedules();
-  //     console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
-
-  // Cron job for reminder notifications - Run daily at 8 AM
   cron.schedule('* * * * *', async () => { 
     try {
-      console.log('Running reminder notification creation at', new Date().toISOString());
-      const notifications = await createReminderNotifications();
-      console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+      console.log('Running overdue schedule check at', new Date().toISOString());
+      const penaltySchedules = await checkOverdueSchedules();
+      console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
     } catch (error) {
-      console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+      console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
     }
   });
+
+  // Cron job for reminder notifications - Run daily at 8 AM
+  // cron.schedule('* * * * *', async () => { 
+  //   try {
+  //     console.log('Running reminder notification creation at', new Date().toISOString());
+  //     const notifications = await createReminderNotifications();
+  //     console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+  //   } catch (error) {
+  //     console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+  //   }
+  // });
 
   // Cron job for overdue notifications - Run daily at 9 AM
   // cron.schedule('* * * * *', async () => { 

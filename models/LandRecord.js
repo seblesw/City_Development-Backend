@@ -37,7 +37,7 @@ const ZONING_TYPES = {
 const OWNERSHIP_TYPES = {
   NO_PRIOR_DOCUMENT: "በሰነድ አልባ",
   AUCTION: "በጨረታ",
-  ALLOCATION: "በምደባ",
+  ALLOCATION: "በምደባ/ምሪት",
   TRANSFER: "በስመንብረት ዝውውር",
   MERET_BANK: "መሬት ባንክ",
   COURT_ORDER: "በፍ/ቤት ትዛዝ",
