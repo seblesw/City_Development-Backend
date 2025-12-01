@@ -40,7 +40,7 @@ const OWNERSHIP_TYPES = {
   ALLOCATION: "በምደባ/ምሪት",
   TRANSFER: "በስመንብረት ዝውውር",
   MERET_BANK: "መሬት ባንክ",
-  COURT_ORDER: "በፍ/ቤት ትዛዝ",
+  COURT_ORDER: "በፍ/ቤት ትዕዛዝ",
   DISPLACEMENT: "በትክና ልዩልዩ",
 };
 
