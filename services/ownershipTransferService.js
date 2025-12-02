@@ -1,15 +1,22 @@
 // services/OwnershipTransferService.js
 
-const { OwnershipTransfer, Sequelize, sequelize } = require("../models");
+const {
+  OwnershipTransfer,
+  Sequelize,
+  sequelize,
+  LandRecord,
+  LandOwner,
+  Document,
+  User,
+} = require("../models");
 const { Op } = require("sequelize");
 const path = require("path");
 const fs = require("fs");
 
 const CreateTransferService = async (data, adminUnitId, userId) => {
   const t = await sequelize.transaction();
-
   try {
-    // STEP 1: Extract all required data from request
+    // Extract input
     const {
       service_rate,
       tax_rate,
@@ -20,13 +27,11 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       land_value,
       building_value,
       property_use,
-      plot_number,
-      parcel_number,
-      property_location,
-      transceiver_full_name,
-      transceiver_phone,
-      transceiver_email,
-      transceiver_nationalid,
+      plot_number: input_plot_number,
+      parcel_number: input_parcel_number,
+      property_location: input_property_location,
+      land_record_id,
+      recipient_user_id,
       recipient_full_name,
       recipient_phone,
       recipient_email,
@@ -34,128 +39,189 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       uploadedFiles = [],
     } = data;
 
-    // STEP 2: Validate required fields
-    if (
-      !transceiver_full_name ||
-      !transceiver_phone ||
-      !recipient_full_name ||
-      !recipient_phone
-    ) {
-      throw new Error("Required fields are missing");
+    // Validate minimal requirement
+    if (!land_record_id) {
+      throw new Error("land_record_id is required");
     }
 
-    // STEP 3: Validate SALE_OR_GIFT_SUB - only required if transfer type is SALE_OR_GIFT
+    // Fetch LandRecord and its owners & documents
+    const landRecord = await LandRecord.findOne({
+      where: { id: land_record_id },
+      include: [
+        {
+          model: User,
+          as: "owners",
+          through: { attributes: [] },
+        },
+        {
+          model: Document,
+          as: "documents",
+        },
+      ],
+      transaction: t,
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    // Ensure there is at least one owner
+    if (!Array.isArray(landRecord.owners) || landRecord.owners.length === 0) {
+      throw new Error("No owners found for the given land record");
+    }
+
+    // Choose first owner as transceiver
+    const landOwner = landRecord.owners[0];
+
+    // Recipient handling: registered user or manual entry
+    let recipientData = {};
+    if (recipient_user_id) {
+      const recipientUser = await User.findByPk(recipient_user_id, {
+        transaction: t,
+      });
+      if (!recipientUser) throw new Error("Recipient user not found");
+      recipientData = {
+        recipient_user_id: recipientUser.id,
+        recipient_full_name: `${recipientUser.first_name || ""} ${
+          recipientUser.middle_name || ""
+        }`.trim(),
+        recipient_phone: recipientUser.phone || null,
+        recipient_email: recipientUser.email || null,
+        recipient_nationalid: recipientUser.national_id || null,
+      };
+    } else {
+      // manual recipient - require minimal info
+      if (!recipient_full_name || !recipient_phone) {
+        throw new Error(
+          "Recipient full name and phone are required for manual recipient"
+        );
+      }
+      recipientData = {
+        recipient_user_id: null,
+        recipient_full_name: recipient_full_name,
+        recipient_phone: String(recipient_phone),
+        recipient_email: recipient_email || null,
+        recipient_nationalid: recipient_nationalid || null,
+      };
+    }
+
+    // Sale/Gift subtype required for sale/gift transfer_type
     if (transfer_type === "በሽያጭ ወይም በስጦታ" && !sale_or_gift_sub) {
       throw new Error(
-        "Sale or gift sub-type is required for sale or gift transfers"
+        "sale_or_gift_sub is required for sale or gift transfers"
       );
     }
 
-    // STEP 4: Check if transfer is free inheritance (parent ↔ child)
+    // Free transfer (inheritance parent<->child)
     const isFreeTransfer =
       transfer_type === "በውርስ የተገኘ" &&
       (inheritance_relation === "ከልጅ ወደ ወላጅ" ||
         inheritance_relation === "ከወላጅ ወደ ልጅ");
 
-    // STEP 5: Validate rates for non-free inheritance transfers
+    // Validate rates if not free transfer
     if (!isFreeTransfer) {
-      if (!service_rate || !tax_rate) {
+      if (service_rate === undefined || tax_rate === undefined) {
         throw new Error(
-          "Service rate and tax rate are required for non-inheritance transfers"
+          "service_rate and tax_rate are required for non-inheritance transfers"
         );
       }
-
-      const serviceRateVal = parseFloat(service_rate);
-      const taxRateVal = parseFloat(tax_rate);
-
-      if (serviceRateVal < 0 || serviceRateVal > 100) {
-        throw new Error("Service rate must be between 0 and 100");
-      }
-
-      if (taxRateVal < 0 || taxRateVal > 100) {
-        throw new Error("Tax rate must be between 0 and 100");
-      }
+      const sRate = parseFloat(service_rate);
+      const tRate = parseFloat(tax_rate);
+      if (Number.isNaN(sRate) || sRate < 0 || sRate > 100)
+        throw new Error("service_rate must be between 0 and 100");
+      if (Number.isNaN(tRate) || tRate < 0 || tRate > 100)
+        throw new Error("tax_rate must be between 0 and 100");
     }
 
-    // STEP 6: Prepare calculation data - set zero rates for free transfers
-    const calculationData = { ...data };
-    if (isFreeTransfer) {
-      calculationData.service_rate = 0;
-      calculationData.tax_rate = 0;
-    }
+    // Prepare calculation values (use landRecord fallbacks)
+    const calcServiceRate = isFreeTransfer ? 0 : parseFloat(service_rate || 0);
+    const calcTaxRate = isFreeTransfer ? 0 : parseFloat(tax_rate || 0);
 
-    // STEP 7: Extract calculation parameters
-    const { service_rate: calc_service_rate, tax_rate: calc_tax_rate } =
-      calculationData;
+    const serviceRateDecimal = (calcServiceRate || 0) / 100;
+    const taxRateDecimal = (calcTaxRate || 0) / 100;
 
-    // STEP 8: Convert rates from percentage to decimal for calculation
-    const serviceRateDecimal = parseFloat(calc_service_rate) / 100;
-    const taxRateDecimal = parseFloat(calc_tax_rate) / 100;
+    const area = Number(property_area) || Number(landRecord.area) || 0;
+    const landRate = Number(land_value) || Number(landRecord.land_value) || 0;
+    const buildingVal =
+      Number(building_value) || Number(landRecord.building_value) || 0;
 
-    // STEP 9: Parse numeric values with safe defaults
-    const area = parseFloat(property_area) || 0;
-    const landRate = parseFloat(land_value) || 0;
-    const buildingVal = parseFloat(building_value) || 0;
-
-    // STEP 10: Calculate base property value
     const baseValue = landRate * area + buildingVal;
-
-    // STEP 11: Calculate individual fees
     const serviceFee = baseValue * serviceRateDecimal;
     const taxAmount = baseValue * taxRateDecimal;
     const totalPayable = serviceFee + taxAmount;
 
-    // STEP 12: Prepare fee calculation results with proper rounding
     const feeCalculation = {
-      baseValue: parseFloat(baseValue.toFixed(2)),
-      serviceFee: parseFloat(serviceFee.toFixed(2)),
-      taxAmount: parseFloat(taxAmount.toFixed(2)),
-      totalPayable: parseFloat(totalPayable.toFixed(2)),
-      serviceRate: serviceRateDecimal * 100,
-      taxRate: taxRateDecimal * 100,
+      baseValue: Number(baseValue.toFixed(2)),
+      serviceFee: Number(serviceFee.toFixed(2)),
+      taxAmount: Number(taxAmount.toFixed(2)),
+      totalPayable: Number(totalPayable.toFixed(2)),
+      serviceRate: Number(calcServiceRate),
+      taxRate: Number(calcTaxRate),
     };
 
-    // STEP 13: Process uploaded files - FIXED VERSION
+    // Files processing (map to your file metadata shape)
     const fileMetadata = [];
     if (Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
       for (const file of uploadedFiles) {
-        // Verify file actually exists on disk
+        if (!file || !file.path) continue;
         if (!fs.existsSync(file.path)) {
           console.warn("File not found on disk:", file.path);
-          continue; // Skip files that don't exist
+          continue;
         }
-
-        // Use serverRelativePath from multer or create it
         const serverRelativePath =
-          file.serverRelativePath || `uploads/documents/${file.filename}`;
-
+          file.serverRelativePath ||
+          `uploads/documents/${
+            file.filename || file.originalname || `${Date.now()}.bin`
+          }`;
         fileMetadata.push({
           file_path: serverRelativePath,
-          file_name: file.originalname || `document_${Date.now()}.pdf`,
+          file_name:
+            file.originalname || file.filename || `document_${Date.now()}`,
           mime_type: file.mimetype || "application/octet-stream",
           file_size: file.size || 0,
-          uploaded_at: new Date().toISOString(),
+          uploaded_at: new Date(),
           uploaded_by: userId,
-          file_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          file_id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         });
       }
     }
 
-    // STEP 14: Prepare complete transfer data for database
-    const transferData = {
-      // Property Information
-      property_use,
-      transfer_type,
-      sale_or_gift_sub,
-      inheritance_relation,
-      plot_number,
-      parcel_number,
-      land_area: parseFloat(property_area) || null,
-      land_value: parseFloat(land_value) || null,
-      building_value: parseFloat(building_value) || null,
-      property_location,
+    // Get plot_number from landRecord.documents[0] if not provided
+    let derivedPlotNumber = null;
+    if (
+      Array.isArray(landRecord.documents) &&
+      landRecord.documents.length > 0
+    ) {
+      const doc = landRecord.documents[0];
+      // doc may be JSON or model instance; handle both
+      derivedPlotNumber =
+        doc.plot_number ||
+        (doc.dataValues && doc.dataValues.plot_number) ||
+        null;
+    }
 
-      // Fee Information
+    const transferData = {
+      // references
+      land_record_id: landRecord.id,
+
+      // recipient
+      ...recipientData,
+
+      // property info - prefer explicit input then landRecord
+      property_use: property_use || landRecord.property_use || null,
+      transfer_type,
+      sale_or_gift_sub: sale_or_gift_sub || null,
+      inheritance_relation: inheritance_relation || null,
+      plot_number: input_plot_number || derivedPlotNumber || null,
+      parcel_number: input_parcel_number || landRecord.parcel_number || null,
+      property_location: input_property_location || landRecord.location || null,
+
+      // numeric stored copies (optional: you can avoid duplicating if you want)
+      land_area: area,
+      land_value: landRate,
+      building_value: buildingVal,
+
+      // fees
       base_value: feeCalculation.baseValue,
       service_fee: feeCalculation.serviceFee,
       service_rate: feeCalculation.serviceRate,
@@ -163,67 +229,411 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       tax_rate: feeCalculation.taxRate,
       total_payable: feeCalculation.totalPayable,
 
-      // Transceiver (Sender) Information
-      transceiver_full_name,
-      transceiver_phone: transceiver_phone.toString(),
-      transceiver_email,
-      transceiver_nationalid,
+      // transceiver auto-filled
+      transceiver_full_name: `${landOwner.first_name || ""} ${
+        landOwner.middle_name || ""
+      }`.trim(),
+      transceiver_phone: landOwner.phone || null,
+      transceiver_email: landOwner.email || null,
+      transceiver_nationalid: landOwner.national_id || null,
 
-      // Recipient Information
-      recipient_full_name,
-      recipient_phone: recipient_phone.toString(),
-      recipient_email,
-      recipient_nationalid,
-
-      // System Information
-      administrative_unit_id: adminUnitId,
+      // system
+      administrative_unit_id:
+        adminUnitId || landRecord.administrative_unit_id || null,
       created_by: userId,
       updated_by: userId,
+      status: "pending",
 
-      // File Information - store as JSON array
-      file: fileMetadata.length > 0 ? fileMetadata : null,
+      // files
+      file: fileMetadata.length ? fileMetadata : null,
     };
 
-    // STEP 15: Create the ownership transfer record in database
+    // Create ownership transfer
     const ownershipTransfer = await OwnershipTransfer.create(transferData, {
       transaction: t,
     });
 
-    // STEP 16: Create audit log
-    try {
-      const creator = await User.findByPk(userId, {
-        attributes: ["id", "first_name", "middle_name", "last_name"],
-        transaction: t,
-      });
-    } catch (auditError) {
-      // Continue with transaction even if audit fails
-    }
-
     await t.commit();
 
-    // STEP 17: Return complete transfer data
+    // Build response payload - include some land_record info
     return {
       success: true,
       message: "Ownership transfer created successfully",
-      data: ownershipTransfer,
+      data: {
+        ...ownershipTransfer.toJSON(),
+        transceiver_user: {
+          id: landOwner.id,
+          first_name: landOwner.first_name,
+          middle_name: landOwner.middle_name,
+          phone: landOwner.phone,
+          email: landOwner.email,
+        },
+        land_record: {
+          id: landRecord.id,
+          plot_number: transferData.plot_number,
+          parcel_number: transferData.parcel_number || null,
+          location: transferData.property_location || null,
+        },
+      },
     };
   } catch (error) {
     await t.rollback();
+    // preserve original error shape for logging
     console.error("CreateTransferService Error:", error);
-
-    // Handle specific database error types
     if (error.name === "SequelizeValidationError") {
-      const validationErrors = error.errors.map((err) => err.message);
+      const validationErrors = error.errors.map((e) => e.message);
       throw new Error(`Validation failed: ${validationErrors.join(", ")}`);
     }
-
     if (error.name === "SequelizeUniqueConstraintError") {
       throw new Error("A transfer with similar details already exists");
     }
-
-    throw new Error(`Failed to create ownership transfer: ${error.message}`);
+    if (error.name === "SequelizeForeignKeyConstraintError") {
+      throw new Error("Invalid reference: related record not found");
+    }
+    throw new Error(
+      `Failed to create ownership transfer: ${error.message || error}`
+    );
   }
 };
+
+// Service: Search Land Records by Document Plot Number and landrecord parcel number if exist -to find the landrecord for the ownershiptransfer
+const searchLandRecordsService = async (searchTerm, opts = {}) => {
+  const { limit = 50 } = opts;
+
+  try {
+    if (!searchTerm || String(searchTerm).trim() === "") return [];
+
+    const q = String(searchTerm).trim();
+
+    // 1) Find matching documents (plot_number, reference_number, file_number)
+    const matchingDocuments = await Document.findAll({
+      where: {
+        [Op.or]: [
+          { plot_number: { [Op.iLike]: `%${q}%` } },
+          { reference_number: { [Op.iLike]: `%${q}%` } },
+          { file_number: { [Op.iLike]: `%${q}%` } },
+        ],
+      },
+      attributes: [
+        "id",
+        "land_record_id",
+        "plot_number",
+        "reference_number",
+        "file_number",
+      ],
+      limit,
+    });
+
+    // 2) Find matching land records by parcel_number
+    const matchingLandRecords = await LandRecord.findAll({
+      where: {
+        parcel_number: { [Op.iLike]: `%${q}%` },
+      },
+      attributes: [
+        "id",
+        "parcel_number",
+        "createdAt",
+        "address",
+        "address_kebele",
+        "address_ketena",
+        "area",
+        "land_use",
+        "ownership_type",
+        "administrative_unit_id",
+      ],
+      limit,
+    });
+
+    // 3) Collect unique land_record ids from both sources
+    const allLandRecordIds = Array.from(
+      new Set([
+        ...matchingDocuments.map((d) => d.land_record_id).filter(Boolean),
+        ...matchingLandRecords.map((r) => r.id).filter(Boolean),
+      ])
+    );
+
+    if (allLandRecordIds.length === 0) return [];
+
+    // 4) Fetch LandRecord rows with documents and owners (User via belongsToMany through LandOwner)
+    const landRecords = await LandRecord.findAll({
+      where: { id: allLandRecordIds },
+      attributes: [
+        "id",
+        "parcel_number",
+        "createdAt",
+        "address",
+        "address_kebele",
+        "address_ketena",
+        "area",
+        "land_use",
+        "ownership_type",
+        "administrative_unit_id",
+      ],
+      include: [
+        {
+          model: Document,
+          as: "documents",
+          attributes: [
+            "id",
+            "plot_number",
+            "reference_number",
+            "file_number",
+            "files",
+          ],
+          required: false,
+        },
+        {
+          model: User,
+          as: "owners",
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+            "email",
+            "national_id",
+          ],
+          required: false,
+          through: {
+            attributes: [],
+          },
+        },
+      ],
+    });
+
+    // 5) Normalize/format results for client
+    const results = landRecords.map((record) => {
+      const docs = Array.isArray(record.documents) ? record.documents : [];
+      const owners = Array.isArray(record.owners) ? record.owners : [];
+
+      // prefer a document that matches the query (gives better relevance)
+      const lowq = q.toLowerCase();
+      let plotDocument =
+        docs.find((d) => {
+          const pn = String(d.plot_number || "").toLowerCase();
+          const rn = String(d.reference_number || "").toLowerCase();
+          const fn = String(d.file_number || "").toLowerCase();
+          return pn.includes(lowq) || rn.includes(lowq) || fn.includes(lowq);
+        }) ||
+        docs[0] ||
+        null;
+
+      // primary owner (user) - first owner user if exists
+      const primaryOwnerUser = owners.length > 0 ? owners[0] : null;
+      const primaryOwner = primaryOwnerUser
+        ? {
+            id: primaryOwnerUser.id,
+            first_name: primaryOwnerUser.first_name || null,
+            middle_name: primaryOwnerUser.middle_name || null,
+            last_name: primaryOwnerUser.last_name || null,
+            phone_number: primaryOwnerUser.phone || null,
+            email: primaryOwnerUser.email || null,
+            national_id: primaryOwnerUser.national_id || null,
+          }
+        : null;
+
+      return {
+        id: record.id,
+        parcel_number: record.parcel_number || null,
+        created_date: record.createdAt,
+        address: record.address || null,
+        address_kebele: record.address_kebele || null,
+        address_ketena: record.address_ketena || null,
+        area: record.area || null,
+        land_use: record.land_use || null,
+        ownership_type: record.ownership_type || null,
+        administrative_unit_id: record.administrative_unit_id || null,
+
+        // document details
+        plot_number: plotDocument ? plotDocument.plot_number : null,
+        document_reference: plotDocument ? plotDocument.reference_number : null,
+        document_file_number: plotDocument ? plotDocument.file_number : null,
+        has_plot_document: docs.length > 0,
+        documents_count: docs.length,
+
+        // owner details (only existence matters)
+        has_owners: owners.length > 0,
+        owners_count: owners.length,
+        primary_owner: primaryOwner,
+      };
+    });
+
+    // 6) Sort results by relevance (exact parcel or plot matches first)
+    results.sort((a, b) => {
+      const aScore =
+        (a.parcel_number &&
+        a.parcel_number.toLowerCase().includes(q.toLowerCase())
+          ? 2
+          : 0) +
+        (a.plot_number &&
+        String(a.plot_number).toLowerCase().includes(q.toLowerCase())
+          ? 1
+          : 0);
+      const bScore =
+        (b.parcel_number &&
+        b.parcel_number.toLowerCase().includes(q.toLowerCase())
+          ? 2
+          : 0) +
+        (b.plot_number &&
+        String(b.plot_number).toLowerCase().includes(q.toLowerCase())
+          ? 1
+          : 0);
+      return bScore - aScore;
+    });
+
+    return results.slice(0, limit);
+  } catch (error) {
+    console.error("Search Land Records Service Error:", error);
+    throw new Error("Failed to search land records");
+  }
+};
+// Service: Get Land Record Owners
+const getLandRecordOwnersService = async (landRecordId) => {
+  try {
+    if (!landRecordId) {
+      throw new Error("landRecordId is required");
+    }
+
+    // Load LandRecord with its documents and owners (Users via belongsToMany)
+    const landRecord = await LandRecord.findByPk(landRecordId, {
+      attributes: [
+        "id",
+        "parcel_number",
+        "createdAt",
+        "address",
+        "address_kebele",
+        "address_ketena",
+        "area",
+        "land_use",
+        "ownership_type",
+        "administrative_unit_id",
+      ],
+      include: [
+        {
+          model: Document,
+          as: "documents",
+          attributes: ["id", "plot_number", "reference_number", "file_number"],
+          required: false,
+        },
+        {
+          model: User,
+          as: "owners",
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+            "email",
+            "national_id",
+          ],
+          required: false,
+          through: {
+            attributes: ["id"], 
+          },
+        },
+      ],
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
+    }
+
+    const docs = Array.isArray(landRecord.documents)
+      ? landRecord.documents
+      : [];
+    const plotNumber = docs.length > 0 ? docs[0].plot_number || null : null;
+
+    const owners = Array.isArray(landRecord.owners) ? landRecord.owners : [];
+
+    // If no owners, return empty array (you can change to throw if you want)
+    if (owners.length === 0) {
+      return [];
+    }
+
+    // Format response
+    const formatted = owners.map((user) => {
+      // `user.LandOwner` holds the through join row (Sequelize uses model name by default)
+
+      return {
+        // no ownership_percentage or verified returned per request
+        user: {
+          id: user.id,
+          first_name: user.first_name || null,
+          middle_name: user.middle_name || null,
+          last_name: user.last_name || null,
+          phone_number:user.phone_number || null,
+          email: user.email || null,
+          national_id: user.national_id || null,
+        },
+        land_record: {
+          id: landRecord.id,
+          parcel_number: landRecord.parcel_number || null,
+          area: landRecord.area || null,
+          address: landRecord.address || null,
+          address_kebele: landRecord.address_kebele || null,
+          address_ketena: landRecord.address_ketena || null,
+          land_use: landRecord.land_use || null,
+        },
+      };
+    });
+
+    return formatted;
+  } catch (error) {
+    console.error("Get Land Record Owners Service Error:", error);
+    throw new Error("Failed to get land record owners");
+  }
+};
+
+// Service: Search Recipient Users
+const searchRecipientUsersService = async (searchTerm) => {
+  try {
+    const users = await User.findAll({
+      where: {
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { first_name: { [Op.iLike]: `%${searchTerm}%` } },
+              { middle_name: { [Op.iLike]: `%${searchTerm}%` } },
+              { last_name: { [Op.iLike]: `%${searchTerm}%` } },
+              { phone_number: { [Op.iLike]: `%${searchTerm}%` } },
+              { email: { [Op.iLike]: `%${searchTerm}%` } },
+              { national_id: { [Op.iLike]: `%${searchTerm}%` } },
+            ],
+          },
+          { is_active: true },
+        ],
+      },
+      attributes: [
+        "id",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "phone_number",
+        "email",
+        "national_id",
+      ],
+      limit: 20,
+      order: [["first_name", "ASC"]],
+    });
+
+    // Format the response
+    return users.map((user) => ({
+      id: user.id,
+      first_name: user.first_name,
+      middle_name: user.middle_name,
+      last_name: user.last_name,
+      phone: user.phone_number,
+      email: user.email,
+      national_id: user.national_id,
+    }));
+  } catch (error) {
+    console.error("Search Recipient Users Service Error:", error);
+    throw new Error("Failed to search users");
+  }
+};
+
 /**
  * Get transfers with pagination and filtering
  */
@@ -266,32 +676,111 @@ const GetTransfersService = async ({
 
 const GetTransferByIdService = async (id, adminUnitId) => {
   try {
-    const transfer = await OwnershipTransfer.findOne({
-      where: { id, administrative_unit_id: adminUnitId },
+    // First get the ownership transfer
+    const ownershipTransfer = await OwnershipTransfer.findOne({
+      where: { 
+        id: id,
+        administrative_unit_id: adminUnitId // Optional admin unit filter
+      }
     });
 
-    if (!transfer) {
+    if (!ownershipTransfer) {
       return null;
     }
 
-    // Convert to plain object to work with
-    const result = transfer.get({ plain: true });
+    // Get the associated land record with its owners
+    const landRecord = await LandRecord.findOne({
+      where: { id: ownershipTransfer.land_record_id },
+      include: [
+        {
+          model: User,
+          as: 'owners',
+          through: { attributes: [] },
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+            "email",
+            "national_id",
+          ],
+        }
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "createdAt",
+        "address",
+        "address_kebele",
+        "address_ketena",
+        "area",
+        "land_use",
+      ],
+    });
 
-    // Add file URLs - files are in /uploads/documents/
-    if (result.file && Array.isArray(result.file)) {
-      result.file = result.file.map((fileItem) => ({
-        ...fileItem,
-        // Direct URL to files in /uploads/documents/
-        file_url: `${
-          process.env.BASE_URL || "http://localhost:3000"
-        }/uploads/documents/${fileItem.storedName}`,
-      }));
+    // Get the first document of the land record
+    const document = await Document.findOne({
+      where: { land_record_id: ownershipTransfer.land_record_id },
+      attributes: [
+        "plot_number",
+        "reference_number",
+        "file_number",
+      ],
+    });
+
+    // Build the response
+    const response = ownershipTransfer.toJSON();
+    
+    // Add land record info
+    if (landRecord) {
+      response.land_record = {
+        id: landRecord.id,
+        parcel_number: landRecord.parcel_number,
+        createdAt: landRecord.createdAt,
+        address: landRecord.address,
+        address_kebele: landRecord.address_kebele,
+        address_ketena: landRecord.address_ketena,
+        area: landRecord.area,
+        land_use: landRecord.land_use,
+      };
+      
+      // Add transceiver from first owner of land record
+      if (landRecord.owners && landRecord.owners.length > 0) {
+        const transceiver = landRecord.owners[0];
+        response.transceiver = {
+          id: transceiver.id,
+          first_name: transceiver.first_name,
+          middle_name: transceiver.middle_name,
+          last_name: transceiver.last_name,
+          phone_number: transceiver.phone_number,
+          email: transceiver.email,
+          national_id: transceiver.national_id,
+        };
+        
+        // You already have recipient info in the model, but you can also add formatted transceiver fields
+        // These match what your CreateTransferService tries to set
+        response.transceiver_full_name = `${transceiver.first_name || ''} ${transceiver.middle_name || ''}`.trim();
+        response.transceiver_phone = transceiver.phone_number;
+        response.transceiver_email = transceiver.email;
+        response.transceiver_nationalid = transceiver.national_id;
+      }
+    }
+    
+    // Add document info
+    if (document) {
+      response.document = {
+        plot_number: document.plot_number,
+        reference_number: document.reference_number,
+        file_number: document.file_number,
+      };
     }
 
-    return result;
+    return response;
+    
   } catch (error) {
     console.error("GetTransferByIdService Error:", error);
-    throw new Error("Failed to fetch transfer");
+    throw error;
   }
 };
 
@@ -903,4 +1392,7 @@ module.exports = {
   GetTransferByIdService,
   UpdateTransferStatusService,
   GetTransferStatsService,
+  searchLandRecordsService,
+  getLandRecordOwnersService,
+  searchRecipientUsersService,
 };

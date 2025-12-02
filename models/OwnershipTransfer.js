@@ -29,6 +29,13 @@ const INHERITANCE_RELATION = {
   OTHER: "ሌላ",
 };
 
+const TRANSFER_STATUS = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  COMPLETED: "completed",
+};
+
 module.exports = (db, DataTypes) => {
   const OwnershipTransfer = db.define(
     "OwnershipTransfer",
@@ -38,6 +45,51 @@ module.exports = (db, DataTypes) => {
         autoIncrement: true,
         primaryKey: true,
         allowNull: false,
+      },
+
+      land_record_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "land_records", key: "id" },
+      },
+
+      // Recipient Info (new owner)
+      recipient_user_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "users", key: "id" },
+        comment:
+          "Reference to new owner (user). If null, recipient info should be filled manually",
+      },
+
+      // Optional manual recipient info (for non-registered users)
+      recipient_full_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 100], msg: "የተቀባይ ስም ከ100 ቁምፊዎች መብለጥ አይችልም።" },
+        },
+      },
+      recipient_phone: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 20], msg: "የተቀባይ ስልክ ቁጥር ከ20 ቁምፊዎች መብለጥ አይችልም።" },
+        },
+      },
+      recipient_email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          isEmail: { msg: "የተቀባይ ኢሜይል ትክክለኛ መሆን አለበት።" },
+        },
+      },
+      recipient_nationalid: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: { args: [0, 50], msg: "የተቀባይ መለያ ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።" },
+        },
       },
 
       // Property Information
@@ -53,7 +105,7 @@ module.exports = (db, DataTypes) => {
       },
       transfer_type: {
         type: DataTypes.ENUM(Object.values(TRANSFER_TYPE)),
-        allowNull: true,
+        allowNull: false,
         validate: {
           isIn: {
             args: [Object.values(TRANSFER_TYPE)],
@@ -100,49 +152,6 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      plot_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 50], msg: "የፕሎት ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      parcel_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 50], msg: "የፓርሴል ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      land_area: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-        validate: {
-          min: { args: [0], msg: "የመሬት ስፋት ከ0 በታች መሆን አይችልም።" },
-        },
-      },
-      land_value: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-        validate: {
-          min: { args: [0], msg: "የመሬት ዋጋ ከ0 በታች መሆን አይችልም።" },
-        },
-      },
-      building_value: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-        validate: {
-          min: { args: [0], msg: "የህንፃ ዋጋ ከ0 በታች መሆን አይችልም።" },
-        },
-      },
-      property_location: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 500], msg: "የንብረት አድራሻ ከ500 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-
       // Fee Calculation
       base_value: {
         type: DataTypes.DECIMAL(15, 2),
@@ -189,75 +198,15 @@ module.exports = (db, DataTypes) => {
         },
       },
 
-      // Personal Information - Transceiver
-      transceiver_full_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: { msg: "የተጋራቢ ሙሉ ስም ባዶ መሆን አይችልም።" },
-          len: { args: [1, 100], msg: "የተጋራቢ ስም ከ100 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      transceiver_phone: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: { msg: "የተጋራቢ ስልክ ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [1, 20], msg: "የተጋራቢ ስልክ ቁጥር ከ20 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      transceiver_email: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isEmail: { msg: "የተጋራቢ ኢሜይል ትክክለኛ መሆን አለበት።" },
-        },
-      },
-      transceiver_nationalid: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 50], msg: "የተጋራቢ መለያ ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-
-      // Personal Information - Recipient
-      recipient_full_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: { msg: "የተቀባይ ሙሉ ስም ባዶ መሆን አይችልም።" },
-          len: { args: [1, 100], msg: "የተቀባይ ስም ከ100 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      recipient_phone: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: { msg: "የተቀባይ ስልክ ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [1, 20], msg: "የተቀባይ ስልክ ቁጥር ከ20 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-      recipient_email: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          isEmail: { msg: "የተቀባይ ኢሜይል ትክክለኛ መሆን አለበት።" },
-        },
-      },
-      recipient_nationalid: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        validate: {
-          len: { args: [0, 50], msg: "የተቀባይ መለያ ቁጥር ከ50 ቁምፊዎች መብለጥ አይችልም።" },
-        },
-      },
-
-      // Administrative Unit Reference
       administrative_unit_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: "administrative_units", key: "id" },
+      },
+      status: {
+        type: DataTypes.ENUM(Object.values(TRANSFER_STATUS)),
+        defaultValue: TRANSFER_STATUS.PENDING,
+        allowNull: false,
       },
 
       // User References
@@ -278,9 +227,12 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
+        { fields: ["land_record_id"] },
+        { fields: ["recipient_user_id"] },
         { fields: ["administrative_unit_id"] },
         { fields: ["transfer_type"] },
         { fields: ["property_use"] },
+        { fields: ["status"] },
         { fields: ["created_by"] },
         { fields: ["updated_by"] },
         { fields: ["createdAt"] },
@@ -288,12 +240,13 @@ module.exports = (db, DataTypes) => {
     }
   );
 
-  // Return both model
+  // Return both model and constants
   return {
     OwnershipTransfer,
     SALE_OR_GIFT_SUB,
     PROPERTY_USE,
     INHERITANCE_RELATION,
     TRANSFER_TYPE,
+    TRANSFER_STATUS,
   };
 };

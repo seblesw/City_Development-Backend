@@ -384,11 +384,9 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       } else if (land_record.land_preparation === "ነባር") {
       paymentType = "የግብር ክፍያ";
       } else {
-      // Unknown preparation -> keep null (explicitly treat as not specified)
       paymentType = null;
       }
     } else {
-      // Not specified -> payment type must be null
       paymentType = null;
     }
 

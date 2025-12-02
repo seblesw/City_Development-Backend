@@ -329,6 +329,11 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      is_dead: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: false,

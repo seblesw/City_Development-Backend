@@ -1,16 +1,17 @@
 // controllers/ownershipTransferController.js
 
+const { get } = require("http");
 const {
   CreateTransferService,
   GetTransfersService,
   GetTransferByIdService,
   UpdateTransferStatusService,
   GetTransferStatsService,
+  searchLandRecordsService,
+  searchRecipientUsersService,
+  getLandRecordOwnersService,
 } = require("../services/ownershipTransferService");
 
-/**
- * Create ownership transfer with file upload
- */
 /**
  * Create ownership transfer with file upload
  */
@@ -31,7 +32,7 @@ const createTransferOwnership = async (req, res) => {
     // Get uploaded files from multer
     const files = req.files || [];
     
-    console.log('Uploaded files:', files); // Debug log
+    console.log('Uploaded files:', files); 
 
     // Add file paths to data for service
     data.uploadedFiles = files.map(file => ({
@@ -52,6 +53,85 @@ const createTransferOwnership = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+// Search Land Records Controller
+const searchLandRecordsController = async (req, res) => {
+  try {
+    const { q } = req.query; 
+    if (!q || q.length < 0) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+    
+    const landRecords = await searchLandRecordsService(q);
+    
+    return res.json({
+      success: true,
+      data: landRecords
+    });
+  } catch (error) {
+    console.error("Search Land Records Error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Get Land Record Owners Controller
+const getLandRecordOwnersController = async (req, res) => {
+  try {
+    const { land_record_id } = req.params;
+    
+    if (!land_record_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Land record ID is required"
+      });
+    }
+    
+    const owners = await getLandRecordOwnersService(land_record_id);
+    
+    return res.json({
+      success: true,
+      data: owners
+    });
+  } catch (error) {
+    console.error("Get Land Record Owners Error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Search Recipient Users Controller
+const searchRecipientUsersController = async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 2) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+    
+    const users = await searchRecipientUsersService(q);
+    
+    return res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error("Search Recipient Users Error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -172,6 +252,9 @@ const getTransferStats = async (req, res) => {
 
 module.exports = {
   createTransferOwnership,
+  searchLandRecordsController,
+  getLandRecordOwnersController,
+  searchRecipientUsersController,
   getTransfers,
   getTransferById,
   updateTransferStatus,

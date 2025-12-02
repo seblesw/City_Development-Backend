@@ -44,7 +44,8 @@ const {
   TRANSFER_TYPE,
 } = require("./OwnershipTransfer")(db, DataTypes);
 
-const { Organization, ORGANIZATION_TYPES, EIA_DOCUMENT } = require("./Organization")(db, DataTypes);
+const { Organization, ORGANIZATION_TYPES, EIA_DOCUMENT } =
+  require("./Organization")(db, DataTypes);
 // Role associations
 Role.hasMany(User, {
   foreignKey: "role_id",
@@ -161,6 +162,10 @@ User.hasMany(OwnershipTransfer, {
   as: "updatedOwnershipTransfers",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
+});
+User.hasMany(OwnershipTransfer, {
+  foreignKey: "recipient_user_id",
+  as: "receivedOwnershipTransfers",
 });
 User.hasMany(ActionLog, {
   foreignKey: "performed_by",
@@ -320,6 +325,10 @@ AdministrativeUnit.hasMany(ActionLog, {
   foreignKey: "admin_unit_id",
   as: "actionLogs",
 });
+AdministrativeUnit.hasMany(OwnershipTransfer, {
+  foreignKey: "administrative_unit_id",
+  as: "ownershipTransfers",
+});
 
 // LandRecord associations
 LandRecord.belongsToMany(User, {
@@ -389,6 +398,10 @@ LandRecord.belongsTo(Organization, {
   as: "organization",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
+});
+LandRecord.hasMany(OwnershipTransfer, {
+  foreignKey: "land_record_id",
+  as: "ownershipTransfers",
 });
 
 // LandPayment associations
@@ -535,26 +548,26 @@ PushNotification.belongsTo(ActionLog, {
   foreignKey: "action_log_id",
   as: "actionLog",
 });
-//ownership transfer association
-OwnershipTransfer.belongsTo(AdministrativeUnit, {
-  foreignKey: "administrative_unit_id",
-  as: "administrativeUnit",
-  onDelete: "RESTRICT",
-  onUpdate: "CASCADE",
+// OwnershipTransfer associations
+OwnershipTransfer.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "land_record",
 });
-
+OwnershipTransfer.belongsTo(User, {
+  foreignKey: "recipient_user_id",
+  as: "recipient_user",
+});
 OwnershipTransfer.belongsTo(User, {
   foreignKey: "created_by",
   as: "creator",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
 });
-
 OwnershipTransfer.belongsTo(User, {
   foreignKey: "updated_by",
   as: "updater",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
+});
+OwnershipTransfer.belongsTo(AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrative_unit",
 });
 // ActionLog associations
 ActionLog.belongsTo(User, {
@@ -586,6 +599,7 @@ Organization.hasMany(LandRecord, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,

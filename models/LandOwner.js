@@ -29,7 +29,7 @@ module.exports = (db, DataTypes) => {
       },
       verified: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false,
+        defaultValue: true,
       },
     },
     {
