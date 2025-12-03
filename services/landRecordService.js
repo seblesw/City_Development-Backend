@@ -1700,116 +1700,60 @@ const getFilterOptionsService = async (adminUnitId = null) => {
 
 const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
   try {
-    // Ethiopian calendar helper functions
-    const getEthiopianDate = (gregorianDate) => {
-      const date = new Date(gregorianDate);
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      const day = date.getDate();
-      
-      // Simple conversion (for accurate conversion, use a proper Ethiopian calendar library)
-      const ethiopianYear = year - 8;
-      let ethiopianMonth = month + 1;
-      let ethiopianDay = day;
-      
-      // Adjust for Ethiopian month starting on September 11 (approx)
-      if (month >= 8 && day >= 11) {
-        ethiopianMonth = month - 8;
-      } else {
-        ethiopianMonth = month + 4;
-        if (ethiopianMonth > 12) {
-          ethiopianMonth -= 12;
-          ethiopianYear += 1;
-        }
-      }
-      
-      return {
-        year: ethiopianYear,
-        month: ethiopianMonth,
-        day: ethiopianDay,
-        week: Math.ceil(ethiopianDay / 7)
-      };
+    // Simple date helper functions without timezone complexity
+    const getStartOfDay = (date = new Date()) => {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      return start;
     };
 
-    const getEthiopianWeekStart = (weeksAgo = 0) => {
-      const now = new Date();
-      const ethiopianNow = getEthiopianDate(now);
-      
-      // Calculate target Ethiopian week
-      let targetWeek = ethiopianNow.week - weeksAgo;
-      let targetMonth = ethiopianNow.month;
-      let targetYear = ethiopianNow.year;
-      
-      while (targetWeek < 1) {
-        targetMonth -= 1;
-        if (targetMonth < 1) {
-          targetMonth = 13; 
-          targetYear -= 1;
-        }
-        // Approximate weeks per month
-        targetWeek += 4;
-      }
-      
-      // Convert back to Gregorian (approximate)
-      // This is a simplified conversion - for production, use a proper library
-      const gregorianMonth = targetMonth <= 4 ? targetMonth + 8 : targetMonth - 4;
-      const gregorianYear = targetMonth <= 4 ? targetYear + 8 : targetYear + 7;
-      
-      const startDate = new Date(gregorianYear, gregorianMonth - 1, 1);
-      startDate.setDate(startDate.getDate() + (targetWeek - 1) * 7);
-      
-      startDate.setHours(0, 0, 0, 0);
-      return startDate;
+    const getStartOfWeek = (date = new Date()) => {
+      const startOfDay = getStartOfDay(date);
+      const day = startOfDay.getDay();
+      const diff = startOfDay.getDate() - day + (day === 0 ? -6 : 1); // Adjust when Sunday
+      const startOfWeek = new Date(startOfDay.setDate(diff));
+      startOfWeek.setHours(0, 0, 0, 0);
+      return startOfWeek;
     };
 
-    const getEthiopianMonthStart = (monthsAgo = 0) => {
-      const now = new Date();
-      const ethiopianNow = getEthiopianDate(now);
-      
-      let targetMonth = ethiopianNow.month - monthsAgo;
-      let targetYear = ethiopianNow.year;
-      
-      while (targetMonth < 1) {
-        targetMonth += 13;
-        targetYear -= 1;
-      }
-      
-      // Convert back to Gregorian (approximate)
-      const gregorianMonth = targetMonth <= 4 ? targetMonth + 8 : targetMonth - 4;
-      const gregorianYear = targetMonth <= 4 ? targetYear + 8 : targetYear + 7;
-      
-      const startDate = new Date(gregorianYear, gregorianMonth - 1, 1);
-      startDate.setHours(0, 0, 0, 0);
-      return startDate;
+    const getStartOfMonth = (date = new Date()) => {
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      return start;
     };
 
-    const getEthiopianYearStart = (yearsAgo = 0) => {
-      const now = new Date();
-      const ethiopianNow = getEthiopianDate(now);
-      const targetYear = ethiopianNow.year - yearsAgo;
-      
-      // Ethiopian year starts on September 11 (approx)
-      const startDate = new Date(targetYear + 8, 8, 11); // September 11
-      startDate.setHours(0, 0, 0, 0);
-      return startDate;
+    const getStartOfYear = (date = new Date()) => {
+      const start = new Date(date.getFullYear(), 0, 1);
+      start.setHours(0, 0, 0, 0);
+      return start;
     };
 
-    // Fixed date calculations using Ethiopian calendar
+    // Current date calculations
     const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
+    
+    // Today's range
+    const todayStart = getStartOfDay(now);
+    const todayEnd = new Date(todayStart);
     todayEnd.setHours(23, 59, 59, 999);
-
-    // Ethiopian calendar periods
-    const ethiopianWeekStart = getEthiopianWeekStart(0); 
-    const ethiopianMonthStart = getEthiopianMonthStart(0); 
-    const ethiopianYearStart = getEthiopianYearStart(0); 
-
-    // For trends - last 12 Ethiopian months
-    const last12EthiopianMonthsStart = getEthiopianMonthStart(11);
-    const last12EthiopianWeeksStart = getEthiopianWeekStart(11);
-    const last3EthiopianYearsStart = getEthiopianYearStart(2);
+    
+    // This week start
+    const weekStart = getStartOfWeek(now);
+    
+    // This month start
+    const monthStart = getStartOfMonth(now);
+    
+    // This year start
+    const yearStart = getStartOfYear(now);
+    
+    // For trends - last periods
+    const last12MonthsStart = new Date(monthStart);
+    last12MonthsStart.setMonth(last12MonthsStart.getMonth() - 11);
+    
+    const last12WeeksStart = new Date(weekStart);
+    last12WeeksStart.setDate(last12WeeksStart.getDate() - (7 * 11));
+    
+    const last3YearsStart = new Date(yearStart);
+    last3YearsStart.setFullYear(last3YearsStart.getFullYear() - 2);
 
     // Execute all essential queries in parallel
     const [
@@ -1843,11 +1787,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 2. Time-based Statistics (Ethiopian calendar)
+      // 2. Time-based Statistics (Gregorian calendar)
       LandRecord.findOne({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.between]: [ethiopianYearStart, todayEnd] },
+          createdAt: { [Op.between]: [yearStart, todayEnd] },
         },
         attributes: [
           [
@@ -1863,7 +1807,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${ethiopianWeekStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${weekStart.toISOString()}' THEN 1 END`
               )
             ),
             "weekly_count",
@@ -1872,7 +1816,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${ethiopianMonthStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${monthStart.toISOString()}' THEN 1 END`
               )
             ),
             "monthly_count",
@@ -1881,7 +1825,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
             Sequelize.fn(
               "COUNT",
               Sequelize.literal(
-                `CASE WHEN "createdAt" >= '${ethiopianYearStart.toISOString()}' THEN 1 END`
+                `CASE WHEN "createdAt" >= '${yearStart.toISOString()}' THEN 1 END`
               )
             ),
             "yearly_count",
@@ -1985,11 +1929,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 10. Monthly Trends (Last 12 Ethiopian months)
+      // 10. Monthly Trends (Last 12 months)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: last12EthiopianMonthsStart },
+          createdAt: { [Op.gte]: last12MonthsStart },
         },
         attributes: [
           [
@@ -2011,11 +1955,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 11. Weekly Trends (Last 12 Ethiopian weeks)
+      // 11. Weekly Trends (Last 12 weeks)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: last12EthiopianWeeksStart },
+          createdAt: { [Op.gte]: last12WeeksStart },
         },
         attributes: [
           [
@@ -2035,11 +1979,11 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 12. Yearly Trends (Last 3 Ethiopian years)
+      // 12. Yearly Trends (Last 3 years)
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
-          createdAt: { [Op.gte]: last3EthiopianYearsStart },
+          createdAt: { [Op.gte]: last3YearsStart },
         },
         attributes: [
           [
@@ -2140,7 +2084,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
         this_week: parseInt(timeBasedStats?.weekly_count) || 0,
         this_month: parseInt(timeBasedStats?.monthly_count) || 0,
         this_year: parseInt(timeBasedStats?.yearly_count) || 0,
-        calendar_type: "ethiopian",
+        calendar_type: "gregorian",
       },
 
       distributions: {
