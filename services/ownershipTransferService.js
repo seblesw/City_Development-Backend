@@ -637,6 +637,9 @@ const searchRecipientUsersService = async (searchTerm) => {
 /**
  * Get transfers with pagination and filtering
  */
+/**
+ * Get transfers with pagination and filtering
+ */
 const GetTransfersService = async ({
   page,
   limit,
@@ -652,6 +655,7 @@ const GetTransfersService = async ({
     if (transfer_type) whereClause.transfer_type = transfer_type;
     if (property_use) whereClause.property_use = property_use;
 
+    // First, get the ownership transfers
     const { count, rows } = await OwnershipTransfer.findAndCountAll({
       where: whereClause,
       limit,
@@ -659,8 +663,150 @@ const GetTransfersService = async ({
       order: [["createdAt", "DESC"]],
     });
 
+    if (rows.length === 0) {
+      return {
+        success: true,
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(count / limit),
+          totalItems: count,
+          itemsPerPage: limit,
+        },
+      };
+    }
+
+    // Extract all land record IDs from the transfers
+    const landRecordIds = rows.map(transfer => transfer.land_record_id);
+    
+    // Get all land records with their owners in a single query
+    const landRecords = await LandRecord.findAll({
+      where: { id: landRecordIds },
+      include: [
+        {
+          model: User,
+          as: 'owners',
+          through: { attributes: [] },
+          attributes: [
+            "id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "phone_number",
+            "email",
+            "national_id",
+          ],
+        }
+      ],
+      attributes: [
+        "id",
+        "parcel_number",
+        "createdAt",
+        "address",
+        "address_kebele",
+        "address_ketena",
+        "area",
+        "land_use",
+      ],
+    });
+
+    // Get all documents for these land records
+    const documents = await Document.findAll({
+      where: { land_record_id: landRecordIds },
+      attributes: [
+        "land_record_id",
+        "plot_number",
+        "reference_number",
+        "file_number",
+      ],
+    });
+
+    // Create lookup maps for faster access
+    const landRecordMap = new Map();
+    const documentMap = new Map();
+    
+    // Organize land records by ID
+    landRecords.forEach(record => {
+      landRecordMap.set(record.id, record);
+    });
+    
+    // Organize documents by land_record_id (assuming one document per land record)
+    documents.forEach(doc => {
+      documentMap.set(doc.land_record_id, doc);
+    });
+
+    // Build the formatted response
+    const formattedData = rows.map(transfer => {
+      const response = transfer.toJSON();
+      const landRecord = landRecordMap.get(transfer.land_record_id);
+      
+      // Add land record info
+      if (landRecord) {
+        response.land_record = {
+          id: landRecord.id,
+          parcel_number: landRecord.parcel_number,
+          createdAt: landRecord.createdAt,
+          address: landRecord.address,
+          address_kebele: landRecord.address_kebele,
+          address_ketena: landRecord.address_ketena,
+          area: landRecord.area,
+          land_use: landRecord.land_use,
+        };
+        
+        // Add transceiver from first owner of land record
+        if (landRecord.owners && landRecord.owners.length > 0) {
+          const transceiver = landRecord.owners[0];
+          response.transceiver = {
+            id: transceiver.id,
+            first_name: transceiver.first_name,
+            middle_name: transceiver.middle_name,
+            last_name: transceiver.last_name,
+            phone_number: transceiver.phone_number,
+            email: transceiver.email,
+            national_id: transceiver.national_id,
+          };
+          
+          // Add formatted transceiver fields
+          response.transceiver_full_name = `${transceiver.first_name || ''} ${transceiver.middle_name || ''}`.trim();
+          response.transceiver_phone = transceiver.phone_number;
+          response.transceiver_email = transceiver.email;
+          response.transceiver_nationalid = transceiver.national_id;
+        } else {
+          // Set null values if no owner found
+          response.transceiver = null;
+          response.transceiver_full_name = null;
+          response.transceiver_phone = null;
+          response.transceiver_email = null;
+          response.transceiver_nationalid = null;
+        }
+      } else {
+        // Set null values if no land record found
+        response.land_record = null;
+        response.transceiver = null;
+        response.transceiver_full_name = null;
+        response.transceiver_phone = null;
+        response.transceiver_email = null;
+        response.transceiver_nationalid = null;
+      }
+      
+      // Add document info
+      const document = documentMap.get(transfer.land_record_id);
+      if (document) {
+        response.document = {
+          plot_number: document.plot_number,
+          reference_number: document.reference_number,
+          file_number: document.file_number,
+        };
+      } else {
+        response.document = null;
+      }
+
+      return response;
+    });
+
     return {
-      data: rows,
+      success: true,
+      data: formattedData,
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(count / limit),
