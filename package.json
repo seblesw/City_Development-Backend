@@ -23,6 +23,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@turf/turf": "^7.3.1",
     "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
@@ -44,6 +45,7 @@
     "path": "^0.12.7",
     "pg": "^8.16.0",
     "pg-hstore": "^2.3.4",
+    "proj4": "^2.20.2",
     "qs": "^6.14.0",
     "redis": "^5.9.0",
     "sequelize": "^6.37.7",

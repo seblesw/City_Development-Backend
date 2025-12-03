@@ -25,7 +25,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes');
 const ownershipTransferRoutes = require('./routes/ownershipTransferRoutes');
 const actionLogsRoutes = require('./routes/actionLogsRoutes');
-
+const coordinateRoutes = require('./routes/geoCoordinatesRoutes');
 // Import services
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');
@@ -85,6 +85,7 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
 app.use('/api/v1/ownership-transfers', ownershipTransferRoutes);
 app.use('/api/v1/action-logs', actionLogsRoutes);
+app.use('/api/v1/geo-coordinates', coordinateRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

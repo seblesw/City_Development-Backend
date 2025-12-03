@@ -43,6 +43,7 @@ const {
   INHERITANCE_RELATION,
   TRANSFER_TYPE,
 } = require("./OwnershipTransfer")(db, DataTypes);
+const GeoCoordinate = require("./GeoCoordinate")(db, DataTypes);
 
 const { Organization, ORGANIZATION_TYPES, EIA_DOCUMENT } =
   require("./Organization")(db, DataTypes);
@@ -403,6 +404,12 @@ LandRecord.hasMany(OwnershipTransfer, {
   foreignKey: "land_record_id",
   as: "ownershipTransfers",
 });
+LandRecord.hasMany(GeoCoordinate, {
+  foreignKey: 'land_record_id',
+  as: 'coordinates',
+  onDelete: 'CASCADE',
+});
+
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -600,6 +607,13 @@ Organization.hasMany(LandRecord, {
   onUpdate: "CASCADE",
 });
 
+//geoCoordinate associations
+GeoCoordinate.belongsTo(LandRecord, {
+  foreignKey: 'land_record_id',
+  as: 'landRecord',
+});
+
+
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -644,4 +658,5 @@ module.exports = {
   Organization,
   ORGANIZATION_TYPES,
   EIA_DOCUMENT,
+  GeoCoordinate,
 };
