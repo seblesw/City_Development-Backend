@@ -964,8 +964,9 @@ const UpdateTransferStatusService = async (id, status, adminUnitId) => {
 };
 
 /**
- * Get comprehensive transfer statistics with time-based analytics including quarterly reports
+ * Get simplified transfer statistics
  */
+
 const GetTransferStatsService = async (adminUnitId) => {
   try {
     const currentDate = new Date();
@@ -973,6 +974,9 @@ const GetTransferStatsService = async (adminUnitId) => {
     // Date calculations
     const startOfToday = new Date(currentDate);
     startOfToday.setHours(0, 0, 0, 0);
+    
+    const endOfToday = new Date(currentDate);
+    endOfToday.setHours(23, 59, 59, 999);
 
     const startOfWeek = new Date(currentDate);
     startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
@@ -983,554 +987,228 @@ const GetTransferStatsService = async (adminUnitId) => {
       currentDate.getMonth(),
       1
     );
+    
+    const endOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+      23, 59, 59, 999
+    );
+
     const startOfYear = new Date(currentDate.getFullYear(), 0, 1);
-
-    // Quarterly calculations
-    const currentQuarter = Math.floor(currentDate.getMonth() / 3);
-    const startOfQuarter = new Date(
+    
+    const endOfYear = new Date(
       currentDate.getFullYear(),
-      currentQuarter * 3,
-      1
-    );
-    const startOfPreviousQuarter = new Date(
-      currentDate.getFullYear(),
-      (currentQuarter - 1) * 3,
-      1
-    );
-    const endOfPreviousQuarter = new Date(
-      currentDate.getFullYear(),
-      currentQuarter * 3,
-      0
+      11,
+      31,
+      23, 59, 59, 999
     );
 
-    const lastMonthStart = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth() - 1,
-      1
-    );
-    const lastMonthEnd = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      0
-    );
-
-    const lastYearStart = new Date(currentDate.getFullYear() - 1, 0, 1);
-    const lastYearEnd = new Date(currentDate.getFullYear() - 1, 11, 31);
+    const sixMonthsAgo = new Date(currentDate);
+    sixMonthsAgo.setMonth(currentDate.getMonth() - 6);
 
     const whereClause = { administrative_unit_id: adminUnitId };
 
     // Execute all queries in parallel
     const queries = await Promise.allSettled([
-      // Overall Statistics
-      OwnershipTransfer.findAll({
+      // 1. Time trends
+      
+      // Today
+      OwnershipTransfer.findOne({
+        where: {
+          ...whereClause,
+          createdAt: { 
+            [Op.gte]: startOfToday,
+            [Op.lte]: endOfToday
+          },
+        },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
+        ],
+        raw: true,
+      }),
+
+      // This week
+      OwnershipTransfer.findOne({
+        where: {
+          ...whereClause,
+          createdAt: { 
+            [Op.gte]: startOfWeek,
+            [Op.lte]: endOfToday
+          },
+        },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
+        ],
+        raw: true,
+      }),
+
+      // This month
+      OwnershipTransfer.findOne({
+        where: {
+          ...whereClause,
+          createdAt: { 
+            [Op.gte]: startOfMonth,
+            [Op.lte]: endOfToday
+          },
+        },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
+        ],
+        raw: true,
+      }),
+
+      // This year
+      OwnershipTransfer.findOne({
+        where: {
+          ...whereClause,
+          createdAt: { 
+            [Op.gte]: startOfYear,
+            [Op.lte]: endOfToday
+          },
+        },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
+        ],
+        raw: true,
+      }),
+
+      // Last 6 months
+      OwnershipTransfer.findOne({
+        where: {
+          ...whereClause,
+          createdAt: { 
+            [Op.gte]: sixMonthsAgo,
+            [Op.lte]: endOfToday
+          },
+        },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
+        ],
+        raw: true,
+      }),
+
+      // 2. Overall totals
+      OwnershipTransfer.findOne({
         where: whereClause,
         attributes: [
           [Sequelize.fn("COUNT", Sequelize.col("id")), "total_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "total_revenue",
-          ],
-          [
-            Sequelize.fn("AVG", Sequelize.col("total_payable")),
-            "average_payment",
-          ],
-          [Sequelize.fn("MAX", Sequelize.col("total_payable")), "max_payment"],
-          [Sequelize.fn("MIN", Sequelize.col("total_payable")), "min_payment"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("land_value")),
-            "total_land_value",
-          ],
-          [
-            Sequelize.fn("SUM", Sequelize.col("building_value")),
-            "total_building_value",
-          ],
-          [Sequelize.fn("SUM", Sequelize.col("land_area")), "total_land_area"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_revenue"],
         ],
         raw: true,
       }),
 
-      // Today's Statistics
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: { [Op.gte]: startOfToday },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "daily_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "daily_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Weekly Statistics
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: { [Op.gte]: startOfWeek },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "weekly_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "weekly_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Monthly Statistics
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: { [Op.gte]: startOfMonth },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "monthly_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "monthly_revenue",
-          ],
-          [
-            Sequelize.fn("AVG", Sequelize.col("total_payable")),
-            "monthly_avg_payment",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Quarterly Statistics (Current Quarter)
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: { [Op.gte]: startOfQuarter },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "quarterly_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "quarterly_revenue",
-          ],
-          [
-            Sequelize.fn("AVG", Sequelize.col("total_payable")),
-            "quarterly_avg_payment",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Previous Quarter Statistics (for growth calculation)
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: {
-            [Op.gte]: startOfPreviousQuarter,
-            [Op.lte]: endOfPreviousQuarter,
-          },
-        },
-        attributes: [
-          [
-            Sequelize.fn("COUNT", Sequelize.col("id")),
-            "previous_quarter_transfers",
-          ],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "previous_quarter_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Yearly Statistics
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: { [Op.gte]: startOfYear },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "yearly_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "yearly_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Last Month Statistics (for growth calculation)
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: {
-            [Op.gte]: lastMonthStart,
-            [Op.lte]: lastMonthEnd,
-          },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "last_month_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "last_month_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Last Year Statistics (for growth calculation)
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: {
-            [Op.gte]: lastYearStart,
-            [Op.lte]: lastYearEnd,
-          },
-        },
-        attributes: [
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "last_year_transfers"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "last_year_revenue",
-          ],
-        ],
-        raw: true,
-      }),
-
-      // Transfer Type Breakdown
-      OwnershipTransfer.findAll({
-        where: whereClause,
-        attributes: [
-          "transfer_type",
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
-          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_amount"],
-          [Sequelize.fn("AVG", Sequelize.col("total_payable")), "avg_amount"],
-        ],
-        group: ["transfer_type"],
-        raw: true,
-      }),
-
-      // Property Use Statistics
+      // 3. Property use breakdown
       OwnershipTransfer.findAll({
         where: whereClause,
         attributes: [
           "property_use",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
-          [Sequelize.fn("AVG", Sequelize.col("land_area")), "avg_land_area"],
-          [Sequelize.fn("SUM", Sequelize.col("land_area")), "total_land_area"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
         ],
         group: ["property_use"],
         raw: true,
       }),
 
-      // Quarterly Trend (Last 8 quarters)
+      // 3. Transfer type breakdown
       OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: {
-            [Op.gte]: new Date(currentDate.getFullYear() - 2, 0, 1),
-          },
-        },
+        where: whereClause,
         attributes: [
-          [Sequelize.fn("YEAR", Sequelize.col("createdAt")), "year"],
-          [Sequelize.fn("QUARTER", Sequelize.col("createdAt")), "quarter"],
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "transfer_count"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "quarterly_revenue",
-          ],
+          "transfer_type",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_payable"],
         ],
-        group: [
-          Sequelize.fn("YEAR", Sequelize.col("createdAt")),
-          Sequelize.fn("QUARTER", Sequelize.col("createdAt")),
-        ],
-        order: [
-          [Sequelize.fn("YEAR", Sequelize.col("createdAt")), "ASC"],
-          [Sequelize.fn("QUARTER", Sequelize.col("createdAt")), "ASC"],
-        ],
-        raw: true,
-      }),
-
-      // Monthly Trend (Last 12 months)
-      OwnershipTransfer.findAll({
-        where: {
-          ...whereClause,
-          createdAt: {
-            [Op.gte]: new Date(
-              currentDate.getFullYear() - 1,
-              currentDate.getMonth(),
-              1
-            ),
-          },
-        },
-        attributes: [
-          [
-            Sequelize.fn("DATE_FORMAT", Sequelize.col("createdAt"), "%Y-%m"),
-            "month",
-          ],
-          [Sequelize.fn("COUNT", Sequelize.col("id")), "transfer_count"],
-          [
-            Sequelize.fn("SUM", Sequelize.col("total_payable")),
-            "monthly_revenue",
-          ],
-        ],
-        group: [
-          Sequelize.fn("DATE_FORMAT", Sequelize.col("createdAt"), "%Y-%m"),
-        ],
-        order: [
-          [
-            Sequelize.fn("DATE_FORMAT", Sequelize.col("createdAt"), "%Y-%m"),
-            "ASC",
-          ],
-        ],
+        group: ["transfer_type"],
         raw: true,
       }),
     ]);
 
-    // Extract results from promises
+    // Extract results with safe defaults
+    const extractResult = (result) => {
+      if (!result || result.status !== 'fulfilled' || !result.value) {
+        return { count: 0, total_payable: 0 };
+      }
+      return {
+        count: parseInt(result.value.count) || 0,
+        total_payable: parseFloat(result.value.total_payable) || 0,
+      };
+    };
+
     const [
-      overallStats,
-      dailyStats,
-      weeklyStats,
-      monthlyStats,
-      quarterlyStats,
-      previousQuarterStats,
-      yearlyStats,
-      lastMonthStats,
-      lastYearStats,
-      transferTypeStats,
+      today,
+      thisWeek,
+      thisMonth,
+      thisYear,
+      lastSixMonths,
+      overall,
       propertyUseStats,
-      quarterlyTrend,
-      monthlyTrend,
-    ] = queries.map((q) => (q.status === "fulfilled" ? q.value : []));
+      transferTypeStats,
+    ] = queries.map(extractResult);
 
-    // Calculate growth rates
-    const calculateGrowth = (current, previous) => {
-      if (!previous || previous === 0) return current > 0 ? 100 : 0;
-      return Number((((current - previous) / previous) * 100).toFixed(2));
+    // Override extractResult for overall stats
+    const overallStats = queries[5];
+    const totalTransfers = overallStats.status === 'fulfilled' && overallStats.value 
+      ? parseInt(overallStats.value.total_transfers) || 0 
+      : 0;
+    const totalRevenue = overallStats.status === 'fulfilled' && overallStats.value 
+      ? parseFloat(overallStats.value.total_revenue) || 0 
+      : 0;
+
+    // For property use and transfer type stats
+    const getBreakdownStats = (queryResult) => {
+      if (!queryResult || queryResult.status !== 'fulfilled' || !queryResult.value) {
+        return [];
+      }
+      return queryResult.value.map(item => ({
+        type: item.property_use || item.transfer_type,
+        count: parseInt(item.count) || 0,
+        total_payable: parseFloat(item.total_payable) || 0,
+        percentage: totalRevenue > 0 
+          ? Number(((parseFloat(item.total_payable) || 0) / totalRevenue * 100).toFixed(1))
+          : 0,
+      }));
     };
-
-    // Current period values
-    const currentMonthTransfers =
-      parseInt(monthlyStats[0]?.monthly_transfers) || 0;
-    const currentQuarterTransfers =
-      parseInt(quarterlyStats[0]?.quarterly_transfers) || 0;
-    const currentYearTransfers =
-      parseInt(yearlyStats[0]?.yearly_transfers) || 0;
-
-    const currentMonthRevenue =
-      parseFloat(monthlyStats[0]?.monthly_revenue) || 0;
-    const currentQuarterRevenue =
-      parseFloat(quarterlyStats[0]?.quarterly_revenue) || 0;
-    const currentYearRevenue = parseFloat(yearlyStats[0]?.yearly_revenue) || 0;
-
-    // Previous period values
-    const lastMonthTransfers =
-      parseInt(lastMonthStats[0]?.last_month_transfers) || 0;
-    const previousQuarterTransfers =
-      parseInt(previousQuarterStats[0]?.previous_quarter_transfers) || 0;
-    const lastYearTransfers =
-      parseInt(lastYearStats[0]?.last_year_transfers) || 0;
-
-    const lastMonthRevenue =
-      parseFloat(lastMonthStats[0]?.last_month_revenue) || 0;
-    const previousQuarterRevenue =
-      parseFloat(previousQuarterStats[0]?.previous_quarter_revenue) || 0;
-    const lastYearRevenue =
-      parseFloat(lastYearStats[0]?.last_year_revenue) || 0;
-
-    // Growth calculations
-    const monthlyGrowth = calculateGrowth(
-      currentMonthTransfers,
-      lastMonthTransfers
-    );
-    const quarterlyGrowth = calculateGrowth(
-      currentQuarterTransfers,
-      previousQuarterTransfers
-    );
-    const yearlyGrowth = calculateGrowth(
-      currentYearTransfers,
-      lastYearTransfers
-    );
-
-    const monthlyRevenueGrowth = calculateGrowth(
-      currentMonthRevenue,
-      lastMonthRevenue
-    );
-    const quarterlyRevenueGrowth = calculateGrowth(
-      currentQuarterRevenue,
-      previousQuarterRevenue
-    );
-    const yearlyRevenueGrowth = calculateGrowth(
-      currentYearRevenue,
-      lastYearRevenue
-    );
-
-    // Get current quarter label
-    const getQuarterLabel = (quarter) => {
-      const quarters = ["Q1", "Q2", "Q3", "Q4"];
-      return quarters[quarter] || `Q${quarter + 1}`;
-    };
-
-    const currentQuarterLabel = `${currentDate.getFullYear()} ${getQuarterLabel(
-      currentQuarter
-    )}`;
 
     return {
-      // Overview
-      overview: {
-        total_transfers: parseInt(overallStats[0]?.total_transfers) || 0,
-        total_revenue: parseFloat(overallStats[0]?.total_revenue) || 0,
-        average_payment: parseFloat(overallStats[0]?.average_payment) || 0,
-        max_payment: parseFloat(overallStats[0]?.max_payment) || 0,
-        min_payment: parseFloat(overallStats[0]?.min_payment) || 0,
-        total_assets_value:
-          (parseFloat(overallStats[0]?.total_land_value) || 0) +
-          (parseFloat(overallStats[0]?.total_building_value) || 0),
-        total_land_area: parseFloat(overallStats[0]?.total_land_area) || 0,
-      },
-
-      // Real-time Statistics
-      real_time: {
-        today: {
-          transfers: parseInt(dailyStats[0]?.daily_transfers) || 0,
-          revenue: parseFloat(dailyStats[0]?.daily_revenue) || 0,
+      success: true,
+      data: {
+        // 1. Time trends
+        time_trends: {
+          today: today,
+          this_week: thisWeek,
+          this_month: thisMonth,
+          this_year: thisYear,
+          last_six_months: lastSixMonths,
         },
-        this_week: {
-          transfers: parseInt(weeklyStats[0]?.weekly_transfers) || 0,
-          revenue: parseFloat(weeklyStats[0]?.weekly_revenue) || 0,
+
+        // 2. Overall totals
+        overall: {
+          total_transfers: totalTransfers,
+          total_revenue: totalRevenue,
         },
-        this_month: {
-          transfers: currentMonthTransfers,
-          revenue: currentMonthRevenue,
-          average_payment:
-            parseFloat(monthlyStats[0]?.monthly_avg_payment) || 0,
-          growth_rate: monthlyGrowth,
+
+        // 3. Breakdowns
+        breakdowns: {
+          by_property_use: getBreakdownStats(queries[6]),
+          by_transfer_type: getBreakdownStats(queries[7]),
         },
-        this_quarter: {
-          period: currentQuarterLabel,
-          transfers: currentQuarterTransfers,
-          revenue: currentQuarterRevenue,
-          average_payment:
-            parseFloat(quarterlyStats[0]?.quarterly_avg_payment) || 0,
-          growth_rate: quarterlyGrowth,
-        },
-        this_year: {
-          transfers: currentYearTransfers,
-          revenue: currentYearRevenue,
-          growth_rate: yearlyGrowth,
-        },
-      },
 
-      // Growth Metrics
-      growth_metrics: {
-        monthly_transfer_growth: monthlyGrowth,
-        quarterly_transfer_growth: quarterlyGrowth,
-        yearly_transfer_growth: yearlyGrowth,
-        monthly_revenue_growth: monthlyRevenueGrowth,
-        quarterly_revenue_growth: quarterlyRevenueGrowth,
-        yearly_revenue_growth: yearlyRevenueGrowth,
-      },
-
-      // Breakdowns
-      breakdowns: {
-        by_transfer_type: (transferTypeStats || []).map((item) => ({
-          type: item.transfer_type,
-          count: parseInt(item.count) || 0,
-          total_amount: parseFloat(item.total_amount) || 0,
-          average_amount: parseFloat(item.avg_amount) || 0,
-          percentage: Number(
-            (
-              ((parseInt(item.count) || 0) /
-                (parseInt(overallStats[0]?.total_transfers) || 1)) *
-              100
-            ).toFixed(1)
-          ),
-        })),
-        by_property_use: (propertyUseStats || []).map((item) => ({
-          use: item.property_use,
-          count: parseInt(item.count) || 0,
-          average_land_area: parseFloat(item.avg_land_area) || 0,
-          total_land_area: parseFloat(item.total_land_area) || 0,
-        })),
-      },
-
-      // Trends
-      trends: {
-        quarterly_trend: (quarterlyTrend || []).map((item) => ({
-          period: `${item.year} Q${item.quarter}`,
-          transfer_count: parseInt(item.transfer_count) || 0,
-          revenue: parseFloat(item.quarterly_revenue) || 0,
-        })),
-        monthly_trend: (monthlyTrend || []).map((item) => ({
-          month: item.month,
-          transfer_count: parseInt(item.transfer_count) || 0,
-          revenue: parseFloat(item.monthly_revenue) || 0,
-        })),
-      },
-
-      // Performance Summary
-      performance_summary: {
-        best_performing_quarter: getBestPerformingPeriod(quarterlyTrend),
-        most_common_transfer_type: getMostCommonType(transferTypeStats),
-        average_processing_time: "N/A", // You can implement this if you have status tracking
-      },
-
-      // Timestamp
-      generated_at: new Date().toISOString(),
-      data_freshness: "real_time",
-      report_periods: {
-        current_quarter: currentQuarterLabel,
-        current_year: currentDate.getFullYear(),
-      },
+        // Metadata
+        metadata: {
+          generated_at: new Date().toISOString(),
+          administrative_unit_id: adminUnitId,
+        }
+      }
     };
   } catch (error) {
     console.error("GetTransferStatsService Error:", error);
-    throw new Error("Failed to fetch comprehensive statistics");
+    throw new Error("Failed to fetch transfer statistics");
   }
-};
-
-// Helper function to find best performing quarter
-const getBestPerformingPeriod = (quarterlyTrend) => {
-  if (!quarterlyTrend || quarterlyTrend.length === 0) return null;
-
-  const bestQuarter = quarterlyTrend.reduce((best, current) => {
-    const currentRevenue = parseFloat(current.quarterly_revenue) || 0;
-    const bestRevenue = parseFloat(best.quarterly_revenue) || 0;
-    return currentRevenue > bestRevenue ? current : best;
-  });
-
-  return {
-    period: `${bestQuarter.year} Q${bestQuarter.quarter}`,
-    revenue: parseFloat(bestQuarter.quarterly_revenue) || 0,
-    transfers: parseInt(bestQuarter.transfer_count) || 0,
-  };
-};
-
-// Helper function to find most common transfer type
-const getMostCommonType = (transferTypeStats) => {
-  if (!transferTypeStats || transferTypeStats.length === 0) return null;
-
-  const mostCommon = transferTypeStats.reduce((most, current) => {
-    const currentCount = parseInt(current.count) || 0;
-    const mostCount = parseInt(most.count) || 0;
-    return currentCount > mostCount ? current : most;
-  });
-
-  return {
-    type: mostCommon.transfer_type,
-    count: parseInt(mostCommon.count) || 0,
-    percentage: Number(
-      (
-        ((parseInt(mostCommon.count) || 0) /
-          transferTypeStats.reduce(
-            (sum, item) => sum + (parseInt(item.count) || 0),
-            0
-          )) *
-        100
-      ).toFixed(1)
-    ),
-  };
 };
 module.exports = {
   CreateTransferService,
