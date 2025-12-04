@@ -23,6 +23,7 @@ const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
+const { createCoordinates } = require("./geoCoordinateService");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
   const { transaction: externalTransaction, isImport = false } = options;
@@ -35,6 +36,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents = [],
       land_payment,
       organization_info = {},
+      points = [], 
     } = data;
     const adminunit = user.administrative_unit_id;
 
@@ -55,7 +57,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
-    //   For imports, check plot_number in documents table
+    // For imports, check plot_number in documents table
     if (isImport) {
       const plotNumber = documents[0]?.plot_number;
       if (!plotNumber) {
@@ -193,7 +195,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 
     const ownersWithPhotos = isImport ? owners : processOwnerPhotos();
 
-    //   Skip status_history during import for performance
+    // Skip status_history during import for performance
     const landRecordData = {
       ...land_record,
       administrative_unit_id: adminunit,
@@ -221,7 +223,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       transaction: t,
     });
 
-    //   Skip ActionLog during import for performance
+    // Skip ActionLog during import for performance
     if (!isImport) {
       await ActionLog.create(
         {
@@ -241,7 +243,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             initial_status: RECORD_STATUSES.SUBMITTED,
             action_description: "የመሬት መዝገብ ተፈጥሯል",
             ownership_category: landRecord.ownership_category,
-            // Include organization info if applicable
             ...(landRecord.ownership_category === "የድርጅት" &&
               organization && {
                 organization_name: organization.name,
@@ -270,7 +271,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           { transaction: t }
         );
 
-        //   Use bulkCreate for land owners during import
+        // Use bulkCreate for land owners during import
         if (isImport && createdOwners.length > 0) {
           const landOwnerData = createdOwners.map((owner) => ({
             user_id: owner.id,
@@ -324,7 +325,59 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
-    //   Document processing - FIXED FILE PATH HANDLING
+    // === COORDINATE PROCESSING (NEW) ===
+    let coordinateResult = null;
+    if (points && Array.isArray(points) && points.length >= 3) {
+      try {
+        coordinateResult = await createCoordinates({
+          land_record_id: landRecord.id,
+          points: points.map((pt, idx) => ({
+            easting: pt.easting,
+            northing: pt.northing,
+            label: pt.label || `${idx + 1}`,
+            description: pt.description || null,
+          })),
+        }, t); // Pass transaction
+
+        // Update land record with calculated area and center
+        await landRecord.update({
+          area_m2: coordinateResult.area_m2,
+          perimeter_m: coordinateResult.perimeter_m,
+          center_latitude: coordinateResult.center.latitude,
+          center_longitude: coordinateResult.center.longitude,
+        }, { transaction: t });
+
+        // Add coordinate info to ActionLog if not import
+        if (!isImport) {
+          await ActionLog.create(
+            {
+              land_record_id: landRecord.id,
+              admin_unit_id: adminunit,
+              performed_by: user.id,
+              action_type: "COORDINATES_CREATED",
+              notes: "የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል",
+              additional_data: {
+                coordinates_count: coordinateResult.coordinates.length,
+                area_m2: coordinateResult.area_m2,
+                perimeter_m: coordinateResult.perimeter_m,
+                center_lat: coordinateResult.center.latitude,
+                center_lng: coordinateResult.center.longitude,
+                action_description: `የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል (${coordinateResult.area_m2} ሜ², ${coordinateResult.perimeter_m} ሜ)`,
+              },
+            },
+            { transaction: t }
+          );
+        }
+
+      } catch (coordError) {
+        throw new Error(`የኮኦርዲኔት ዝርዝር መመዝገብ ስህተት: ${coordError.message}`);
+      }
+    } else if (points && points.length > 0 && points.length < 3) {
+      throw new Error('የመሬት ጂኦግራፊካ ኮኦርዲኔት ቢያንስ 3 ነጥቦች ይጠይቃል።');
+    }
+    // ====================================
+
+    // Document processing - FIXED FILE PATH HANDLING
     let documentResults = [];
     if (documents.length > 0) {
       // Handle document files properly
@@ -358,7 +411,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           })
         );
       } else {
-        //   Bulk create documents for imports
+        // Bulk create documents for imports
         const documentData = documents.map((doc) => ({
           ...doc,
           land_record_id: landRecord.id,
@@ -380,11 +433,11 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     let paymentType = null;
     if (land_record.land_preparation) {
       if (land_record.land_preparation === "ሊዝ") {
-      paymentType = "የሊዝ ክፍያ";
+        paymentType = "የሊዝ ክፍያ";
       } else if (land_record.land_preparation === "ነባር") {
-      paymentType = "የግብር ክፍያ";
+        paymentType = "የግብር ክፍያ";
       } else {
-      paymentType = null;
+        paymentType = null;
       }
     } else {
       paymentType = null;
@@ -417,8 +470,8 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       payer_id: payerId,
       created_by: user.id,
       payment_status: calculatePaymentStatus({
-      total_amount: land_payment?.total_amount || 0,
-      paid_amount: land_payment?.paid_amount || 0,
+        total_amount: land_payment?.total_amount || 0,
+        paid_amount: land_payment?.paid_amount || 0,
       }),
       ...land_payment,
     };
@@ -437,6 +490,13 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents: documentResults,
       landPayment: landPayment?.toJSON(),
       organization: organization?.toJSON(),
+      coordinates: coordinateResult ? {
+        points: coordinateResult.coordinates.map(c => c.toJSON()),
+        polygon: coordinateResult.polygon,
+        center: coordinateResult.center,
+        area_m2: coordinateResult.area_m2,
+        perimeter_m: coordinateResult.perimeter_m,
+      } : null,
     };
   } catch (error) {
     if (!externalTransaction) {

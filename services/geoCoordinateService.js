@@ -14,8 +14,7 @@ class AppError extends Error {
   }
 }
 
-const createCoordinates = async ({ land_record_id, points }) => {
-
+const createCoordinates = async ({ land_record_id, points }, transaction) => {
   // Validation
   if (!land_record_id || isNaN(land_record_id)) {
     throw new AppError('Valid land_record_id is required', 400);
@@ -25,11 +24,11 @@ const createCoordinates = async ({ land_record_id, points }) => {
   }
 
   // Check land record exists
-  const landRecord = await LandRecord.findByPk(land_record_id);
+  const landRecord = await LandRecord.findByPk(land_record_id, { transaction });
   if (!landRecord) throw new AppError('Land record not found', 404);
 
   // Delete old coordinates
-  await GeoCoordinate.destroy({ where: { land_record_id } });
+  await GeoCoordinate.destroy({ where: { land_record_id }, transaction });
 
   // Convert X/Y → Lat/Long + prepare for DB
   const coordinates = points.map((pt, i) => {
@@ -55,7 +54,7 @@ const createCoordinates = async ({ land_record_id, points }) => {
   });
 
   // Save to database
-  const created = await GeoCoordinate.bulkCreate(coordinates);
+  const created = await GeoCoordinate.bulkCreate(coordinates, { transaction });
 
   // CORRECT AREA & PERIMETER USING PROJECTED COORDINATES (meters)
   const shoelaceArea = () => {
@@ -94,7 +93,6 @@ const createCoordinates = async ({ land_record_id, points }) => {
     latitude: Number((created.reduce((sum, c) => sum + c.latitude, 0) / created.length).toFixed(8)),
     longitude: Number((created.reduce((sum, c) => sum + c.longitude, 0) / created.length).toFixed(8)),
   };
-
 
   return {
     coordinates: created,

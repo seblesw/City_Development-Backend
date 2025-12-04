@@ -329,6 +329,7 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+
       is_dead: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -358,6 +359,22 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: "organizations", key: "id" },
+      },
+      area_m2: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+      perimeter_m: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+      center_latitude: {
+        type: DataTypes.DOUBLE,
+        allowNull: true,
+      },
+      center_longitude: {
+        type: DataTypes.DOUBLE,
+        allowNull: true,
       },
     },
     {

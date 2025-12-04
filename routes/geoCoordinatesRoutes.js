@@ -17,7 +17,7 @@ router.get(
 // POST   → Save or replace coordinates for a land record
 // URL:   POST /api/land-records/123/coordinates
 router.post(
-  '/:land_record_id/',
+  '/:land_record_id',
   createGeoCoordinates
 );
 
