@@ -361,8 +361,6 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
         zoningTypes: unitStats.zoningTypes.count,
         zoningTypeAreas: unitStats.zoningTypes.area,
         
-        leaseOwnershipTypes: unitStats.leaseOwnershipTypes.count,
-        leaseOwnershipTypeAreas: unitStats.leaseOwnershipTypes.area,
         
         leaseTransferReasons: unitStats.leaseTransferReasons.count,
         leaseTransferReasonAreas: unitStats.leaseTransferReasons.area,
@@ -410,7 +408,6 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
           ownershipTypes: globalStats.ownershipTypes,
           landUses: globalStats.landUses,
           zoningTypes: globalStats.zoningTypes,
-          leaseOwnershipTypes: globalStats.leaseOwnershipTypes,
           leaseTransferReasons: globalStats.leaseTransferReasons
         },
         
@@ -503,11 +500,7 @@ const initializeAdminUnitStats = (adminUnitIds) => {
         count: initializeCountObject(zoningTypeValues),
         area: initializeCountObject(zoningTypeValues) 
       },
-      
-      leaseOwnershipTypes: {
-        count: initializeCountObject(leaseOwnershipTypeValues),
-        area: initializeCountObject(leaseOwnershipTypeValues) 
-      },
+    
       
       leaseTransferReasons: {
         count: initializeCountObject(leaseTransferReasonValues),
@@ -558,10 +551,6 @@ const initializeGlobalStats = () => {
       area: initializeCountObject(zoningTypeValues) // hectares
     },
     
-    leaseOwnershipTypes: {
-      count: initializeCountObject(leaseOwnershipTypeValues),
-      area: initializeCountObject(leaseOwnershipTypeValues) // hectares
-    },
     
     leaseTransferReasons: {
       count: initializeCountObject(leaseTransferReasonValues),
@@ -774,7 +763,6 @@ const getEmptyUnitStats = () => ({
   ownershipTypes: { count: {}, area: {} },
   landUses: { count: {}, area: {} },
   zoningTypes: { count: {}, area: {} },
-  leaseOwnershipTypes: { count: {}, area: {} },
   leaseTransferReasons: { count: {}, area: {} }
 });
 
