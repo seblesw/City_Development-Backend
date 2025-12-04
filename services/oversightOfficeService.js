@@ -14,6 +14,7 @@ const {
   User,
   LAND_USE_TYPES,
   LEASE_TRANSFER_REASONS,
+  LAND_PREPARATION,
 } = require("../models");
 const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
@@ -361,9 +362,12 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
         zoningTypes: unitStats.zoningTypes.count,
         zoningTypeAreas: unitStats.zoningTypes.area,
         
+        landPreparationTypes: unitStats.landPreparationTypes.count,
+        landPreparationTypeAreas: unitStats.landPreparationTypes.area,
         
         leaseTransferReasons: unitStats.leaseTransferReasons.count,
         leaseTransferReasonAreas: unitStats.leaseTransferReasons.area,
+
         
         // Performance metrics
         areaPerOwner: unitStats.landownerIds.size > 0 ? unitStats.totalAreaHectares / unitStats.landownerIds.size : 0,
@@ -408,6 +412,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
           ownershipTypes: globalStats.ownershipTypes,
           landUses: globalStats.landUses,
           zoningTypes: globalStats.zoningTypes,
+          landPreparationTypes: globalStats.landPreparationTypes,
           leaseTransferReasons: globalStats.leaseTransferReasons
         },
         
@@ -476,6 +481,7 @@ const initializeAdminUnitStats = (adminUnitIds) => {
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
+  const landPreparationTypeValues = Object.values(LAND_PREPARATION); 
 
   adminUnitIds.forEach(adminUnitId => {
     stats[adminUnitId] = {
@@ -500,7 +506,11 @@ const initializeAdminUnitStats = (adminUnitIds) => {
         count: initializeCountObject(zoningTypeValues),
         area: initializeCountObject(zoningTypeValues) 
       },
-    
+      
+      landPreparationTypes: {
+        count: initializeCountObject(landPreparationTypeValues),
+        area: initializeCountObject(landPreparationTypeValues) 
+      },
       
       leaseTransferReasons: {
         count: initializeCountObject(leaseTransferReasonValues),
@@ -520,6 +530,7 @@ const initializeGlobalStats = () => {
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
+  const landPreparationTypeValues = Object.values(LAND_PREPARATION);
 
   return {
     totalLandowners: 0,
@@ -551,6 +562,10 @@ const initializeGlobalStats = () => {
       area: initializeCountObject(zoningTypeValues) // hectares
     },
     
+    landPreparationTypes: {
+      count: initializeCountObject(landPreparationTypeValues),
+      area: initializeCountObject(landPreparationTypeValues) // hectares
+    },
     
     leaseTransferReasons: {
       count: initializeCountObject(leaseTransferReasonValues),
@@ -594,6 +609,7 @@ const updateAdminUnitStats = (unitStats, record, areaInSquareMeters, areaInHecta
   updateTypeDistribution(unitStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(unitStats.zoningTypes, record.zoning_type, areaInHectares);
   updateTypeDistribution(unitStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
+  updateTypeDistribution(unitStats.landPreparationTypes, record.land_preparation, areaInHectares);
   
   // Update landowners
   if (record.owners && Array.isArray(record.owners)) {
@@ -629,6 +645,7 @@ const updateGlobalStats = (globalStats, record, areaInSquareMeters, areaInHectar
   updateTypeDistribution(globalStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(globalStats.zoningTypes, record.zoning_type, areaInHectares);
   updateTypeDistribution(globalStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
+  updateTypeDistribution(globalStats.landPreparationTypes, record.land_preparation, areaInHectares);
   
   // Update landowners
   if (record.owners && Array.isArray(record.owners)) {
@@ -763,6 +780,7 @@ const getEmptyUnitStats = () => ({
   ownershipTypes: { count: {}, area: {} },
   landUses: { count: {}, area: {} },
   zoningTypes: { count: {}, area: {} },
+  landPreparationTypes: { count: {}, area: {} },
   leaseTransferReasons: { count: {}, area: {} }
 });
 
