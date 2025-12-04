@@ -1,5 +1,8 @@
-const { GlobalNoticeSchedule } = require('../models');
+const { GlobalNoticeSchedule, PaymentNotification } = require('../models');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('../services/notificationService');
+
+
+
 
 const createReminders = async (req, res) => {
   try {
@@ -29,6 +32,20 @@ const createOverdue = async (req, res) => {
     res.status(500).json({
       success: false,
       message: `ያለፈበት ማሳወቂያ መፍጠር አልተሳካም: ${error.message}`,
+    });
+  }
+};
+const getAllNotifications = async (req, res) => {
+  try {
+    const notifications = await PaymentNotification.findAll();
+    res.status(200).json({
+      success: true,
+      notifications,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: `የማሳወቂያ መዝግቦችን መውሰድ አልተሳካም: ${error.message}`,
     });
   }
 };
@@ -96,4 +113,5 @@ module.exports = {
   sendNotifications,
   createGlobalNoticeSchedule,
   getNotices,
+  getAllNotifications
 };
