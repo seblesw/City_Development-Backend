@@ -60,6 +60,7 @@ module.exports = (db, DataTypes) => {
     {
       tableName: "organizations",
       timestamps: true,
+      paranoid: true,
     }
   );
   return {Organization, ORGANIZATION_TYPES, EIA_DOCUMENT};

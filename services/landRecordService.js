@@ -14,6 +14,7 @@ const {
   ActionLog,
   Organization,
   LAND_PREPARATION,
+  GeoCoordinate,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -36,7 +37,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents = [],
       land_payment,
       organization_info = {},
-      points = [], 
+      points = [],
     } = data;
     const adminunit = user.administrative_unit_id;
 
@@ -74,7 +75,9 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       });
 
       if (existingDocument) {
-        throw new Error(`ይህ ካርታ ሰነድ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`);
+        throw new Error(
+          `ይህ ካርታ ሰነድ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`
+        );
       }
     } else {
       // Original duplicate check for normal operations
@@ -329,23 +332,29 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     let coordinateResult = null;
     if (points && Array.isArray(points) && points.length >= 3) {
       try {
-        coordinateResult = await createCoordinates({
-          land_record_id: landRecord.id,
-          points: points.map((pt, idx) => ({
-            easting: pt.easting,
-            northing: pt.northing,
-            label: pt.label || `${idx + 1}`,
-            description: pt.description || null,
-          })),
-        }, t); // Pass transaction
+        coordinateResult = await createCoordinates(
+          {
+            land_record_id: landRecord.id,
+            points: points.map((pt, idx) => ({
+              easting: pt.easting,
+              northing: pt.northing,
+              label: pt.label || `${idx + 1}`,
+              description: pt.description || null,
+            })),
+          },
+          t
+        ); // Pass transaction
 
         // Update land record with calculated area and center
-        await landRecord.update({
-          area_m2: coordinateResult.area_m2,
-          perimeter_m: coordinateResult.perimeter_m,
-          center_latitude: coordinateResult.center.latitude,
-          center_longitude: coordinateResult.center.longitude,
-        }, { transaction: t });
+        await landRecord.update(
+          {
+            area_m2: coordinateResult.area_m2,
+            perimeter_m: coordinateResult.perimeter_m,
+            center_latitude: coordinateResult.center.latitude,
+            center_longitude: coordinateResult.center.longitude,
+          },
+          { transaction: t }
+        );
 
         // Add coordinate info to ActionLog if not import
         if (!isImport) {
@@ -368,12 +377,11 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             { transaction: t }
           );
         }
-
       } catch (coordError) {
         throw new Error(`የኮኦርዲኔት ዝርዝር መመዝገብ ስህተት: ${coordError.message}`);
       }
     } else if (points && points.length > 0 && points.length < 3) {
-      throw new Error('የመሬት ጂኦግራፊካ ኮኦርዲኔት ቢያንስ 3 ነጥቦች ይጠይቃል።');
+      throw new Error("የመሬት ጂኦግራፊካ ኮኦርዲኔት ቢያንስ 3 ነጥቦች ይጠይቃል።");
     }
     // ====================================
 
@@ -402,7 +410,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
               {
                 ...doc,
                 land_record_id: landRecord.id,
-                file_path: relativePath, 
+                file_path: relativePath,
               },
               file ? [file] : [],
               user.id,
@@ -446,8 +454,8 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     // For organization, use organization manager as payer
     const payerId =
       land_record.ownership_category === "የድርጅት" && organization
-      ? organization.user_id
-      : createdOwners[0]?.id || null;
+        ? organization.user_id
+        : createdOwners[0]?.id || null;
 
     // If ownership is government, payerId can be null. Otherwise require payerId.
     if (
@@ -476,9 +484,12 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       ...land_payment,
     };
 
-    landPayment = await landPaymentService.createLandPaymentService(paymentData, {
-      transaction: t,
-    });
+    landPayment = await landPaymentService.createLandPaymentService(
+      paymentData,
+      {
+        transaction: t,
+      }
+    );
 
     if (!externalTransaction) {
       await t.commit();
@@ -490,13 +501,15 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       documents: documentResults,
       landPayment: landPayment?.toJSON(),
       organization: organization?.toJSON(),
-      coordinates: coordinateResult ? {
-        points: coordinateResult.coordinates.map(c => c.toJSON()),
-        polygon: coordinateResult.polygon,
-        center: coordinateResult.center,
-        area_m2: coordinateResult.area_m2,
-        perimeter_m: coordinateResult.perimeter_m,
-      } : null,
+      coordinates: coordinateResult
+        ? {
+            points: coordinateResult.coordinates.map((c) => c.toJSON()),
+            polygon: coordinateResult.polygon,
+            center: coordinateResult.center,
+            area_m2: coordinateResult.area_m2,
+            perimeter_m: coordinateResult.perimeter_m,
+          }
+        : null,
     };
   } catch (error) {
     if (!externalTransaction) {
@@ -645,7 +658,8 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
       throw new Error(
-        "⚠️ Could not delete temporary file after import:", cleanupError.message
+        "⚠️ Could not delete temporary file after import:",
+        cleanupError.message
       );
     }
     return results;
@@ -655,7 +669,8 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       await fs.promises.unlink(filePath);
     } catch (cleanupError) {
       throw new Error(
-        "⚠️ Could not delete temporary file after import error:", cleanupError.message
+        "⚠️ Could not delete temporary file after import error:",
+        cleanupError.message
       );
     }
 
@@ -680,7 +695,6 @@ async function streamAndParseXLSX(filePath) {
     let rowCount = 0;
 
     try {
-
       const workbook = XLSX.readFile(filePath, {
         cellDates: true,
         dense: true,
@@ -713,7 +727,7 @@ async function streamAndParseXLSX(filePath) {
 
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
-        rowCount = i + 2; 
+        rowCount = i + 2;
 
         try {
           // Store original row number for error reporting
@@ -754,11 +768,9 @@ async function streamAndParseXLSX(filePath) {
           }
 
           // Numeric fields with validation
-      row.land_level = parseInt(row.land_level) || 1;
-      if (row.land_level < 1 || row.land_level > 5) {
-        throw new Error(
-          `ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`
-        );
+          row.land_level = parseInt(row.land_level) || 1;
+          if (row.land_level < 1 || row.land_level > 5) {
+            throw new Error(`ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`);
           }
 
           row.area = parseFloat(row.area) || 0;
@@ -937,11 +949,15 @@ async function transformXLSXData(rows, adminUnitId) {
     if (ownershipCategory === "የድርጅት") {
       // Organization ownership - extract organization info and manager (first owner)
       if (!primaryRow.organization_name && !primaryRow.name) {
-        throw new Error("የድርጅቱ ስም ያስፈልጋል። (organization_name or name column required)");
+        throw new Error(
+          "የድርጅቱ ስም ያስፈልጋል። (organization_name or name column required)"
+        );
       }
 
       if (!primaryRow.organization_type) {
-        throw new Error("የድርጅቱ አይነት ያስፈልጋል። (organization_type column required)");
+        throw new Error(
+          "የድርጅቱ አይነት ያስፈልጋል። (organization_type column required)"
+        );
       }
 
       // Manager is the first owner (required for organization)
@@ -962,7 +978,8 @@ async function transformXLSXData(rows, adminUnitId) {
           primaryRow.organization_permit_number || primaryRow.permit_number
         ),
         permit_issue_date: parseDateValue(
-          primaryRow.organization_permit_issue_date || primaryRow.permit_issue_date
+          primaryRow.organization_permit_issue_date ||
+            primaryRow.permit_issue_date
         ),
       };
 
@@ -1007,7 +1024,8 @@ async function transformXLSXData(rows, adminUnitId) {
         email: normalizeString(primaryRow.email) || null,
         gender: normalizeString(primaryRow.gender) || null,
         phone_number: normalizeString(primaryRow.phone_number) || null,
-        relationship_type: normalizeString(primaryRow.relationship_type) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
       });
     }
 
@@ -1035,21 +1053,24 @@ async function transformXLSXData(rows, adminUnitId) {
       ownership_type: primaryRow.ownership_type,
       zoning_type: normalizeString(primaryRow.zoning_type) || null,
       block_number: normalizeString(primaryRow.block_number),
-      block_special_name: normalizeString(primaryRow.block_special_name) || null,
+      block_special_name:
+        normalizeString(primaryRow.block_special_name) || null,
       ownership_category: ownershipCategory,
       remark: normalizeString(primaryRow.remark) || null,
       building_hight: normalizeString(primaryRow.building_hight),
       notes: normalizeString(primaryRow.notes) || null,
-      plan: normalizeString(primaryRow.plan) || null  ,
+      plan: normalizeString(primaryRow.plan) || null,
       land_preparation: normalizeString(primaryRow.land_preparation) || null,
-      lease_transfer_reason: normalizeString(primaryRow.lease_transfer_reason) || null,
-      infrastructure_status: normalizeString(primaryRow.infrastructure_status) || null,
+      lease_transfer_reason:
+        normalizeString(primaryRow.lease_transfer_reason) || null,
+      infrastructure_status:
+        normalizeString(primaryRow.infrastructure_status) || null,
       land_bank_code: normalizeString(primaryRow.land_bank_code) || null,
       land_history: normalizeString(primaryRow.land_history) || null,
-      other_land_history: normalizeString(primaryRow.other_land_history) || null,
-      landbank_registrer_name: normalizeString(
-        primaryRow.landbank_registrer_name
-      ) || null,
+      other_land_history:
+        normalizeString(primaryRow.other_land_history) || null,
+      landbank_registrer_name:
+        normalizeString(primaryRow.landbank_registrer_name) || null,
       has_debt: parseBooleanValue(primaryRow.has_debt) ?? false,
       address: normalizeString(primaryRow.address) || null,
       address_kebele: normalizeString(primaryRow.address_kebele) || null,
@@ -1082,7 +1103,7 @@ async function transformXLSXData(rows, adminUnitId) {
         ? PAYMENT_TYPES.TAX
         : PAYMENT_TYPES.PENALTY;
     const payments = paymentRows.map((row) => ({
-      payment_type:derivedPaymentType ,
+      payment_type: derivedPaymentType,
       total_amount: parseFloatValue(row.total_amount, 0),
       paid_amount: parseFloatValue(row.paid_amount, 0),
       lease_year: parseIntegerValue(row.lease_year, 0),
@@ -1098,12 +1119,12 @@ async function transformXLSXData(rows, adminUnitId) {
       description: normalizeString(row.description) || null,
     }));
 
-    return { 
-      owners, 
-      landRecordData, 
-      documents, 
+    return {
+      owners,
+      landRecordData,
+      documents,
       payments,
-      organization_info: organizationInfo 
+      organization_info: organizationInfo,
     };
   } catch (error) {
     throw new Error(`ውሂብ ማቀናበር አልተቻለም: ${error.message}`);
@@ -1790,28 +1811,28 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
     // Current date calculations
     const now = new Date();
-    
+
     // Today's range
     const todayStart = getStartOfDay(now);
     const todayEnd = new Date(todayStart);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     // This week start
     const weekStart = getStartOfWeek(now);
-    
+
     // This month start
     const monthStart = getStartOfMonth(now);
-    
+
     // This year start
     const yearStart = getStartOfYear(now);
-    
+
     // For trends - last periods
     const last12MonthsStart = new Date(monthStart);
     last12MonthsStart.setMonth(last12MonthsStart.getMonth() - 11);
-    
+
     const last12WeeksStart = new Date(weekStart);
-    last12WeeksStart.setDate(last12WeeksStart.getDate() - (7 * 11));
-    
+    last12WeeksStart.setDate(last12WeeksStart.getDate() - 7 * 11);
+
     const last3YearsStart = new Date(yearStart);
     last3YearsStart.setFullYear(last3YearsStart.getFullYear() - 2);
 
@@ -1842,7 +1863,13 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
           [Sequelize.fn("MAX", Sequelize.col("area")), "max_area"],
           [Sequelize.fn("MIN", Sequelize.col("area")), "min_area"],
-          [Sequelize.fn("SUM", Sequelize.literal("CASE WHEN has_debt THEN 1 ELSE 0 END")), "debt_count"],
+          [
+            Sequelize.fn(
+              "SUM",
+              Sequelize.literal("CASE WHEN has_debt THEN 1 ELSE 0 END")
+            ),
+            "debt_count",
+          ],
         ],
         raw: true,
       }),
@@ -2332,7 +2359,7 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "address",
             "gender",
             "marital_status",
-            "relationship_type"
+            "relationship_type",
           ],
           paranoid: !includeDeleted,
         },
@@ -2366,10 +2393,10 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "id",
             "plot_number",
             "document_type",
-             "shelf_number",
-          "box_number",
-          "reference_number",
-          "file_number",
+            "shelf_number",
+            "box_number",
+            "reference_number",
+            "file_number",
             "issue_date",
             "isActive",
             "files",
@@ -2396,6 +2423,35 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "payment_status",
             "description",
             "createdAt",
+          ],
+          where: includeDeleted ? {} : { deletedAt: null },
+          required: false,
+          paranoid: !includeDeleted,
+        },
+        {
+          model: GeoCoordinate,
+          as: "coordinates",
+          attributes: [
+            "easting",
+            "northing",
+            "latitude",
+            "longitude",
+            "sequence",
+            "label",
+          ],
+          where: includeDeleted ? {} : { deletedAt: null },
+          required: false,
+          paranoid: !includeDeleted,
+        },
+        {
+          model: Organization,
+          as: "organization",
+          attributes: [
+            "name",
+            "eia_document",
+            "permit_number",
+            "permit_issue_date"
+
           ],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
@@ -2651,7 +2707,7 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           "phone_number",
           "national_id",
           "profile_picture",
-          "address"
+          "address",
         ],
       },
       {
@@ -3238,7 +3294,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "email",
           "phone_number",
           "national_id",
-          "profile_picture"
+          "profile_picture",
         ],
       },
       {
@@ -3255,7 +3311,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "files",
           "plot_number",
           "createdAt",
-          "issue_date"
+          "issue_date",
         ],
       },
       {
@@ -3604,7 +3660,7 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
             "email",
             "phone_number",
             "national_id",
-            "profile_picture"
+            "profile_picture",
           ],
         },
         {
@@ -4351,7 +4407,7 @@ const getTrashItemsService = async (user, options = {}) => {
             "email",
             "phone_number",
             "national_id",
-            "profile_picture"
+            "profile_picture",
           ],
         },
         {

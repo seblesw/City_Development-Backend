@@ -69,6 +69,7 @@ module.exports = (db, DataTypes) => {
     {
       tableName: 'geo_coordinates',
       timestamps: true,
+      paranoid: true,
       indexes: [
         { fields: ['land_record_id'] },
         { unique: true, fields: ['land_record_id', 'sequence'] },
@@ -78,7 +79,8 @@ module.exports = (db, DataTypes) => {
         beforeUpdate: convertXYtoLatLng,
         beforeBulkCreate: (coords) => coords.forEach(convertXYtoLatLng),
       },
-    }
+    },
+
   );
 
   // Auto convert X/Y → Lat/Long

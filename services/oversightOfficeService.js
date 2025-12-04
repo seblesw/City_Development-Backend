@@ -237,10 +237,10 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
 
     // 3. Build where clause based on office level
     const where = { deletedAt: null };
-    if (officeLevel === 'woreda') {
+    if (officeLevel === 'ጽ/ቤት') {
       where.woreda_id = oversightOffice.woreda_id;
       where.zone_id = oversightOffice.zone_id;
-    } else if (officeLevel === 'zonal') {
+    } else if (officeLevel === 'መምሪያ') {
       where.zone_id = oversightOffice.zone_id;
     }
     where.region_id = oversightOffice.region_id;
@@ -439,11 +439,11 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
  */
 const determineOfficeLevel = (oversightOffice) => {
   if (oversightOffice.woreda_id && oversightOffice.zone_id && oversightOffice.region_id) {
-    return 'woreda';
+    return 'ጽ/ቤት';
   } else if (oversightOffice.zone_id && oversightOffice.region_id) {
-    return 'zonal';
+    return 'መምሪያ';
   } else if (oversightOffice.region_id) {
-    return 'regional';
+    return 'ቢሮ';
   } else {
     return 'unknown';
   }
