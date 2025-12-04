@@ -110,7 +110,7 @@ const syncDatabase = async () => {
     // await db.sync({ force: });
     
     // Option 3: Alter sync (modifies tables to match model definitions)
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     
     console.log('Database synchronized successfully at', new Date().toISOString());
     return true;
@@ -133,7 +133,7 @@ const startServer = async () => {
     await syncDatabase();
     
     // Initialize cron jobs after successful sync
-    // initializeCronJobs();
+    initializeCronJobs();
     
     server.listen(port, () => {
       console.log(`Server running on port ${port} at ${new Date().toISOString()}`);
@@ -145,66 +145,66 @@ const startServer = async () => {
 };
 
 // Initialize cron jobs separately
-// const initializeCronJobs = () => {
-  // console.log('Initializing cron jobs at', new Date().toISOString());
+const initializeCronJobs = () => {
+  console.log('Initializing cron jobs at', new Date().toISOString());
   
-  // // Cron job for overdue schedules (penalties) - Run daily at 2 AM
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running overdue schedule check at', new Date().toISOString());
-  //     const penaltySchedules = await checkOverdueSchedules();
-  //     console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
+  // Cron job for overdue schedules (penalties) - Run daily at 2 AM
+  cron.schedule('* * * * *', async () => { 
+    try {
+      console.log('Running overdue schedule check at', new Date().toISOString());
+      const penaltySchedules = await checkOverdueSchedules();
+      console.log(`${penaltySchedules.length} የቅጣት መርሃ ግብሮች ተፈጥሯል at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error(`የቅጣት መርሃ ግብር ስህተት at ${new Date().toISOString()}:`, error.message);
+    }
+  });
 
   // Cron job for reminder notifications - Run daily at 8 AM
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running reminder notification creation at', new Date().toISOString());
-  //     const notifications = await createReminderNotifications();
-  //     console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
+  cron.schedule('* * * * *', async () => { 
+    try {
+      console.log('Running reminder notification creation at', new Date().toISOString());
+      const notifications = await createReminderNotifications();
+      console.log(`${notifications.length} የአስታዋሽ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error(`የአስታዋሽ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    }
+  });
 
   // Cron job for overdue notifications - Run daily at 9 AM
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running overdue notification creation at', new Date().toISOString());
-  //     const notifications = await createOverdueNotifications();
-  //     console.log(`${notifications.length} ያለፈበት ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`ያለፈበት ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
+  cron.schedule('* * * * *', async () => { 
+    try {
+      console.log('Running overdue notification creation at', new Date().toISOString());
+      const notifications = await createOverdueNotifications();
+      console.log(`${notifications.length} ያለፈበት ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error(`ያለፈበት ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    }
+  });
 
   // Cron job for global notice notifications - Run daily at 10 AM
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running global notice notification creation at', new Date().toISOString());
-  //     const notifications = await createGlobalNoticeNotifications();
-  //     console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
+  cron.schedule('* * * * *', async () => { 
+    try {
+      console.log('Running global notice notification creation at', new Date().toISOString());
+      const notifications = await createGlobalNoticeNotifications();
+      console.log(`${notifications.length} አጠቃላይ ማሳወቂያዎች ተፈጥሯል at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error(`አጠቃላይ ማሳወቂያ ስህተት at ${new Date().toISOString()}:`, error.message);
+    }
+  });
 
   // Cron job for sending notifications - Run every 5 minutes
-  // cron.schedule('* * * * *', async () => { 
-  //   try {
-  //     console.log('Running notification sending at', new Date().toISOString());
-  //     const sentCount = await sendPendingNotifications();
-  //     console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
-  //   } catch (error) {
-  //     console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
-  //   }
-  // });
+  cron.schedule('* * * * *', async () => { 
+    try {
+      console.log('Running notification sending at', new Date().toISOString());
+      const sentCount = await sendPendingNotifications();
+      console.log(`${sentCount} ማሳወቂያዎች ተልከዋል at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error(`ማሳወቂያ መላክ ስህተት at ${new Date().toISOString()}:`, error.message);
+    }
+  });
 
-  // console.log('All cron jobs initialized successfully');
-// };
+  console.log('All cron jobs initialized successfully');
+};
 
 
 
