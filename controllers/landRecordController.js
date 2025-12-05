@@ -137,7 +137,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
         createdCount: results.createdCount,
         skippedCount: results.skippedCount,
         totalRows: results.totalRows,
-        totalGroups: results.totalGroups,
         errors: results.errors || [],
         errorDetails: results.errorDetails || [],
         processingTime: results.processingTime,
