@@ -9,7 +9,8 @@ const {
   getTransferStats,
   searchLandRecordsController,
   getLandRecordOwnersController,
-  searchRecipientUsersController
+  searchRecipientUsersController,
+  getTransferByAdminUnitId
 } = require('../controllers/ownershipTransferController');
 
 // Apply authentication middleware to all routes
@@ -22,6 +23,7 @@ router.get('/land-record/:land_record_id/owners', authMiddleware.protect, getLan
 router.get('/search-recipient-users', authMiddleware.protect, searchRecipientUsersController);
 router.get('/',authMiddleware.protect,getTransfers);
 router.get('/stats',authMiddleware.protect, getTransferStats);
+router.get('/:admin_unit_id/stats', getTransferByAdminUnitId);
 router.get('/:id',authMiddleware.protect, getTransferById);
 router.patch('/:id/status',authMiddleware.protect, updateTransferStatus);
 

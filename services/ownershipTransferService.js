@@ -972,6 +972,14 @@ const UpdateTransferStatusService = async (id, status, adminUnitId) => {
 
 const GetTransferStatsService = async (adminUnitId) => {
   try {
+    // Validate adminUnitId
+    if (!adminUnitId || isNaN(parseInt(adminUnitId))) {
+      throw new Error(`Invalid adminUnitId: ${adminUnitId}`);
+    }
+    
+    const adminUnitIdNum = parseInt(adminUnitId);
+    console.log(`Getting transfer stats for admin unit ID: ${adminUnitIdNum} (type: ${typeof adminUnitIdNum})`);
+
     const currentDate = new Date();
 
     // Date calculations
@@ -990,36 +998,30 @@ const GetTransferStatsService = async (adminUnitId) => {
       currentDate.getMonth(),
       1
     );
-    
-    const endOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth() + 1,
-      0,
-      23, 59, 59, 999
-    );
 
     const startOfYear = new Date(currentDate.getFullYear(), 0, 1);
-    
-    const endOfYear = new Date(
-      currentDate.getFullYear(),
-      11,
-      31,
-      23, 59, 59, 999
-    );
 
     const sixMonthsAgo = new Date(currentDate);
     sixMonthsAgo.setMonth(currentDate.getMonth() - 6);
 
-    const whereClause = { administrative_unit_id: adminUnitId };
+    const whereClause = { administrative_unit_id: adminUnitIdNum };
+    console.log('Where clause:', whereClause);
 
-    // Execute all queries in parallel
-    const queries = await Promise.allSettled([
-      // 1. Time trends
-      
+    // Execute all queries
+    const [
+      todayResult,
+      thisWeekResult,
+      thisMonthResult,
+      thisYearResult,
+      lastSixMonthsResult,
+      overallResult,
+      propertyUseResult,
+      transferTypeResult
+    ] = await Promise.all([
       // Today
       OwnershipTransfer.findOne({
         where: {
-          ...whereClause,
+          administrative_unit_id: adminUnitIdNum,
           createdAt: { 
             [Op.gte]: startOfToday,
             [Op.lte]: endOfToday
@@ -1035,7 +1037,7 @@ const GetTransferStatsService = async (adminUnitId) => {
       // This week
       OwnershipTransfer.findOne({
         where: {
-          ...whereClause,
+          administrative_unit_id: adminUnitIdNum,
           createdAt: { 
             [Op.gte]: startOfWeek,
             [Op.lte]: endOfToday
@@ -1051,7 +1053,7 @@ const GetTransferStatsService = async (adminUnitId) => {
       // This month
       OwnershipTransfer.findOne({
         where: {
-          ...whereClause,
+          administrative_unit_id: adminUnitIdNum,
           createdAt: { 
             [Op.gte]: startOfMonth,
             [Op.lte]: endOfToday
@@ -1067,7 +1069,7 @@ const GetTransferStatsService = async (adminUnitId) => {
       // This year
       OwnershipTransfer.findOne({
         where: {
-          ...whereClause,
+          administrative_unit_id: adminUnitIdNum,
           createdAt: { 
             [Op.gte]: startOfYear,
             [Op.lte]: endOfToday
@@ -1083,7 +1085,7 @@ const GetTransferStatsService = async (adminUnitId) => {
       // Last 6 months
       OwnershipTransfer.findOne({
         where: {
-          ...whereClause,
+          administrative_unit_id: adminUnitIdNum,
           createdAt: { 
             [Op.gte]: sixMonthsAgo,
             [Op.lte]: endOfToday
@@ -1096,9 +1098,9 @@ const GetTransferStatsService = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 2. Overall totals
+      // Overall totals
       OwnershipTransfer.findOne({
-        where: whereClause,
+        where: { administrative_unit_id: adminUnitIdNum },
         attributes: [
           [Sequelize.fn("COUNT", Sequelize.col("id")), "total_transfers"],
           [Sequelize.fn("SUM", Sequelize.col("total_payable")), "total_revenue"],
@@ -1106,9 +1108,9 @@ const GetTransferStatsService = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 3. Property use breakdown
+      // Property use breakdown
       OwnershipTransfer.findAll({
-        where: whereClause,
+        where: { administrative_unit_id: adminUnitIdNum },
         attributes: [
           "property_use",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1118,9 +1120,9 @@ const GetTransferStatsService = async (adminUnitId) => {
         raw: true,
       }),
 
-      // 3. Transfer type breakdown
+      // Transfer type breakdown
       OwnershipTransfer.findAll({
-        where: whereClause,
+        where: { administrative_unit_id: adminUnitIdNum },
         attributes: [
           "transfer_type",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1131,88 +1133,93 @@ const GetTransferStatsService = async (adminUnitId) => {
       }),
     ]);
 
-    // Extract results with safe defaults
-    const extractResult = (result) => {
-      if (!result || result.status !== 'fulfilled' || !result.value) {
-        return { count: 0, total_payable: 0 };
-      }
-      return {
-        count: parseInt(result.value.count) || 0,
-        total_payable: parseFloat(result.value.total_payable) || 0,
-      };
+    // Extract time trend results
+    const extractTimeTrend = (result) => ({
+      count: result?.count ? parseInt(result.count) : 0,
+      total_payable: result?.total_payable ? parseFloat(result.total_payable) : 0,
+    });
+
+    // Extract overall results
+    const extractOverall = (result) => ({
+      total_transfers: result?.total_transfers ? parseInt(result.total_transfers) : 0,
+      total_revenue: result?.total_revenue ? parseFloat(result.total_revenue) : 0,
+    });
+
+    // Extract breakdown results
+    const extractBreakdown = (results, keyName) => {
+      if (!Array.isArray(results)) return [];
+      
+      return results.map(item => {
+        const total = item?.total_payable ? parseFloat(item.total_payable) : 0;
+        const count = item?.count ? parseInt(item.count) : 0;
+        const overallRevenue = overallResult?.total_revenue ? parseFloat(overallResult.total_revenue) : 0;
+        
+        return {
+          type: item[keyName] || "unknown",
+          count,
+          total_payable: total,
+          percentage: overallRevenue > 0 ? Number(((total / overallRevenue) * 100).toFixed(1)) : 0,
+        };
+      });
     };
 
-    const [
+    const today = extractTimeTrend(todayResult);
+    const thisWeek = extractTimeTrend(thisWeekResult);
+    const thisMonth = extractTimeTrend(thisMonthResult);
+    const thisYear = extractTimeTrend(thisYearResult);
+    const lastSixMonths = extractTimeTrend(lastSixMonthsResult);
+    const overall = extractOverall(overallResult);
+    
+    const byPropertyUse = extractBreakdown(propertyUseResult, "property_use");
+    const byTransferType = extractBreakdown(transferTypeResult, "transfer_type");
+
+    // DEBUG: Log the results to see what's coming back
+    console.log("DEBUG - Final Results:", {
       today,
       thisWeek,
       thisMonth,
       thisYear,
       lastSixMonths,
       overall,
-      propertyUseStats,
-      transferTypeStats,
-    ] = queries.map(extractResult);
-
-    // Override extractResult for overall stats
-    const overallStats = queries[5];
-    const totalTransfers = overallStats.status === 'fulfilled' && overallStats.value 
-      ? parseInt(overallStats.value.total_transfers) || 0 
-      : 0;
-    const totalRevenue = overallStats.status === 'fulfilled' && overallStats.value 
-      ? parseFloat(overallStats.value.total_revenue) || 0 
-      : 0;
-
-    // For property use and transfer type stats
-    const getBreakdownStats = (queryResult) => {
-      if (!queryResult || queryResult.status !== 'fulfilled' || !queryResult.value) {
-        return [];
-      }
-      return queryResult.value.map(item => ({
-        type: item.property_use || item.transfer_type,
-        count: parseInt(item.count) || 0,
-        total_payable: parseFloat(item.total_payable) || 0,
-        percentage: totalRevenue > 0 
-          ? Number(((parseFloat(item.total_payable) || 0) / totalRevenue * 100).toFixed(1))
-          : 0,
-      }));
-    };
+      byPropertyUse,
+      byTransferType,
+      adminUnitId: adminUnitIdNum
+    });
 
     return {
       success: true,
       data: {
-        // 1. Time trends
         time_trends: {
-          today: today,
+          today,
           this_week: thisWeek,
           this_month: thisMonth,
           this_year: thisYear,
           last_six_months: lastSixMonths,
         },
-
-        // 2. Overall totals
-        overall: {
-          total_transfers: totalTransfers,
-          total_revenue: totalRevenue,
-        },
-
-        // 3. Breakdowns
+        overall,
         breakdowns: {
-          by_property_use: getBreakdownStats(queries[6]),
-          by_transfer_type: getBreakdownStats(queries[7]),
+          by_property_use: byPropertyUse,
+          by_transfer_type: byTransferType,
         },
-
-        // Metadata
         metadata: {
           generated_at: new Date().toISOString(),
-          administrative_unit_id: adminUnitId,
+          administrative_unit_id: adminUnitIdNum,
         }
       }
     };
   } catch (error) {
     console.error("GetTransferStatsService Error:", error);
-    throw new Error("Failed to fetch transfer statistics");
+    console.error("Error details:", {
+      message: error.message,
+      stack: error.stack,
+      adminUnitId
+    });
+    throw new Error(`Failed to fetch transfer statistics: ${error.message}`);
   }
 };
+
+
+
 module.exports = {
   CreateTransferService,
   GetTransfersService,

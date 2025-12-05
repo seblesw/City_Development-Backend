@@ -10,6 +10,7 @@ const {
   searchLandRecordsService,
   searchRecipientUsersService,
   getLandRecordOwnersService,
+  getTransferByAdminUnitsService,
 } = require("../services/ownershipTransferService");
 
 /**
@@ -249,6 +250,36 @@ const getTransferStats = async (req, res) => {
   }
 };
 
+//get transfer by admin unit id from params
+const getTransferByAdminUnitId = async (req, res) => {
+  try {
+    console.log('Received request for admin unit stats:', {
+      params: req.params,
+      query: req.query,
+      admin_unit_id: req.params.admin_unit_id
+    });
+    
+    const adminUnitId = req.params.admin_unit_id;
+    
+    if (!adminUnitId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin unit ID is required'
+      });
+    }
+    
+    const result = await GetTransferStatsService(adminUnitId);
+    res.json(result);
+  } catch (error) {
+    console.error('Route Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch transfers by administrative unit',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 
 module.exports = {
   createTransferOwnership,
@@ -256,6 +287,7 @@ module.exports = {
   getLandRecordOwnersController,
   searchRecipientUsersController,
   getTransfers,
+  getTransferByAdminUnitId,
   getTransferById,
   updateTransferStatus,
   getTransferStats,
