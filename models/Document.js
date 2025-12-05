@@ -17,7 +17,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [1, 50], msg: "የካርታ ቁጥር ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።" },
         },
       },
       land_record_id: {
