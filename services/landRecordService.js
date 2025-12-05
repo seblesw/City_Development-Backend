@@ -760,9 +760,9 @@ async function streamAndParseXLSX(filePath) {
           // Validate plot number format
           if (
             row.plot_number === "null" ||
-            row.plot_number === "undefined" ||
-            row.plot_number === "ሰ_ን_ማ" ||
-            row.plot_number.length < 2
+            row.plot_number === "undefined"
+            // row.plot_number === "ሰ_ን_ማ" ||
+            // row.plot_number.length < 2
           ) {
             throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ትክክለኛ አይደለም።`);
           }
@@ -883,7 +883,7 @@ function extractDetailedError(error, plotNumber) {
   }
 
   // Default: return the original message but clean it up
-  return errorMessage.replace("Validation error", "የውሂብ ማረጋገጫ ስህተት");
+  return errorMessage.replace("Validation error", "የ Network or connection errors");
 }
 
 async function transformXLSXData(rows, adminUnitId) {
@@ -1013,8 +1013,8 @@ async function transformXLSXData(rows, adminUnitId) {
       });
     } else {
       // Single ownership - use primary row
-      if (!primaryRow.first_name || !primaryRow.middle_name) {
-        throw new Error("ዋና ባለቤት ስም እና የአባት ስም ያስፈልጋል።");
+      if (!primaryRow.first_name ) {
+        throw new Error("ዋና ባለቤት ስም  ያስፈልጋል።");
       }
       owners.push({
         first_name: normalizeString(primaryRow.first_name) || "Unknown",
