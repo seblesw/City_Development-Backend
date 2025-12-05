@@ -23,8 +23,6 @@ module.exports = (db, DataTypes) => {
           model: 'land_records',
           key: 'id',
         },
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
       },
 
       // Official X/Y from title deed (never change these!)
