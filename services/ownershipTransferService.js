@@ -165,7 +165,6 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
       for (const file of uploadedFiles) {
         if (!file || !file.path) continue;
         if (!fs.existsSync(file.path)) {
-          console.warn("File not found on disk:", file.path);
           continue;
         }
         const serverRelativePath =
@@ -279,7 +278,6 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
   } catch (error) {
     await t.rollback();
     // preserve original error shape for logging
-    console.error("CreateTransferService Error:", error);
     if (error.name === "SequelizeValidationError") {
       const validationErrors = error.errors.map((e) => e.message);
       throw new Error(`Validation failed: ${validationErrors.join(", ")}`);
@@ -487,7 +485,6 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
 
     return results.slice(0, limit);
   } catch (error) {
-    console.error("Search Land Records Service Error:", error);
     throw new Error("Failed to search land records");
   }
 };
@@ -584,7 +581,6 @@ const getLandRecordOwnersService = async (landRecordId) => {
 
     return formatted;
   } catch (error) {
-    console.error("Get Land Record Owners Service Error:", error);
     throw new Error("Failed to get land record owners");
   }
 };
@@ -632,7 +628,6 @@ const searchRecipientUsersService = async (searchTerm) => {
       national_id: user.national_id,
     }));
   } catch (error) {
-    console.error("Search Recipient Users Service Error:", error);
     throw new Error("Failed to search users");
   }
 };
@@ -818,7 +813,6 @@ const GetTransfersService = async ({
       },
     };
   } catch (error) {
-    console.error("GetTransfersService Error:", error);
     throw new Error("Failed to fetch transfers");
   }
 };
@@ -928,7 +922,6 @@ const GetTransferByIdService = async (id, adminUnitId) => {
     return response;
     
   } catch (error) {
-    console.error("GetTransferByIdService Error:", error);
     throw error;
   }
 };
@@ -961,7 +954,6 @@ const UpdateTransferStatusService = async (id, status, adminUnitId) => {
 
     return updatedTransfer;
   } catch (error) {
-    console.error("UpdateTransferStatusService Error:", error);
     throw new Error(`Failed to update transfer status: ${error.message}`);
   }
 };
@@ -978,7 +970,6 @@ const GetTransferStatsService = async (adminUnitId) => {
     }
     
     const adminUnitIdNum = parseInt(adminUnitId);
-    console.log(`Getting transfer stats for admin unit ID: ${adminUnitIdNum} (type: ${typeof adminUnitIdNum})`);
 
     const currentDate = new Date();
 
@@ -1005,7 +996,6 @@ const GetTransferStatsService = async (adminUnitId) => {
     sixMonthsAgo.setMonth(currentDate.getMonth() - 6);
 
     const whereClause = { administrative_unit_id: adminUnitIdNum };
-    console.log('Where clause:', whereClause);
 
     // Execute all queries
     const [
@@ -1173,18 +1163,6 @@ const GetTransferStatsService = async (adminUnitId) => {
     const byPropertyUse = extractBreakdown(propertyUseResult, "property_use");
     const byTransferType = extractBreakdown(transferTypeResult, "transfer_type");
 
-    // DEBUG: Log the results to see what's coming back
-    console.log("DEBUG - Final Results:", {
-      today,
-      thisWeek,
-      thisMonth,
-      thisYear,
-      lastSixMonths,
-      overall,
-      byPropertyUse,
-      byTransferType,
-      adminUnitId: adminUnitIdNum
-    });
 
     return {
       success: true,
@@ -1208,12 +1186,6 @@ const GetTransferStatsService = async (adminUnitId) => {
       }
     };
   } catch (error) {
-    console.error("GetTransferStatsService Error:", error);
-    console.error("Error details:", {
-      message: error.message,
-      stack: error.stack,
-      adminUnitId
-    });
     throw new Error(`Failed to fetch transfer statistics: ${error.message}`);
   }
 };

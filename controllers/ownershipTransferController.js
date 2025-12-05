@@ -253,11 +253,6 @@ const getTransferStats = async (req, res) => {
 //get transfer by admin unit id from params
 const getTransferByAdminUnitId = async (req, res) => {
   try {
-    console.log('Received request for admin unit stats:', {
-      params: req.params,
-      query: req.query,
-      admin_unit_id: req.params.admin_unit_id
-    });
     
     const adminUnitId = req.params.admin_unit_id;
     
