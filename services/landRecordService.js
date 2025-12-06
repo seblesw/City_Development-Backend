@@ -536,6 +536,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 };
 
 //importLandRecordsFromXLSXService
+//importLandRecordsFromXLSXService
 const importLandRecordsFromXLSXService = async (filePath, user) => {
   const startTime = Date.now();
 
@@ -569,34 +570,19 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       processingTime: 0,
     };
 
-    // Group by plot number
-    const uniquePlots = new Map();
-    for (const row of validatedData) {
-      const plotKey = String(row.plot_number).trim();
-      if (!plotKey || plotKey === "null" || plotKey === "undefined") {
-        continue;
-      }
-      if (!uniquePlots.has(plotKey)) {
-        uniquePlots.set(plotKey, [row]);
-      } else {
-        uniquePlots.get(plotKey).push(row);
-      }
-    }
-
-    if (uniquePlots.size === 0) {
+    if (validatedData.length === 0) {
       throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
     }
 
     const CONCURRENCY = 5;
-    const plotEntries = Array.from(uniquePlots.entries());
     const pLimit = (await import("p-limit")).default;
     const limiter = pLimit(CONCURRENCY);
 
     const creationResults = await Promise.all(
-      plotEntries.map(([plotNumber, rows]) =>
+      validatedData.map((row) =>
         limiter(async () => {
           try {
-            const transformedData = await transformXLSXData(rows, adminUnitId);
+            const transformedData = await transformXLSXData([row], adminUnitId);
 
             await createLandRecordService(
               {
@@ -611,14 +597,14 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
               { isImport: true }
             );
 
-            return { success: true, plotNumber };
+            return { success: true, plotNumber: row.plot_number };
           } catch (error) {
-            const detailedError = extractDetailedError(error, plotNumber);
+            const detailedError = extractDetailedError(error, row.plot_number);
             return {
               success: false,
-              plotNumber,
+              plotNumber: row.plot_number,
               error: detailedError,
-              row_data: rows[0],
+              row_data: row,
             };
           }
         })
@@ -647,9 +633,9 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     results.performance = {
       rowsPerSecond:
         results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
-      plotsProcessed: results.createdCount,
+      rowsProcessed: results.createdCount,
       successRate:
-        ((results.createdCount / plotEntries.length) * 100).toFixed(2) + "%",
+        ((results.createdCount / validatedData.length) * 100).toFixed(2) + "%",
       totalTime: `${Math.round(results.processingTime)}s`,
     };
 
@@ -823,7 +809,6 @@ async function streamAndParseXLSX(filePath) {
     }
   });
 }
-// Enhanced error extraction function
 function extractDetailedError(error, plotNumber) {
   let errorMessage = error.message;
 
@@ -885,7 +870,6 @@ function extractDetailedError(error, plotNumber) {
   // Default: return the original message but clean it up
   return errorMessage.replace("Validation error", "የ Network or connection errors");
 }
-
 async function transformXLSXData(rows, adminUnitId) {
   try {
     const primaryRow = rows[0];
@@ -997,19 +981,17 @@ async function transformXLSXData(rows, adminUnitId) {
         address: normalizeString(primaryRow.address) || null,
       });
     } else if (ownershipCategory === "የጋራ") {
-      // Shared ownership - multiple owners
-      owners = rows.map((row, index) => {
-        return {
-          first_name: normalizeString(row.first_name) || "Unknown",
-          middle_name: normalizeString(row.middle_name) || "unknown",
-          last_name: normalizeString(row.last_name) || "Unknown",
-          national_id: normalizeString(row.national_id) || null,
-          email: normalizeString(row.email) || null,
-          phone_number: normalizeString(row.phone_number) || null,
-          gender: normalizeString(row.gender) || null,
-          relationship_type: normalizeString(row.relationship_type) || null,
-          address: normalizeString(row.address) || null,
-        };
+      // Shared ownership - since processing row by row, treat as single owner per row
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "Unknown",
+        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
+        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        relationship_type: normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
       });
     } else {
       // Single ownership - use primary row
@@ -1077,47 +1059,45 @@ async function transformXLSXData(rows, adminUnitId) {
       address_ketena: normalizeString(primaryRow.address_ketena) || null,
     };
 
-    // Documents - use all rows for shared ownership, primary row for single
-    const documentRows = ownershipCategory === "የጋራ" ? rows : [primaryRow];
-    const documents = documentRows.map((row) => ({
+    // Documents - since row by row, use primary row
+    const documents = [{
       document_type: DOCUMENT_TYPES.TITLE_DEED,
-      plot_number: normalizeString(row.plot_number) || row.plot_number,
-      approver_name: normalizeString(row.approver_name) || null,
-      verifier_name: normalizeString(row.verifier_name) || null,
-      preparer_name: normalizeString(row.preparer_name) || null,
-      shelf_number: normalizeString(row.shelf_number) || null,
-      box_number: normalizeString(row.box_number) || null,
-      file_number: normalizeString(row.file_number) || null,
-      reference_number: normalizeString(row.reference_number) || null,
-      description: normalizeString(row.description) || null,
-      issue_date: normalizeString(row.issue_date) || null,
+      plot_number: normalizeString(primaryRow.plot_number) || primaryRow.plot_number,
+      approver_name: normalizeString(primaryRow.approver_name) || null,
+      verifier_name: normalizeString(primaryRow.verifier_name) || null,
+      preparer_name: normalizeString(primaryRow.preparer_name) || null,
+      shelf_number: normalizeString(primaryRow.shelf_number) || null,
+      box_number: normalizeString(primaryRow.box_number) || null,
+      file_number: normalizeString(primaryRow.file_number) || null,
+      reference_number: normalizeString(primaryRow.reference_number) || null,
+      description: normalizeString(primaryRow.description) || null,
+      issue_date: normalizeString(primaryRow.issue_date) || null,
       files: [],
-    }));
+    }];
 
-    // Payments
-    const paymentRows = ownershipCategory === "የጋራ" ? rows : [primaryRow];
+    // Payments - since row by row, use primary row
     const derivedPaymentType =
       landRecordData.land_preparation === LAND_PREPARATION.LEASE
         ? PAYMENT_TYPES.LEASE_PAYMENT
         : landRecordData.land_preparation === LAND_PREPARATION.EXISTING
         ? PAYMENT_TYPES.TAX
         : PAYMENT_TYPES.PENALTY;
-    const payments = paymentRows.map((row) => ({
+    const payments = [{
       payment_type: derivedPaymentType,
-      total_amount: parseFloatValue(row.total_amount, 0),
-      paid_amount: parseFloatValue(row.paid_amount, 0),
-      lease_year: parseIntegerValue(row.lease_year, 0),
-      lease_payment_year: parseIntegerValue(row.lease_payment_year, 0),
-      annual_payment: parseFloatValue(row.annual_payment, 0),
-      initial_payment: parseFloatValue(row.initial_payment, 0),
-      penalty_rate: parseFloatValue(row.penalty_rate, 0),
-      remaining_amount: parseFloatValue(row.remaining_amount, 0),
-      receipt_number: normalizeString(row.receipt_number) || null,
-      payment_date: parseDateValue(row.payment_date) || null,
-      currency: normalizeString(row.currency) || "ETB",
-      payment_status: calculatePaymentStatus(row),
-      description: normalizeString(row.description) || null,
-    }));
+      total_amount: parseFloatValue(primaryRow.total_amount, 0),
+      paid_amount: parseFloatValue(primaryRow.paid_amount, 0),
+      lease_year: parseIntegerValue(primaryRow.lease_year, 0),
+      lease_payment_year: parseIntegerValue(primaryRow.lease_payment_year, 0),
+      annual_payment: parseFloatValue(primaryRow.annual_payment, 0),
+      initial_payment: parseFloatValue(primaryRow.initial_payment, 0),
+      penalty_rate: parseFloatValue(primaryRow.penalty_rate, 0),
+      remaining_amount: parseFloatValue(primaryRow.remaining_amount, 0),
+      receipt_number: normalizeString(primaryRow.receipt_number) || null,
+      payment_date: parseDateValue(primaryRow.payment_date) || null,
+      currency: normalizeString(primaryRow.currency) || "ETB",
+      payment_status: calculatePaymentStatus(primaryRow),
+      description: normalizeString(primaryRow.description) || null,
+    }];
 
     return {
       owners,
