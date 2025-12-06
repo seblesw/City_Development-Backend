@@ -1,6 +1,5 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
-const { on } = require("nodemailer/lib/xoauth2");
 // Load models in dependency order to ensure foreign key references are resolved
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
