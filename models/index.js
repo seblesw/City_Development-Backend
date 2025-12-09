@@ -317,6 +317,10 @@ AdministrativeUnit.hasMany(LandRecord, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+AdministrativeUnit.hasMany(Document, {
+  foreignKey: "administrative_unit_id",
+  as: "documents",
+});
 AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
   as: "leseagreements",
@@ -460,6 +464,11 @@ Document.belongsTo(User, {
   as: "inactivator",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
+});
+
+Document.belongsTo(AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrativeUnit",
 });
 // PaymentSchedule associations
 PaymentSchedule.belongsTo(LandPayment, {

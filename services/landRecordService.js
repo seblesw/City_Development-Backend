@@ -67,6 +67,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 
       const existingDocument = await Document.findOne({
         where: {
+          administrative_unit_id: adminunit,
           plot_number: plotNumber,
           deletedAt: null,
         },

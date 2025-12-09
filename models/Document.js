@@ -127,7 +127,11 @@ module.exports = (db, DataTypes) => {
           len: { args: [1, 20], msg: "የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም" },
         },
       },
-
+      administrative_unit_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "administrative_units", key: "id" },
+      },
       preparer_name: {
         type: DataTypes.STRING,
         allowNull: true,
