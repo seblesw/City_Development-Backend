@@ -20,6 +20,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
 
   try {
+    
     const existingOffice = await OversightOffice.findOne({
       where: {
         name,
@@ -32,11 +33,13 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
     }
 
+    
     const region = await Region.findByPk(region_id, { transaction });
     if (!region) {
       throw new Error("ትክክለኛ ክልል ይምረጡ።");
     }
 
+    
     let zone = null;
     if (zone_id) {
       zone = await Zone.findByPk(zone_id, { transaction });
@@ -45,6 +48,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
+    
     let woreda = null;
     if (woreda_id) {
       if (!zone_id) {
@@ -57,34 +61,49 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
-    // Generate code (single attempt)
+    
     let code;
-    const where = {
-      region_id,
-      deletedAt: { [Op.eq]: null },
-    };
-    if (zone_id) where.zone_id = zone_id;
-    if (woreda_id) where.woreda_id = woreda_id;
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      
+      const where = {
+        region_id,
+        deletedAt: { [Op.eq]: null },
+      };
 
-    const count = await OversightOffice.count({
-      where,
-      transaction,
-    });
+      if (zone_id) where.zone_id = zone_id;
+      if (woreda_id) where.woreda_id = woreda_id;
 
-    const regionCode = region.code;
-    const zoneCode = zone ? zone.code.split("-")[1] || "NZ" : "NZ";
-    const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
-    code = `${regionCode}-${zoneCode}-${woredaCode}-OF${count + 1}`;
+      const count = await OversightOffice.count({
+        where,
+        transaction,
+      });
 
-    const codeExists = await OversightOffice.findOne({
-      where: { code },
-      transaction,
-    });
+      const regionCode = region.code;
+      const zoneCode = zone ? zone.code.split("-")[1] || "NZ" : "NZ";
+      const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
+      code = `${regionCode}-${zoneCode}-${woredaCode}-OF${count + 1}`;
 
-    if (codeExists) {
-      throw new Error("ኮድ ቀድሞ አለ። እባክዎ እንደገና ይሞክሩ።");
+      
+      const codeExists = await OversightOffice.findOne({
+        where: { code },
+        transaction,
+      });
+
+      if (!codeExists) {
+        break; 
+      }
+
+      // if (attempts === maxAttempts) {
+      //   throw new Error("ለመፍጠር የሚሞከርበት ጊዜ አልቋል። እባክዎ እንደገና ይሞክሩ።");
+      // }
     }
 
+    
     return await OversightOffice.create(
       {
         name,
@@ -97,6 +116,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       { transaction }
     );
   } catch (error) {
+    
     throw new Error(error.message || "ቢሮ መፍጠር አልተሳካም።");
   }
 };
