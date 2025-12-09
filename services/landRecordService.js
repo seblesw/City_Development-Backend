@@ -969,9 +969,9 @@ async function transformXLSXData(rows, adminUnitId) {
 
       // Manager (first owner) - required for organization
       owners.push({
-        first_name: normalizeString(primaryRow.first_name) || "Unknown",
-        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
-        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
         national_id: normalizeString(primaryRow.national_id) || null,
         email: normalizeString(primaryRow.email) || null,
         gender: normalizeString(primaryRow.gender) || null,
@@ -983,9 +983,9 @@ async function transformXLSXData(rows, adminUnitId) {
     } else if (ownershipCategory === "የጋራ") {
       // Shared ownership - since processing row by row, treat as single owner per row
       owners.push({
-        first_name: normalizeString(primaryRow.first_name) || "Unknown",
-        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
-        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
         national_id: normalizeString(primaryRow.national_id) || null,
         email: normalizeString(primaryRow.email) || null,
         phone_number: normalizeString(primaryRow.phone_number) || null,
@@ -999,9 +999,9 @@ async function transformXLSXData(rows, adminUnitId) {
         throw new Error("ዋና ባለቤት ስም  ያስፈልጋል።");
       }
       owners.push({
-        first_name: normalizeString(primaryRow.first_name) || "Unknown",
-        middle_name: normalizeString(primaryRow.middle_name) || "unknown",
-        last_name: normalizeString(primaryRow.last_name) || "Unknown",
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
         national_id: normalizeString(primaryRow.national_id) || null,
         email: normalizeString(primaryRow.email) || null,
         gender: normalizeString(primaryRow.gender) || null,
