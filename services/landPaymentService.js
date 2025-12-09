@@ -6,69 +6,205 @@ const {
   LandRecord,
   User,
   Role,
+  ActionLog,
+  LAND_PREPARATION,
 } = require("../models");
 const { Op } = require("sequelize");
-const addNewPaymentService = async (landRecordId, user, data) => {
-  const {
-    payment_type,
-    total_amount,
-    paid_amount,
-    annual_payment,
-    initial_payment,
-    currency,
-    payment_status,
-    penalty_reason,
-    description,
-    payer_id,
-  } = data;
 
-  
-  const landRecord = await LandRecord.findByPk(landRecordId);
-  if (!landRecord) {
-    throw new Error("የመሬት መዝገብ አልተገኘም።");
+const derivePaymentTypeFromLandPreparation = (
+  landPreparation,
+  fallbackType = null
+) => {
+  if (landPreparation === LAND_PREPARATION.LEASE) {
+    return PAYMENT_TYPES.LEASE_PAYMENT;
   }
+  if (landPreparation === LAND_PREPARATION.EXISTING) {
+    return PAYMENT_TYPES.TAX;
+  }
+  return fallbackType || PAYMENT_TYPES.PENALTY;
+};
+const addNewPaymentService = async (landRecordId, user, paymentData = {}) => {
+  const t = await sequelize.transaction();
 
-  
-  const payment = await LandPayment.create({
-    land_record_id: landRecordId,
-    payment_type,
-    total_amount,
-    paid_amount,
-    annual_payment: annual_payment || null,
-    initial_payment: initial_payment || null,
-    currency: currency || "ETB",
-    payment_status: payment_status || PAYMENT_STATUSES.PENDING,
-    penalty_reason: penalty_reason || null,
-    description: description || null,
-    payer_id,
-    created_by: user.id,
-  });
+  try {
+    // Validate land record
+    const landRecord = await LandRecord.findByPk(landRecordId, { transaction: t });
+    if (!landRecord) {
+      throw new Error("የመሬት መዝገብ አልተገኘም።");
+    }
 
-  
-  const currentLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-  const newLog = [
-    ...currentLog,
-    {
-      action: "አዲስ ክፍያ ተጨምሯል",
-      payment_id: payment.id,
-      amount: payment.paid_amount,
-      currency: payment.currency,
-      payment_type: payment.payment_type,
-      changed_by: {
-        id: user.id,
-        first_name: user.first_name,
-        middle_name: user.middle_name,
-        last_name: user.last_name,
-      },
-      changed_at: new Date(),
-    },
-  ];
-  await LandRecord.update(
-    { action_log: newLog },
-    { where: { id: landRecordId } }
-  );
+    // Validate payment amount
+    const newPaidAmount = parseFloat(paymentData.paid_amount);
+    if (!paymentData.paid_amount || newPaidAmount <= 0) {
+      throw new Error("የክፍያ መጠን መግለጽ አለበት እና ከዜሮ በላይ መሆን አለበት።");
+    }
 
-  return payment;
+    // Find the existing payment
+    const existingPayment = await LandPayment.findOne({
+      where: { land_record_id: landRecordId },
+      order: [['createdAt', 'DESC']],
+      transaction: t
+    });
+
+    if (!existingPayment) {
+      throw new Error("ለዚህ የመሬት መዝገብ የቀድሞ ክፍያ አልተገኘም።");
+    }
+
+    // Get current amounts
+    const existingTotal = parseFloat(existingPayment.total_amount);
+    const currentPaid = parseFloat(existingPayment.paid_amount);
+    
+    let totalAmount = existingTotal;
+    let updatedPaymentData = {};
+
+    // If existing total is 0 and new total is provided, update the total amount and other fields
+    if (existingTotal === 0) {
+      // Validate that total_amount is provided when existing total is 0
+      if (!paymentData.total_amount || paymentData.total_amount <= 0) {
+        throw new Error("የጠቅላላ ክፍያ መጠን መግለጽ አለበት እና ከዜሮ በላይ መሆን አለበት");
+      }
+
+      totalAmount = parseFloat(paymentData.total_amount);
+      
+      // Update payment with new total amount and additional fields
+      updatedPaymentData = {
+        total_amount: totalAmount,
+        paid_amount: currentPaid + newPaidAmount,
+        remaining_amount: totalAmount - (currentPaid + newPaidAmount)
+      };
+
+      // Add lease-specific fields if payment type is lease
+      if (existingPayment.payment_type === PAYMENT_TYPES.LEASE_PAYMENT) {
+        if (paymentData.initial_payment) {
+          updatedPaymentData.initial_payment = parseFloat(paymentData.initial_payment);
+        }
+        if (paymentData.annual_payment) {
+          updatedPaymentData.annual_payment = parseFloat(paymentData.annual_payment);
+        }
+        if (paymentData.lease_year) {
+          updatedPaymentData.lease_year = paymentData.lease_year;
+        }
+        if (paymentData.lease_payment_year) {
+          updatedPaymentData.lease_payment_year = paymentData.lease_payment_year;
+        }
+      }
+
+      // Add penalty reason for penalty type
+      if (existingPayment.payment_type === PAYMENT_TYPES.PENALTY && paymentData.penalty_reason) {
+        updatedPaymentData.penalty_reason = paymentData.penalty_reason;
+      }
+
+      // Add description for all types
+      if (paymentData.description) {
+        updatedPaymentData.description = paymentData.description;
+      }
+    } else {
+      // Normal case - existing total amount is valid
+      const currentRemaining = parseFloat(existingPayment.remaining_amount) || totalAmount - currentPaid;
+
+      // Check if payment is already completed
+      if (currentRemaining <= 0) {
+        throw new Error("ክፍያው ቀድሞውኑ ሙሉ በሙሉ ተከፍሏል። ተጨማሪ ክፍያ ማከል አይቻልም።");
+      }
+
+      // Check if new payment exceeds remaining amount
+      if (newPaidAmount > currentRemaining) {
+        throw new Error(`የክፍያ መጠን ከቀረው መጠን መብለጥ አይችልም። ከፍተኛ የሚከፈለው: ${currentRemaining} ${existingPayment.currency}`);
+      }
+
+      // Calculate new amounts for normal case
+      updatedPaymentData = {
+        paid_amount: currentPaid + newPaidAmount,
+        remaining_amount: totalAmount - (currentPaid + newPaidAmount)
+      };
+
+      // For tax and penalty payments when total > 0, also update total amount if provided
+      if (existingPayment.payment_type === PAYMENT_TYPES.TAX || existingPayment.payment_type === PAYMENT_TYPES.PENALTY) {
+        if (paymentData.total_amount && paymentData.total_amount > 0) {
+          updatedPaymentData.total_amount = parseFloat(paymentData.total_amount);
+          updatedPaymentData.remaining_amount = parseFloat(paymentData.total_amount) - (currentPaid + newPaidAmount);
+          totalAmount = parseFloat(paymentData.total_amount);
+        }
+      }
+
+      // Add penalty reason for penalty type when total > 0
+      if (existingPayment.payment_type === PAYMENT_TYPES.PENALTY && paymentData.penalty_reason) {
+        updatedPaymentData.penalty_reason = paymentData.penalty_reason;
+      }
+    }
+
+    // Determine payment status
+    const updatedPaid = updatedPaymentData.paid_amount;
+    const updatedRemaining = updatedPaymentData.remaining_amount;
+    
+    let paymentStatus;
+    if (updatedRemaining <= 0) {
+      paymentStatus = PAYMENT_STATUSES.COMPLETED;
+    } else if (updatedPaid > 0) {
+      paymentStatus = PAYMENT_STATUSES.PARTIAL;
+    } else {
+      paymentStatus = existingPayment.payment_status;
+    }
+
+    updatedPaymentData.payment_status = paymentStatus;
+
+    // Update the existing payment
+    await existingPayment.update(updatedPaymentData, { transaction: t });
+
+    // Get creator info for ActionLog
+    let creator = null;
+    if (user.id) {
+      creator = await User.findByPk(user.id, { 
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t 
+      });
+    }
+
+    // Create ActionLog entry for payment update
+    await ActionLog.create({
+      land_record_id: landRecordId,
+      performed_by: user.id,
+      action_type: 'PAYMENT_UPDATED',
+      notes: `ክፍያ ታክሏል - አዲስ ክፍያ: ${newPaidAmount} ${existingPayment.currency}, አጠቃላይ የተከፈለ: ${updatedPaid} ${existingPayment.currency}`,
+      additional_data: {
+        payment_id: existingPayment.id,
+        payment_type: existingPayment.payment_type,
+        previous_paid_amount: currentPaid,
+        new_payment_amount: newPaidAmount,
+        updated_paid_amount: updatedPaid,
+        total_amount: totalAmount,
+        remaining_amount: updatedRemaining,
+        payment_status: paymentStatus,
+        currency: existingPayment.currency,
+        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
+        parcel_number: landRecord.parcel_number,
+        ...(existingTotal === 0 && {
+          initial_payment: updatedPaymentData.initial_payment,
+          annual_payment: updatedPaymentData.annual_payment,
+          lease_year: updatedPaymentData.lease_year,
+          lease_payment_year: updatedPaymentData.lease_payment_year
+        })
+      }
+    }, { transaction: t });
+
+    await t.commit();
+
+    return {
+      success: true,
+      previousPaid: currentPaid,
+      newPayment: newPaidAmount,
+      totalPaid: updatedPaid,
+      remaining: updatedRemaining,
+      totalAmount: totalAmount,
+      paymentStatus: paymentStatus,
+      currency: existingPayment.currency,
+      updatedFields: existingTotal === 0 ? 'total_amount and lease fields updated' : 'paid_amount updated'
+    };
+
+  } catch (error) {
+    await t.rollback();
+    throw new Error(`የክፋያ መጨመር ስህተት: ${error.message}`);
+  }
 };
 
 const createLandPaymentService = async (data, options = {}) => {
@@ -77,43 +213,30 @@ const createLandPaymentService = async (data, options = {}) => {
 
   try {
     
-    const requiredFields = [
-      "payment_type",
-      "total_amount",
-      "paid_amount",
-      "land_record_id",
-    ];
-    const missingFields = requiredFields.filter(
-      (field) => data[field] === undefined || data[field] === null
-    );
-    if (missingFields.length > 0) {
-      throw new Error(`የሚከተሉት መስኮች አስፈላጊ ናቸው: ${missingFields.join(", ")}`);
-    }
-
-    
     if (typeof data.land_record_id !== "number" || data.land_record_id <= 0) {
       throw new Error("ትክክለኛ የመሬት መዝገብ መታወቂያ መግለጽ አለበት።");
     }
-    
-    
-    
-    if (!Object.values(PAYMENT_TYPES).includes(data.payment_type)) {
-      throw new Error(
-        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(PAYMENT_TYPES).join(
-          ", "
-        )}`
-      );
-    }
-    if (data.total_amount <= 0) {
-      throw new Error("የጠቅላላ መጠን ከ 0 በላይ ትክክለኛ ቁጥር መሆን አለበት።");
-    }
-    if ( data.paid_amount < 0) {
-      throw new Error("የተከፈለው መጠን ከ 0 በላይ ወይም እኩል ትክክለኛ ቁጥር መሆን አለበት።");
-    }
-    if (data.paid_amount > data.total_amount) {
-      throw new Error("የተከፈለው መጠን ከጠቅላላ መጠን መብለጥ አይችልም።");
+    const landRecord = await LandRecord.findByPk(data.land_record_id, {
+      transaction: t,
+      lock: transaction ? undefined : t.LOCK.UPDATE,
+    });
+
+    if (!landRecord) {
+      throw new Error("Land record not found");
     }
 
+    const resolvedPaymentType = derivePaymentTypeFromLandPreparation(
+      landRecord.land_preparation,
+      data.payment_type
+    );
+
+    if (!Object.values(PAYMENT_TYPES).includes(resolvedPaymentType)) {
+      throw new Error(
+        `የክፍያ አይነት ከተፈቀዱት ውስጥ መሆን አለበት: ${Object.values(
+          PAYMENT_TYPES
+        ).join(", ")}`
+      );
+    }
     
     const payment_status =
       data.paid_amount >= data.total_amount
@@ -126,65 +249,54 @@ const createLandPaymentService = async (data, options = {}) => {
     const payment = await LandPayment.create(
       {
         land_record_id: data.land_record_id,
-        payment_type: data.payment_type,
+        payment_type: resolvedPaymentType,
         total_amount: data.total_amount,
         paid_amount: data.paid_amount,
-        anual_payment: data.anual_payment || null,
-        initial_payment: data.initial_payment || null,
+        remaining_amount: data.total_amount - data.paid_amount,
+        lease_year: data.lease_year,
+        lease_payment_year: data.lease_payment_year || 0,
+        annual_payment: data.annual_payment || 0,
+        initial_payment: data.initial_payment || 0,
         currency: data.currency || "ETB",
         payment_status,
-        penalty_reason: data.penalty_reason || null,
-        description: data.description || null,
+        penalty_reason: data.penalty_reason || 0,
+        description: data.description || 0,
         payer_id: data.payer_id || null,
         created_by: data.created_by,
-        is_draft: false,
       },
       { transaction: t }
     );
 
-    
-    const landRecord = await LandRecord.findByPk(data.land_record_id, {
-      transaction: t,
-      lock: transaction ? undefined : t.LOCK.UPDATE,
-    });
-
-    if (!landRecord) {
-      throw new Error("Land record not found");
-    }
-
-    const currentLog = Array.isArray(landRecord.action_log)
-      ? landRecord.action_log
-      : [];
-    
+    //  Get creator info for ActionLog
     let creator = null;
     if (data.created_by) {
-      creator = await User.findByPk(data.created_by, { transaction: t });
+      creator = await User.findByPk(data.created_by, { 
+        attributes: ["id", "first_name", "middle_name", "last_name"],
+        transaction: t 
+      });
     }
-    const newLog = [
-      ...currentLog,
-      {
-        action: "ክፍያ ተጨምሯል",
+
+    //  Create ActionLog entry for payment creation (replaces the old action_log)
+    await ActionLog.create({
+      land_record_id: data.land_record_id,
+      performed_by: data.created_by,
+      action_type: 'PAYMENT_CREATED',
+      notes: `ክፍያ ተጨምሯል - አጠቃላይ: ${data.total_amount} ${data.currency || 'ETB'}, የተከፈለ: ${data.paid_amount} ${data.currency || 'ETB'}`,
+      additional_data: {
         payment_id: payment.id,
-        amount: payment.paid_amount,
-        currency: payment.currency,
-        payment_type: payment.payment_type,
-        changed_by: 
-           {
-              id: creator.id,
-              first_name: creator.first_name,
-              middle_name: creator.middle_name,
-              last_name: creator.last_name,
-            },
-        changed_at: new Date(),
-      },
-    ];
-
-    await LandRecord.update(
-      { action_log: newLog },
-      { where: { id: data.land_record_id }, transaction: t }
-    );
-
-    
+        payment_type: resolvedPaymentType,
+        total_amount: data.total_amount,
+        paid_amount: data.paid_amount,
+        currency: data.currency || "ETB",
+        payment_status: payment_status,
+        remaining_amount: data.total_amount - data.paid_amount,
+        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
+        parcel_number: landRecord.parcel_number,
+        description: data.description,
+        penalty_reason: data.penalty_reason,
+        payer_id: data.payer_id
+      }
+    }, { transaction: t });
     if (!transaction) await t.commit();
 
     return payment;
@@ -294,8 +406,8 @@ const updateLandPaymentsService = async (
         Object.keys(paymentData).forEach((key) => {
           if (
             paymentToUpdate[key] !== paymentData[key] &&
-            key !== "updated_at" &&
-            key !== "created_at"
+            key !== "updatedAt" &&
+            key !== "createdAt"
           ) {
             changes[key] = {
               from: paymentToUpdate[key],

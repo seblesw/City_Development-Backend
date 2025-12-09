@@ -1,6 +1,5 @@
 const { Sequelize, DataTypes } = require("sequelize");
 const db = require("../config/database");
-const { on } = require("nodemailer/lib/xoauth2");
 // Load models in dependency order to ensure foreign key references are resolved
 const Role = require("./Role")(db, DataTypes);
 const Region = require("./Region")(db, DataTypes);
@@ -8,23 +7,24 @@ const Zone = require("./Zone")(db, DataTypes);
 const Woreda = require("./Woreda")(db, DataTypes);
 const OversightOffice = require("./OversightOffice")(db, DataTypes);
 const AdministrativeUnit = require("./AdministrativeUnit")(db, DataTypes);
+const PushNotification = require("./PushNotification")(db, DataTypes);
 const { LeaseAgreement, LEASE_STATUSES } = require("./LeaseAgreement")(
   db,
   DataTypes
 );
+const ActionLog = require("./ActionLog")(db, DataTypes);
+
 const User = require("./User")(db, DataTypes);
 const {
   LandRecord,
   RECORD_STATUSES,
-  NOTIFICATION_STATUSES,
   LAND_HISTORY,
   INFRASTRUCTURE_STATUS,
-  PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
-  LEASE_OWNERSHIP_TYPE,
   LEASE_TRANSFER_REASONS,
   ZONING_TYPES,
+  LAND_PREPARATION,
 } = require("./LandRecord")(db, DataTypes);
 const LandOwner = require("./LandOwner")(db, DataTypes);
 const PaymentSchedule = require("./PaymentSchedule")(db, DataTypes);
@@ -35,7 +35,17 @@ const { LandPayment, PAYMENT_STATUSES, PAYMENT_TYPES } =
   require("./LandPayment")(db, DataTypes);
 const { Document, DOCUMENT_TYPES } = require("./Document")(db, DataTypes);
 const { LeaseUser, LEASE_USER_TYPES } = require("./LeaseUser")(db, DataTypes);
+const {
+  OwnershipTransfer,
+  SALE_OR_GIFT_SUB,
+  PROPERTY_USE,
+  INHERITANCE_RELATION,
+  TRANSFER_TYPE,
+} = require("./OwnershipTransfer")(db, DataTypes);
+const GeoCoordinate = require("./GeoCoordinate")(db, DataTypes);
 
+const { Organization, ORGANIZATION_TYPES, EIA_DOCUMENT } =
+  require("./Organization")(db, DataTypes);
 // Role associations
 Role.hasMany(User, {
   foreignKey: "role_id",
@@ -138,6 +148,39 @@ User.hasMany(LeaseAgreement, {
 User.hasMany(LeaseAgreement, {
   foreignKey: "updated_by",
   as: "updatedLeases",
+});
+
+User.hasMany(OwnershipTransfer, {
+  foreignKey: "created_by",
+  as: "createdOwnershipTransfers",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+User.hasMany(OwnershipTransfer, {
+  foreignKey: "updated_by",
+  as: "updatedOwnershipTransfers",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+User.hasMany(OwnershipTransfer, {
+  foreignKey: "recipient_user_id",
+  as: "receivedOwnershipTransfers",
+});
+User.hasMany(ActionLog, {
+  foreignKey: "performed_by",
+  as: "performedActions",
+});
+
+User.hasMany(PushNotification, {
+  foreignKey: "user_id",
+  as: "notifications",
+});
+User.hasMany(Organization, {
+  foreignKey: "user_id",
+  as: "organizations",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 // Region associations
 Region.hasMany(Zone, {
@@ -274,9 +317,21 @@ AdministrativeUnit.hasMany(LandRecord, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+AdministrativeUnit.hasMany(Document, {
+  foreignKey: "administrative_unit_id",
+  as: "documents",
+});
 AdministrativeUnit.hasMany(LeaseAgreement, {
   foreignKey: "administrative_unit_id",
   as: "leseagreements",
+});
+AdministrativeUnit.hasMany(ActionLog, {
+  foreignKey: "admin_unit_id",
+  as: "actionLogs",
+});
+AdministrativeUnit.hasMany(OwnershipTransfer, {
+  foreignKey: "administrative_unit_id",
+  as: "ownershipTransfers",
 });
 
 // LandRecord associations
@@ -333,6 +388,31 @@ LandRecord.hasMany(LeaseAgreement, {
   foreignKey: "land_record_id",
   as: "leasedlands",
 });
+LandRecord.hasMany(ActionLog, {
+  foreignKey: "land_record_id",
+  as: "actionLogs",
+});
+
+LandRecord.hasMany(PushNotification, {
+  foreignKey: "land_record_id",
+  as: "notifications",
+});
+LandRecord.belongsTo(Organization, {
+  foreignKey: "organization_id",
+  as: "organization",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+LandRecord.hasMany(OwnershipTransfer, {
+  foreignKey: "land_record_id",
+  as: "ownershipTransfers",
+});
+LandRecord.hasMany(GeoCoordinate, {
+  foreignKey: 'land_record_id',
+  as: 'coordinates',
+  onDelete: 'CASCADE',
+});
+
 
 // LandPayment associations
 LandPayment.belongsTo(LandRecord, {
@@ -384,6 +464,11 @@ Document.belongsTo(User, {
   as: "inactivator",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
+});
+
+Document.belongsTo(AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrativeUnit",
 });
 // PaymentSchedule associations
 PaymentSchedule.belongsTo(LandPayment, {
@@ -462,6 +547,81 @@ LeaseUser.belongsTo(LeaseAgreement, {
   foreignKey: "lease_agreement_id",
   as: "leaseAgreement",
 });
+
+//push notification associations
+PushNotification.belongsTo(User, {
+  foreignKey: "user_id",
+  as: "user",
+});
+
+PushNotification.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
+
+PushNotification.belongsTo(ActionLog, {
+  foreignKey: "action_log_id",
+  as: "actionLog",
+});
+// OwnershipTransfer associations
+OwnershipTransfer.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "land_record",
+});
+OwnershipTransfer.belongsTo(User, {
+  foreignKey: "recipient_user_id",
+  as: "recipient_user",
+});
+OwnershipTransfer.belongsTo(User, {
+  foreignKey: "created_by",
+  as: "creator",
+});
+OwnershipTransfer.belongsTo(User, {
+  foreignKey: "updated_by",
+  as: "updater",
+});
+OwnershipTransfer.belongsTo(AdministrativeUnit, {
+  foreignKey: "administrative_unit_id",
+  as: "administrative_unit",
+});
+// ActionLog associations
+ActionLog.belongsTo(User, {
+  foreignKey: "performed_by",
+  as: "performedBy",
+});
+
+ActionLog.belongsTo(LandRecord, {
+  foreignKey: "land_record_id",
+  as: "landRecord",
+});
+
+ActionLog.hasMany(PushNotification, {
+  foreignKey: "action_log_id",
+  as: "notifications",
+});
+ActionLog.belongsTo(AdministrativeUnit, {
+  foreignKey: "admin_unit_id",
+  as: "administrativeUnit",
+});
+//organization associations
+Organization.belongsTo(User, {
+  foreignKey: "user_id",
+  as: "manager",
+});
+Organization.hasMany(LandRecord, {
+  foreignKey: "organization_id",
+  as: "landRecords",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+//geoCoordinate associations
+GeoCoordinate.belongsTo(LandRecord, {
+  foreignKey: 'land_record_id',
+  as: 'landRecord',
+});
+
+
 // Export Sequelize instance, models, and constants
 module.exports = {
   sequelize: db,
@@ -483,12 +643,10 @@ module.exports = {
   RECORD_STATUSES,
   LAND_HISTORY,
   INFRASTRUCTURE_STATUS,
-  NOTIFICATION_STATUSES,
-  PRIORITIES,
   LAND_USE_TYPES,
   OWNERSHIP_TYPES,
-  LEASE_OWNERSHIP_TYPE,
   ZONING_TYPES,
+  LAND_PREPARATION,
   PAYMENT_STATUSES,
   PAYMENT_TYPES,
   NOTIFICATION_TYPES,
@@ -498,4 +656,15 @@ module.exports = {
   LeaseUser,
   LEASE_USER_TYPES,
   LEASE_TRANSFER_REASONS,
+  PushNotification,
+  OwnershipTransfer,
+  SALE_OR_GIFT_SUB,
+  PROPERTY_USE,
+  INHERITANCE_RELATION,
+  TRANSFER_TYPE,
+  ActionLog,
+  Organization,
+  ORGANIZATION_TYPES,
+  EIA_DOCUMENT,
+  GeoCoordinate,
 };

@@ -1,24 +1,31 @@
 const { Op } = require("sequelize");
-const { Zone, Region, Woreda, AdministrativeUnit } = require("../models/index");
+const { Zone, Region, Woreda, AdministrativeUnit } = require("../models");
 
 const createZoneService = async (zoneData, createdByUserId) => {
   const { name, region_id } = zoneData;
 
+  // Check for duplicate zone name in the same region
   const existingZone = await Zone.findOne({
     where: { name, region_id, deletedAt: null },
   });
+  
   if (existingZone) {
     throw new Error("የዞን ስም በዚህ ክልል ውስጥ ተይዟል።");
   }
 
+  // Validate region exists
   const region = await Region.findByPk(region_id);
   if (!region) {
     throw new Error("ትክክለኛ ክልል ይምረጡ።");
   }
 
-  const count = await Zone.count({ where: { region_id } });
-  const code = `${region.code}-Z${count + 1}`;
+  // Generate unique identifier using timestamp
+  const uniqueId = Date.now().toString().slice(-9); 
+  
+  // Generate the code: RegionCode + Z + UniqueID
+  const code = `${region.code}Z${uniqueId}`;
 
+  // Create the zone
   const zone = await Zone.create({
     name,
     region_id,
@@ -26,7 +33,8 @@ const createZoneService = async (zoneData, createdByUserId) => {
     created_by: createdByUserId || null,
   });
 
-  return Zone.findByPk(zone.id, {
+  // Return the created zone with associations
+  return await Zone.findByPk(zone.id, {
     include: [
       { model: Region, as: "region" },
       { model: Woreda, as: "woredas" },

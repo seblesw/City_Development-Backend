@@ -78,7 +78,7 @@ const createLandOwner = async (
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
               profile_picture: profilePicture || existingUser.profile_picture,
-              role_id: ownerData.role_id || existingUser.role_id, // Keep existing role_id if not provided
+              role_id: ownerData.role_id || existingUser.role_id, 
             },
             { transaction: t }
           );
@@ -95,7 +95,7 @@ const createLandOwner = async (
             administrative_unit_id: administrativeUnitId,
             password,
             profile_picture: profilePicture,
-            role_id: roleId, // This is the crucial fix - setting role_id
+            role_id: roleId, 
             created_by: creatorId,
             is_active: true,
           },

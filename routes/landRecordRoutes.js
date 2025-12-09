@@ -4,6 +4,7 @@ const landRecordController = require("../controllers/landRecordController");
 const rateLimit = require("express-rate-limit");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
+const { getActionLog } = require("../controllers/actionLogController");
 
 // Rate limiters
 const getLimiter = rateLimit({
@@ -33,36 +34,7 @@ router.get(
   landRecordController.getLandRecordStatsController
 ),
 router.get("/land-banks", authMiddleware.protect, landRecordController.getLandBankRecords)
-  // Draft Management Routes
-  router.post(
-    "/drafts",
-    authMiddleware.protect,
-    postLimiter,
-    upload.array("documents", 20),
-    landRecordController.saveLandRecordAsDraft
-  );
-
-router.get(
-  "/drafts/:id",
-  authMiddleware.protect,
-  getLimiter,
-  landRecordController.getDraftLandRecord
-);
-
-router.put(
-  "/drafts/:id",
-  authMiddleware.protect,
-  postLimiter,
-  upload.array("documents", 20),
-  landRecordController.updateDraftLandRecord
-);
-
-router.post(
-  "/drafts/:id/submit",
-  authMiddleware.protect,
-  postLimiter,
-  landRecordController.submitDraftLandRecord
-);
+router.get('/:landRecordId/action-logs', authMiddleware.protect, getActionLog);
 
 // Main Land Record Routes
 router.post(
@@ -78,10 +50,9 @@ router.post(
 router.post(
   "/:id/status",
   authMiddleware.protect,
-  postLimiter,
   landRecordController.changeRecordStatus
 );
-//get the land records the primary owner
+//get the land records by owner
 router.get(
   "/my-land-records",
   authMiddleware.protect,
@@ -97,9 +68,11 @@ router.get(
 );
 router.get('/filter-options', landRecordController.getFilterOptions);
 
-router.get('/stat', landRecordController.getLandRecordsStats);
-//this helps to filter land records geographically by admin unit
-router.get(
+router.get('/admin-stat',
+  authMiddleware.protect,
+  landRecordController.getLandRecordsStats);
+
+  router.get(
   "/admin-unit-records",
   authMiddleware.protect,
   landRecordController.getLandRecordsByUserAdminUnit

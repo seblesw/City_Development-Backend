@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { AdministrativeUnit, Region, Zone, Woreda, OversightOffice, User, LandRecord } = require("../models/index");
+const flatted = require('flatted');
 
 const typeLevels = {
   "ሪጂኦፖሊታን": 1,
@@ -22,42 +23,71 @@ const levelMap = {
 const createAdministrativeUnitService = async (unitData, createdByUserId) => {
   const { name, region_id, zone_id, woreda_id, oversight_office_id, type } = unitData;
 
+  // Validate unit type
   if (!typeLevels[type]) {
     throw new Error("ትክክለኛ የክፍል አይነት ይምረጡ።");
   }
 
+  // Check for duplicate name in same region and oversight office
   const existingUnit = await AdministrativeUnit.findOne({
-    where: { name, region_id, oversight_office_id: oversight_office_id || null, deletedAt: null },
+    where: { 
+      name, 
+      region_id, 
+      oversight_office_id: oversight_office_id || null, 
+      deletedAt: null 
+    },
   });
+  
   if (existingUnit) {
     throw new Error("የአስተዳደር ክፍል ስም በዚህ ክልል እና ቢሮ ውስጥ ተይዟል።");
   }
 
+  // Validate region exists
   const region = await Region.findByPk(region_id);
   if (!region) {
     throw new Error("ትክክለኛ ክልል ይምረጡ።");
   }
 
+  // Validate zone if provided
   const zone = zone_id ? await Zone.findByPk(zone_id) : null;
   if (zone_id && !zone) {
     throw new Error("ትክክለኛ ዞን ይምረጡ።");
   }
 
+  // Validate woreda if provided
   const woreda = woreda_id ? await Woreda.findByPk(woreda_id) : null;
   if (woreda_id && !woreda) {
     throw new Error("ትክክለኛ ወረዳ ይምረጡ።");
   }
 
+  // Validate oversight office if provided
   const oversight = oversight_office_id ? await OversightOffice.findByPk(oversight_office_id) : null;
   if (oversight_office_id && (!oversight || oversight.region_id !== region.id)) {
     throw new Error("ትክክለኛ ቢሮ ይምረጡ።");
   }
 
-  const count = await AdministrativeUnit.count();
-  const code = `${region.code}-${zone?.code.split("-")[1] || "NZ"}-${woreda?.code.split("-")[2] || "NW"}-AU${count + 1}`;
+  // Generate unique identifier (timestamp + random)
+  const generateUniqueId = () => {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 999).toString().padStart(3, '0');
+    // Take last 6 digits of timestamp + 3 random digits = 9 digit unique ID
+    return `${timestamp.slice(-6)}${random}`;
+  };
+
+  // Generate code parts
+  const regionCode = region.code;
+  const zoneCode = zone ? zone.code.split("-")[1] || "NZ" : "NZ";
+  const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
+  const uniqueId = generateUniqueId();
+  
+  // Create the final code
+  const code = `${regionCode}-${zoneCode}-${woredaCode}-AU-${uniqueId}`;
+
+  // Set unit level and max land levels
   const unit_level = typeLevels[type];
   const max_land_levels = levelMap[unit_level];
 
+  // Create the administrative unit
   const unit = await AdministrativeUnit.create({
     name,
     region_id,
@@ -71,13 +101,14 @@ const createAdministrativeUnitService = async (unitData, createdByUserId) => {
     created_by: createdByUserId || null,
   });
 
-  return AdministrativeUnit.findByPk(unit.id, {
+  // Return the created unit with all associations
+  return await AdministrativeUnit.findByPk(unit.id, {
     include: [
       { model: Region, as: "region" },
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name","middle_name", "last_name"] },
+      { model: User, as: "users", attributes: ["id", "first_name", "middle_name", "last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -98,7 +129,9 @@ const getAllAdministrativeUnitsService = async () => {
   });
 };
 
+
 const getAdministrativeUnitByIdService = async (id) => {
+  // Get administrative unit without users
   const unit = await AdministrativeUnit.findByPk(id, {
     where: { deletedAt: null },
     include: [
@@ -106,7 +139,6 @@ const getAdministrativeUnitByIdService = async (id) => {
       { model: Zone, as: "zone" },
       { model: Woreda, as: "woreda" },
       { model: OversightOffice, as: "oversightOffice" },
-      { model: User, as: "users", attributes: ["id", "first_name","middle_name","last_name"] },
       { model: LandRecord, as: "landRecords" },
     ],
   });
@@ -115,7 +147,18 @@ const getAdministrativeUnitByIdService = async (id) => {
     throw new Error("አስተዳደር ክፍል አልተገኘም።");
   }
 
-  return unit;
+  // Get users separately
+  const users = await User.findAll({
+    where: { administrative_unit_id: id },
+    attributes: ["id", "first_name", "middle_name", "last_name"],
+    raw: true 
+  });
+
+  // Return combined data
+  return {
+    ...unit.toJSON(),
+    users
+  };
 };
 
 const updateAdministrativeUnitService = async (id, unitData, updatedByUserId, transaction = null) => {

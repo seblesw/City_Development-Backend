@@ -2,8 +2,6 @@ const DOCUMENT_TYPES = {
   TITLE_DEED: "የባለቤትነት ሰነድ",
 };
 
-
-
 module.exports = (db, DataTypes) => {
   const Document = db.define(
     "Document",
@@ -19,7 +17,6 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: { msg: "የካርታ ቁጥር ባዶ መሆን አይችልም።" },
-          len: { args: [1, 50], msg: "የካርታ ቁጥር ከ1 እስከ 50 ቁምፊዎች መሆን አለበት።" },
         },
       },
       land_record_id: {
@@ -36,7 +33,27 @@ module.exports = (db, DataTypes) => {
             msg: "የሰነድ አይነት ከተፈቀዱት ውስጥ መሆን አለበት።",
           },
         },
-      }, 
+      },
+      shelf_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ሸልፍ ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
+      box_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ሳጥን ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
+        },
+      },
       reference_number: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -45,7 +62,16 @@ module.exports = (db, DataTypes) => {
             args: [0, 50],
             msg: "የሰነድ አመላካች ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
           },
-         
+        },
+      },
+      file_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 50],
+            msg: "የሰነድ ፋይል ቁጥር ከ0 እስከ 50 ቁምፊዎች መሆን አለበት።",
+          },
         },
       },
       numebr_of_pages: {
@@ -65,9 +91,9 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      inactived_by:{
-        type:DataTypes.INTEGER,
-        allowNull:true,
+      inactived_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
         references: { model: "users", key: "id" },
       },
       files: {
@@ -76,7 +102,7 @@ module.exports = (db, DataTypes) => {
         defaultValue: [],
       },
       issue_date: {
-        type: DataTypes.DATE,
+        type: DataTypes.STRING,
         allowNull: true,
       },
       description: {
@@ -94,24 +120,17 @@ module.exports = (db, DataTypes) => {
         type: DataTypes.JSONB,
         allowNull: true,
       },
-      verified_plan_number:{
-        type:DataTypes.STRING,
-        allowNull:true,
-        validate:{
-          len:{args:[1,20], msg:"የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም"}
-        }
-      },
-      is_draft: {
-        type: DataTypes.BOOLEAN,
+      verified_plan_number: {
+        type: DataTypes.STRING,
         allowNull: true,
-        defaultValue: false,
         validate: {
-          isBoolean(value) {
-            if (typeof value !== "boolean") {
-              throw new Error("is_draft የተለያዩ እሴቶች መሆን አለበት (true ወይም false)።");
-            }
-          },
+          len: { args: [1, 20], msg: "የጸደቀ የ ፕላን ቁጥር ከ 20 መብለጥ አይችልም" },
         },
+      },
+      administrative_unit_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "administrative_units", key: "id" },
       },
       preparer_name: {
         type: DataTypes.STRING,
@@ -123,7 +142,7 @@ module.exports = (db, DataTypes) => {
           },
         },
       },
-      verifyer_name: {
+      verifier_name: {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {

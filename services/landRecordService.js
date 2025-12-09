@@ -4,15 +4,17 @@ const {
   User,
   AdministrativeUnit,
   RECORD_STATUSES,
-  NOTIFICATION_STATUSES,
-  PRIORITIES,
   DOCUMENT_TYPES,
-
   Document,
   LandOwner,
   LandPayment,
   PAYMENT_TYPES,
   OWNERSHIP_TYPES,
+  Sequelize,
+  ActionLog,
+  Organization,
+  LAND_PREPARATION,
+  GeoCoordinate,
 } = require("../models");
 const documentService = require("./documentService");
 const landPaymentService = require("./landPaymentService");
@@ -20,98 +22,262 @@ const { Op } = require("sequelize");
 const userService = require("./userService");
 const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
-const { fs } = require("fs");
+const fs = require("fs");
+const path = require("path");
+const { createCoordinates } = require("./geoCoordinateService");
 
-const createLandRecordService = async (data, files, user) => {
-  const t = await sequelize.transaction();
+const createLandRecordService = async (data, files, user, options = {}) => {
+  const { transaction: externalTransaction, isImport = false } = options;
+  const t = externalTransaction || (await sequelize.transaction());
 
   try {
-    const { owners = [], land_record, documents = [], land_payment } = data;
+    const {
+      owners = [],
+      land_record = {},
+      documents = [],
+      land_payment,
+      organization_info = {},
+      points = [],
+    } = data;
     const adminunit = user.administrative_unit_id;
 
-    const existingRecord = await LandRecord.findOne({
-      where: {
-        parcel_number: land_record.parcel_number,
-        administrative_unit_id: adminunit,
-        deletedAt: null,
-      },
-      transaction: t,
-    });
-
-    if (existingRecord) {
-      throw new Error("ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።");
+    if (!land_record.ownership_category) {
+      throw new Error("የባለቤትነት ክፍል (ownership_category) መግለጽ አለበት።");
     }
 
+    //Validate organization data if ownership category is organization
+    if (land_record.ownership_category === "የድርጅት") {
+      if (!organization_info.name) {
+        throw new Error("የድርጅቱ ስም መግለጽ አለበት።");
+      }
+      if (!organization_info.organization_type) {
+        throw new Error("የድርጅቱ አይነት መግለጽ አለበት።");
+      }
+      if (owners.length === 0) {
+        throw new Error("የድርጅቱ መሪ (manager) መግለጽ አለበት።");
+      }
+    }
+
+    // For imports, check plot_number in documents table
+    if (isImport) {
+      const plotNumber = documents[0]?.plot_number;
+      if (!plotNumber) {
+        throw new Error("የካርታ ሰነድ ቁጥር (plot_number) ከሰነዶች አልተገኘም።");
+      }
+
+      const existingDocument = await Document.findOne({
+        where: {
+          administrative_unit_id: adminunit,
+          plot_number: plotNumber,
+          deletedAt: null,
+        },
+        attributes: ["id"],
+        transaction: t,
+      });
+
+      if (existingDocument) {
+        throw new Error(
+          `ይህ ካርታ ሰነድ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`
+        );
+      }
+    } else {
+      // Original duplicate check for normal operations
+      const existingRecord = await LandRecord.findOne({
+        where: {
+          parcel_number: land_record.parcel_number,
+          administrative_unit_id: adminunit,
+          deletedAt: null,
+        },
+        transaction: t,
+      });
+
+      if (existingRecord) {
+        throw new Error(
+          `ይህ የመሬት ቁጥር (${land_record.parcel_number}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`
+        );
+      }
+    }
+
+    // Helper function to convert absolute path to server relative path
+    const getServerRelativePath = (file) => {
+      if (!file || !file.path) return null;
+
+      // If already has serverRelativePath, use it
+      if (file.serverRelativePath) return file.serverRelativePath;
+
+      // Convert absolute path to relative path from uploads directory
+      const absolutePath = file.path;
+      const uploadsIndex = absolutePath.indexOf("uploads" + path.sep);
+
+      if (uploadsIndex !== -1) {
+        return absolutePath.substring(uploadsIndex);
+      }
+
+      // If we can't extract relative path, return the original path
+      return absolutePath;
+    };
+
+    // Process organization if ownership category is organization
+    let organization = null;
+    let managerUser = null;
+
+    if (land_record.ownership_category === "የድርጅት") {
+      // Create organization manager (first owner) as user
+      const managerData = owners[0];
+
+      const processManagerPhoto = () => {
+        if (!files || !files.profile_picture) return managerData;
+
+        let managerPhoto = null;
+
+        // Handle single file or array of files
+        if (Array.isArray(files.profile_picture)) {
+          // For organization, only use the first profile picture (manager's photo)
+          managerPhoto = getServerRelativePath(files.profile_picture[0]);
+        } else {
+          managerPhoto = getServerRelativePath(files.profile_picture);
+        }
+
+        return {
+          ...managerData,
+          profile_picture: managerPhoto,
+        };
+      };
+
+      const managerWithPhoto = isImport ? managerData : processManagerPhoto();
+
+      // Create manager user
+      const createdManagers = await userService.createLandOwner(
+        [
+          {
+            ...managerWithPhoto,
+            email: managerWithPhoto.email?.trim() || null,
+            address: managerWithPhoto.address?.trim() || null,
+            administrative_unit_id: adminunit,
+          },
+        ],
+        adminunit,
+        user.id,
+        { transaction: t }
+      );
+
+      managerUser = createdManagers[0];
+
+      // Create organization
+      organization = await Organization.create(
+        {
+          ...organization_info,
+          user_id: managerUser.id,
+          created_by: user.id,
+          administrative_unit_id: adminunit,
+        },
+        { transaction: t }
+      );
+
+      // Set organization_id in land_record
+      land_record.organization_id = organization.id;
+    }
+
+    // Process owners for non-organization cases
     const processOwnerPhotos = () => {
+      if (!files || land_record.ownership_category === "የድርጅት") {
+        // For organization, we already processed the manager, return empty or original
+        return land_record.ownership_category === "የድርጅት" ? [] : owners;
+      }
+
       const profilePictures = Array.isArray(files?.profile_picture)
-        ? files.profile_picture.filter(
-            (file) => file && file.serverRelativePath
-          )
-        : files?.profile_picture && files.profile_picture.serverRelativePath
+        ? files.profile_picture.filter((file) => file && file.path)
+        : files?.profile_picture && files.profile_picture.path
         ? [files.profile_picture]
         : [];
 
       return owners.map((owner, index) => ({
         ...owner,
-        profile_picture: profilePictures[index]?.serverRelativePath || null,
+        profile_picture: getServerRelativePath(profilePictures[index]) || null,
       }));
     };
 
-    const ownersWithPhotos = processOwnerPhotos();
+    const ownersWithPhotos = isImport ? owners : processOwnerPhotos();
 
-    const landRecord = await LandRecord.create(
-      {
-        ...land_record,
-        administrative_unit_id: adminunit,
-        created_by: user.id,
-        record_status: RECORD_STATUSES.SUBMITTED,
-        notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-        priority: land_record.priority || PRIORITIES.MEDIUM,
-        status_history: [
-          {
-            status: RECORD_STATUSES.SUBMITTED,
-            changed_by: {
-              id: user.id,
-              name: [user.first_name, user.middle_name, user.last_name]
-                .filter(Boolean)
-                .join(" "),
-            },
-            changed_at: new Date(),
+    // Skip status_history during import for performance
+    const landRecordData = {
+      ...land_record,
+      administrative_unit_id: adminunit,
+      created_by: user.id,
+      record_status: RECORD_STATUSES.SUBMITTED,
+    };
+
+    // Only add status_history for non-import operations
+    if (!isImport) {
+      landRecordData.status_history = [
+        {
+          status: RECORD_STATUSES.SUBMITTED,
+          changed_by: {
+            id: user.id,
+            name: [user.first_name, user.middle_name, user.last_name]
+              .filter(Boolean)
+              .join(" "),
           },
-        ],
-        action_log: [
-          {
-            action: "የመሬት መዝገብ ተፈጥሯል",
-            changed_by: {
-              id: user.id,
-              first_name: user.first_name,
-              middle_name: user.middle_name,
-              last_name: user.last_name,
-              email: user.email,
-            },
-            changed_at: new Date(),
+          changed_at: new Date(),
+        },
+      ];
+    }
+
+    const landRecord = await LandRecord.create(landRecordData, {
+      transaction: t,
+    });
+
+    // Skip ActionLog during import for performance
+    if (!isImport) {
+      await ActionLog.create(
+        {
+          land_record_id: landRecord.id,
+          admin_unit_id: adminunit,
+          performed_by: user.id,
+          action_type: "RECORD_CREATED",
+          notes: "የመሬት መዝገብ ተፈጥሯል",
+          additional_data: {
+            parcel_number: landRecord.parcel_number,
+            administrative_unit_id: adminunit,
+            owners_count: owners.length,
+            documents_count: documents.length,
+            created_by_name: [user.first_name, user.middle_name, user.last_name]
+              .filter(Boolean)
+              .join(" "),
+            initial_status: RECORD_STATUSES.SUBMITTED,
+            action_description: "የመሬት መዝገብ ተፈጥሯል",
+            ownership_category: landRecord.ownership_category,
+            ...(landRecord.ownership_category === "የድርጅት" &&
+              organization && {
+                organization_name: organization.name,
+                organization_id: organization.id,
+              }),
           },
-        ],
-      },
-      { transaction: t }
-    );
+        },
+        { transaction: t }
+      );
+    }
 
-    const createdOwners = await userService.createLandOwner(
-      ownersWithPhotos.map((owner) => ({
-        ...owner,
-        email: owner.email?.trim() || null,
-        address: owner.address?.trim() || null,
-        administrative_unit_id: adminunit,
-      })),
-      adminunit,
-      user.id,
-      { transaction: t }
-    );
+    // Handle owners creation
+    let createdOwners = [];
+    if (land_record.ownership_category !== "የድርጅት") {
+      // For non-organization ownership, create all owners normally
+      if (ownersWithPhotos.length > 0) {
+        createdOwners = await userService.createLandOwner(
+          ownersWithPhotos.map((owner) => ({
+            ...owner,
+            email: owner.email?.trim() || null,
+            address: owner.address?.trim() || null,
+            administrative_unit_id: adminunit,
+          })),
+          adminunit,
+          user.id,
+          { transaction: t }
+        );
 
-    await Promise.all(
-      createdOwners.map((owner) =>
-        LandOwner.create(
-          {
+        // Use bulkCreate for land owners during import
+        if (isImport && createdOwners.length > 0) {
+          const landOwnerData = createdOwners.map((owner) => ({
             user_id: owner.id,
             land_record_id: landRecord.id,
             ownership_percentage:
@@ -120,78 +286,248 @@ const createLandRecordService = async (data, files, user) => {
                 : 100,
             verified: true,
             created_at: new Date(),
+          }));
+
+          await LandOwner.bulkCreate(landOwnerData, { transaction: t });
+        } else {
+          await Promise.all(
+            createdOwners.map((owner) =>
+              LandOwner.create(
+                {
+                  user_id: owner.id,
+                  land_record_id: landRecord.id,
+                  ownership_percentage:
+                    land_record.ownership_category === "የጋራ"
+                      ? 100 / createdOwners.length
+                      : 100,
+                  verified: true,
+                  created_at: new Date(),
+                },
+                { transaction: t }
+              )
+            )
+          );
+        }
+      }
+    } else {
+      // For organization ownership, we already created the manager
+      // Link the organization manager to the land record
+      if (organization && managerUser) {
+        await LandOwner.create(
+          {
+            user_id: organization.user_id,
+            land_record_id: landRecord.id,
+            ownership_percentage: 100,
+            verified: true,
+            created_at: new Date(),
+            is_organization_manager: true,
           },
           { transaction: t }
-        )
-      )
-    );
+        );
 
-    const processDocuments = async () => {
-      if (!documents.length) return [];
+        createdOwners = [managerUser];
+      }
+    }
 
-      const filesArr = Array.isArray(files?.documents)
-        ? files.documents.filter((file) => file && file.serverRelativePath)
-        : [];
+    // === COORDINATE PROCESSING (NEW) ===
+    let coordinateResult = null;
+    if (points && Array.isArray(points) && points.length >= 3) {
+      try {
+        coordinateResult = await createCoordinates(
+          {
+            land_record_id: landRecord.id,
+            points: points.map((pt, idx) => ({
+              easting: pt.easting,
+              northing: pt.northing,
+              label: pt.label || `${idx + 1}`,
+              description: pt.description || null,
+            })),
+          },
+          t
+        ); // Pass transaction
 
-      return Promise.all(
-        documents.map((doc, index) => {
-          const file = filesArr[index];
-          return documentService.createDocumentService(
+        // Update land record with calculated area and center
+        await landRecord.update(
+          {
+            area_m2: coordinateResult.area_m2,
+            perimeter_m: coordinateResult.perimeter_m,
+            center_latitude: coordinateResult.center.latitude,
+            center_longitude: coordinateResult.center.longitude,
+          },
+          { transaction: t }
+        );
+
+        // Add coordinate info to ActionLog if not import
+        if (!isImport) {
+          await ActionLog.create(
             {
-              ...doc,
               land_record_id: landRecord.id,
-              file_path: file?.serverRelativePath || null,
+              admin_unit_id: adminunit,
+              performed_by: user.id,
+              action_type: "COORDINATES_CREATED",
+              notes: "የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል",
+              additional_data: {
+                coordinates_count: coordinateResult.coordinates.length,
+                area_m2: coordinateResult.area_m2,
+                perimeter_m: coordinateResult.perimeter_m,
+                center_lat: coordinateResult.center.latitude,
+                center_lng: coordinateResult.center.longitude,
+                action_description: `የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል (${coordinateResult.area_m2} ሜ², ${coordinateResult.perimeter_m} ሜ)`,
+              },
             },
-            file ? [file] : [],
-            user.id,
             { transaction: t }
           );
-        })
-      );
-    };
+        }
+      } catch (coordError) {
+        throw new Error(`የኮኦርዲኔት ዝርዝር መመዝገብ ስህተት: ${coordError.message}`);
+      }
+    } else if (points && points.length > 0 && points.length < 3) {
+      throw new Error("የመሬት ጂኦግራፊካ ኮኦርዲኔት ቢያንስ 3 ነጥቦች ይጠይቃል።");
+    }
+    // ====================================
 
-    const documentResults = await processDocuments();
+    // Document processing - FIXED FILE PATH HANDLING
+    let documentResults = [];
+    if (documents.length > 0) {
+      // Handle document files properly
+      let documentFiles = [];
 
-    let landPayment = null;
-    if (
-      land_payment &&
-      (land_payment.total_amount > 0 || land_payment.paid_amount > 0)
-    ) {
-      if (!land_payment.payment_type) {
-        throw new Error("የክፍያ አይነት መግለጽ አለበት።");
+      if (files && files.documents) {
+        if (Array.isArray(files.documents)) {
+          documentFiles = files.documents.filter((file) => file && file.path);
+        } else if (files.documents.path) {
+          documentFiles = [files.documents];
+        }
       }
 
-      landPayment = await landPaymentService.createLandPaymentService(
-        {
-          ...land_payment,
+      if (!isImport) {
+        // Normal document creation with proper relative paths
+        documentResults = await Promise.all(
+          documents.map((doc, index) => {
+            const file = documentFiles[index];
+            const relativePath = getServerRelativePath(file);
+
+            return documentService.createDocumentService(
+              {
+                ...doc,
+                land_record_id: landRecord.id,
+                file_path: relativePath,
+              },
+              file ? [file] : [],
+              user.id,
+              { transaction: t }
+            );
+          })
+        );
+      } else {
+        // Bulk create documents for imports
+        const documentData = documents.map((doc) => ({
+          ...doc,
           land_record_id: landRecord.id,
-          payer_id: createdOwners[0].id,
           created_by: user.id,
-          payment_status: calculatePaymentStatus(land_payment),
-        },
-        { transaction: t }
-      );
+          createdAt: new Date(),
+        }));
+
+        const createdDocs = await Document.bulkCreate(documentData, {
+          transaction: t,
+        });
+        documentResults = createdDocs.map((doc) => doc.toJSON());
+      }
     }
-    await t.commit();
+
+    // ALWAYS CREATE LAND PAYMENT BASED ON LAND_PREPARATION TYPE
+    let landPayment = null;
+
+    // Determine payment type based on LAND_PREPARATION
+    let paymentType = null;
+    if (land_record.land_preparation) {
+      if (land_record.land_preparation === "ሊዝ") {
+        paymentType = "የሊዝ ክፍያ";
+      } else if (land_record.land_preparation === "ነባር") {
+        paymentType = "የግብር ክፍያ";
+      } else {
+        paymentType = null;
+      }
+    } else {
+      paymentType = null;
+    }
+
+    // For organization, use organization manager as payer
+    const payerId =
+      land_record.ownership_category === "የድርጅት" && organization
+        ? organization.user_id
+        : createdOwners[0]?.id || null;
+
+    // If ownership is government, payerId can be null. Otherwise require payerId.
+    if (
+      !payerId &&
+      land_record.ownership_category !== "የመንግስት" &&
+      land_record.ownership_category !== "የድርጅት"
+    ) {
+      throw new Error("የከፋይ መለያ አልተገኘም።");
+    }
+
+    // Create payment data - use provided values or defaults
+    const paymentData = {
+      payment_type: paymentType,
+      total_amount: land_payment?.total_amount || 0,
+      paid_amount: land_payment?.paid_amount || 0,
+      payment_date: land_payment?.payment_date || new Date(),
+      due_date: land_payment?.due_date || new Date(),
+      receipt_number: land_payment?.receipt_number || null,
+      land_record_id: landRecord.id,
+      payer_id: payerId,
+      created_by: user.id,
+      payment_status: calculatePaymentStatus({
+        total_amount: land_payment?.total_amount || 0,
+        paid_amount: land_payment?.paid_amount || 0,
+      }),
+      ...land_payment,
+    };
+
+    landPayment = await landPaymentService.createLandPaymentService(
+      paymentData,
+      {
+        transaction: t,
+      }
+    );
+
+    if (!externalTransaction) {
+      await t.commit();
+    }
 
     return {
       landRecord: landRecord.toJSON(),
       owners: createdOwners.map((o) => o.toJSON()),
       documents: documentResults,
       landPayment: landPayment?.toJSON(),
+      organization: organization?.toJSON(),
+      coordinates: coordinateResult
+        ? {
+            points: coordinateResult.coordinates.map((c) => c.toJSON()),
+            polygon: coordinateResult.polygon,
+            center: coordinateResult.center,
+            area_m2: coordinateResult.area_m2,
+            perimeter_m: coordinateResult.perimeter_m,
+          }
+        : null,
     };
   } catch (error) {
-    await t.rollback();
+    if (!externalTransaction) {
+      await t.rollback();
+    }
 
-    if (files) {
-      const cleanupFiles = Object.values(files).flat();
+    if (!isImport && files) {
+      const cleanupFiles = Object.values(files)
+        .flat()
+        .filter((file) => file && file.path);
       cleanupFiles.forEach((file) => {
         try {
-          if (file && file.path) {
+          if (file && file.path && fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
           }
         } catch (cleanupError) {
-          // Silent fail - no error thrown during cleanup
+          // Silent fail - log but don't throw
         }
       });
     }
@@ -199,1069 +535,600 @@ const createLandRecordService = async (data, files, user) => {
     throw new Error(`የመዝገብ መፍጠር ስህተት: ${error.message}`);
   }
 };
-//import xlsx
-const importLandRecordsFromXLSXService = async (
-  filePath,
-  user,
-  options = {}
-) => {
-  const { transaction } = options;
+
+//importLandRecordsFromXLSXService
+const importLandRecordsFromXLSXService = async (filePath, user) => {
   const startTime = Date.now();
-  const t = transaction || (await sequelize.transaction());
 
   try {
     if (!user?.administrative_unit_id) {
-      throw new Error("የተጠቃሚው administrative_unit_id አልተገኘም።");
+      throw new Error("የተጠቃሚው አስተዳደራዊ ክፍል አልተገኘም።");
     }
 
     const adminUnitId = user.administrative_unit_id;
 
-    // Pre-load cache for duplicate checking
-    const cache = await buildOptimizedCache(adminUnitId, t);
+    // Stream and parse XLSX file
+    const { validatedData, validationErrors } = await streamAndParseXLSX(
+      filePath
+    );
 
+    if (validatedData.length === 0 && validationErrors.length === 0) {
+      throw new Error("ፋይሉ ባዶ ነው ወይም ምንም የሚገባ ውሂብ አልተገኘም።");
+    }
+
+    if (validatedData.length === 0) {
+      throw new Error("ሁሉም የተጻፉ ውሂቦች ስህተት አላቸው። ከላይ ያሉትን ስህተቶች ይመልከቱ።");
+    }
+
+    //    - let createLandRecordService handle duplicates
     const results = {
       createdCount: 0,
       skippedCount: 0,
-      totalRows: 0,
-      totalGroups: 0,
-      errors: [],
+      totalRows: validatedData.length,
+      errors: validationErrors,
       errorDetails: [],
       processingTime: 0,
-      performance: {
-        rowsPerSecond: 0,
-        batchesProcessed: 0,
-        averageBatchTime: 0,
-      },
     };
 
-    // Parallel: Parse file and validate in one pass
-    const { validatedData, validationErrors } =
-      await parseAndValidateXLSXOptimized(filePath);
-    results.totalRows = validatedData.length;
-    results.errors.push(...validationErrors);
-
     if (validatedData.length === 0) {
-      throw new Error("ምንም የሚገባ ውሂብ አልተገኘም።");
+      throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
     }
 
-    // Optimized grouping with Map
-    const recordsGrouped = groupXLSXRowsOptimized(validatedData);
-    results.totalGroups = recordsGrouped.size;
+    const CONCURRENCY = 5;
+    const pLimit = (await import("p-limit")).default;
+    const limiter = pLimit(CONCURRENCY);
 
-    // Process in optimized batches
-    const BATCH_SIZE = 100;
-    const batches = Array.from(recordsGrouped.entries());
+    const creationResults = await Promise.all(
+      validatedData.map((row) =>
+        limiter(async () => {
+          try {
+            const transformedData = await transformXLSXData([row], adminUnitId);
 
-    let totalBatchTime = 0;
+            await createLandRecordService(
+              {
+                land_record: transformedData.landRecordData,
+                owners: transformedData.owners,
+                documents: transformedData.documents,
+                land_payment: transformedData.payments[0],
+                organization_info: transformedData.organization_info || null,
+              },
+              [],
+              user,
+              { isImport: true }
+            );
 
-    for (let i = 0; i < batches.length; i += BATCH_SIZE) {
-      const batchStartTime = Date.now();
-      const batch = batches.slice(i, i + BATCH_SIZE);
+            return { success: true, plotNumber: row.plot_number };
+          } catch (error) {
+            const detailedError = extractDetailedError(error, row.plot_number);
+            return {
+              success: false,
+              plotNumber: row.plot_number,
+              error: detailedError,
+              row_data: row,
+            };
+          }
+        })
+      )
+    );
 
-      const batchResults = await processBatchOptimized(
-        batch,
-        adminUnitId,
-        user,
-        cache,
-        t
-      );
-
-      // Aggregate results
-      results.createdCount += batchResults.createdCount;
-      results.skippedCount += batchResults.skippedCount;
-      results.errors.push(...batchResults.errors);
-      results.errorDetails.push(...batchResults.errorDetails);
-
-      const batchTime = Date.now() - batchStartTime;
-      totalBatchTime += batchTime;
-      results.performance.batchesProcessed++;
-
-      // Progress-based transaction management
-      if (!transaction && i > 0 && i % 200 === 0) {
-        await t.commit();
-        const newTransaction = await sequelize.transaction();
-        Object.assign(t, newTransaction);
-        await updateCacheForTransaction(cache, adminUnitId, t);
+    creationResults.forEach((result, index) => {
+      if (result.success) {
+        results.createdCount++;
+      } else {
+        results.skippedCount++;
+        const errorMessage = `ካርታ ${result.plotNumber}: ${result.error}`;
+        results.errors.push(errorMessage);
+        results.errorDetails.push({
+          plot_number: result.plotNumber,
+          error: result.error,
+          row_data: result.row_data,
+          index,
+          timestamp: new Date().toISOString(),
+        });
       }
-    }
+    });
 
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
-    results.performance.rowsPerSecond =
-      results.totalRows > 0 ? results.totalRows / results.processingTime : 0;
-    results.performance.averageBatchTime =
-      results.performance.batchesProcessed > 0
-        ? totalBatchTime / results.performance.batchesProcessed
-        : 0;
+    results.performance = {
+      rowsPerSecond:
+        results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
+      rowsProcessed: results.createdCount,
+      successRate:
+        ((results.createdCount / validatedData.length) * 100).toFixed(2) + "%",
+      totalTime: `${Math.round(results.processingTime)}s`,
+    };
 
-    if (!transaction) await t.commit();
+    // Cleanup file
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (cleanupError) {
+      throw new Error(
+        "⚠️ Could not delete temporary file after import:",
+        cleanupError.message
+      );
+    }
     return results;
   } catch (error) {
-    if (!transaction && t && !t.finished) await t.rollback();
-    throw new Error(`XLSX import failed: ${error.message}`);
+    // Cleanup file on error
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (cleanupError) {
+      throw new Error(
+        "⚠️ Could not delete temporary file after import error:",
+        cleanupError.message
+      );
+    }
+
+    const amharicErrors = ["የተጠቃሚው", "ምንም የሚገባ", "ሁሉም ውሂቦች", "ፋይሉ", "የተጻፉ"];
+    const isAmharicError = amharicErrors.some((phrase) =>
+      error.message.includes(phrase)
+    );
+
+    if (isAmharicError) {
+      console.error("❌ Import failed with Amharic error:", error.message);
+      throw error;
+    }
+
+    console.error("❌ Import failed:", error.message);
+    throw new Error(`የ Excel ፋይል ማስገቢያ አልተሳካም: ${error.message}`);
   }
 };
-
-// OPTIMIZED: Cache builder
-async function buildOptimizedCache(adminUnitId, transaction) {
-  try {
-    const existingRecords = await LandRecord.findAll({
-      where: { administrative_unit_id: adminUnitId },
-      attributes: ["parcel_number"],
-      transaction,
-      raw: true,
-    });
-
-    return new Set(existingRecords.map((record) => `${record.parcel_number}`));
-  } catch (error) {
-    console.warn("Cache build warning:", error.message);
-    return new Set();
-  }
-}
-
-// OPTIMIZED: File parsing with single pass
-async function parseAndValidateXLSXOptimized(filePath) {
-  try {
-    const workbook = XLSX.readFile(filePath, {
-      cellDates: true,
-      dense: true,
-    });
-
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const xlsxData = XLSX.utils.sheet_to_json(worksheet, {
-      raw: false,
-      defval: null,
-      blankrows: false,
-    });
-
+async function streamAndParseXLSX(filePath) {
+  return new Promise((resolve, reject) => {
     const validatedData = [];
     const validationErrors = [];
+    let rowCount = 0;
 
-    // Single pass validation with early returns
-    for (let i = 0; i < xlsxData.length; i++) {
-      const row = xlsxData[i];
-      try {
-        // Fast validation checks - KEEPING ORIGINAL VALIDATION LOGIC
-        if (!row.parcel_number || !row.plot_number) {
-          throw new Error(`ሮው ${i + 2} የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።`);
-        }
-        if (!row.land_use || !row.ownership_type) {
-          throw new Error(`ሮው ${i + 2} የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።`);
-        }
-
-        // Data cleaning and normalization
-        row.parcel_number = row.parcel_number.toString().trim();
-        row.plot_number = row.plot_number.toString().trim();
-        row.land_use = row.land_use.toString().trim();
-        row.ownership_type = row.ownership_type.toString().trim();
-        row.ownership_category =
-          row.ownership_category?.toString().trim() || "የግል";
-
-        // Numeric field processing
-        row.land_level = parseInt(row.land_level) || 1;
-        row.area = parseFloat(row.area) || 0;
-
-        validatedData.push(row);
-      } catch (error) {
-        validationErrors.push(error.message);
-      }
-    }
-
-    return { validatedData, validationErrors };
-  } catch (error) {
-    throw new Error(`ፋይሉን ፓርስ ማድረግ አልተቻለም: ${error.message}`);
-  }
-}
-
-// OPTIMIZED: Grouping with Map
-function groupXLSXRowsOptimized(xlsxData) {
-  const groups = new Map();
-
-  for (const row of xlsxData) {
-    const key = `${row.parcel_number}_${row.plot_number}`;
-    if (!groups.has(key)) {
-      groups.set(key, []);
-    }
-    groups.get(key).push(row);
-  }
-
-  return groups;
-}
-
-// OPTIMIZED: Batch processing with parallel execution
-async function processBatchOptimized(
-  batchEntries,
-  adminUnitId,
-  user,
-  cache,
-  transaction
-) {
-  const batchResults = {
-    createdCount: 0,
-    skippedCount: 0,
-    errors: [],
-    errorDetails: [],
-  };
-
-  const processPromises = batchEntries.map(async ([groupKey, rows]) => {
     try {
-      const primaryRow = rows[0];
+      const workbook = XLSX.readFile(filePath, {
+        cellDates: true,
+        dense: true,
+        sheetStubs: true,
+      });
 
-      // Fast duplicate check
-      const parcelKey = `${primaryRow.parcel_number}`;
-      if (cache.has(parcelKey)) {
-        throw new Error(`ፓርሴል ቁጥር ${primaryRow.parcel_number} ከዚህ በፊት ተመዝግቧል።`);
+      // Check if worksheet exists
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error("ፋይሉ ባዶ ነው ወይም ምንም ሉህ አልተገኘም።");
       }
 
-      // Transform data - USING YOUR ORIGINAL TRANSFORM LOGIC
-      const transformedData = await transformXLSXData(rows, adminUnitId);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-      // USE YOUR ORIGINAL createLandRecordService - DON'T CHANGE THE LOGIC
-      await createLandRecordService(
-        {
-          land_record: transformedData.landRecordData,
-          owners: transformedData.owners,
-          documents: transformedData.documents,
-          land_payment: transformedData.payments[0] || null,
-        },
-        [],
-        user, // PASS USER TO MAINTAIN created_by
-        {
-          transaction: transaction,
-          isImport: true,
+      // Check if worksheet has data
+      if (!worksheet || !worksheet["!ref"]) {
+        throw new Error("የመጀመሪያው ሉህ ባዶ ነው።");
+      }
+
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        raw: false,
+        defval: null,
+        blankrows: false,
+      });
+
+      console.log(`📊 Found ${jsonData.length} rows in Excel file`);
+
+      if (jsonData.length === 0) {
+        throw new Error("በ Excel ፋይሉ ውስጥ ምንም ውሂብ አልተገኘም።");
+      }
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        rowCount = i + 2;
+
+        try {
+          // Store original row number for error reporting
+          row.__rowNum__ = i;
+
+          // Critical validation with Amharic errors
+          if (!row.plot_number) {
+            throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ያስፈልጋል።`);
+          }
+
+          if (!row.land_use) {
+            throw new Error(`ረድፍ ${rowCount} የመሬት አጠቃቀም ዓይነት ያስፈልጋል።`);
+          }
+
+          if (!row.ownership_type) {
+            throw new Error(`ረድፍ ${rowCount} የባለቤትነት ዓይነት ያስፈልጋል።`);
+          }
+
+          // Data normalization with validation
+          row.plot_number = String(row.plot_number).trim();
+          row.land_use = String(row.land_use).trim();
+          row.ownership_type = String(row.ownership_type).trim();
+          row.parcel_number = row.parcel_number
+            ? String(row.parcel_number).trim()
+            : null;
+          row.ownership_category = row.ownership_category
+            ? String(row.ownership_category).trim()
+            : "የግል";
+
+          // Validate plot number format
+          if (
+            row.plot_number === "null" ||
+            row.plot_number === "undefined"
+            // row.plot_number === "ሰ_ን_ማ" ||
+            // row.plot_number.length < 2
+          ) {
+            throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ትክክለኛ አይደለም።`);
+          }
+
+          // Numeric fields with validation
+          row.land_level = parseInt(row.land_level) || 1;
+          if (row.land_level < 1 || row.land_level > 5) {
+            throw new Error(`ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`);
+          }
+
+          row.area = parseFloat(row.area) || 0;
+          if (row.area < 0) {
+            throw new Error(`ረድፍ ${rowCount} ስፋት አሉታዊ መሆን አይችልም።`);
+          }
+
+          // Fix common ownership category spelling
+          if (
+            row.ownership_category === "የገራ" ||
+            row.ownership_category === "የጋር"
+          ) {
+            row.ownership_category = "የጋራ";
+          }
+
+          validatedData.push(row);
+        } catch (error) {
+          // Add row context to error
+          const enhancedError = `${error.message} (ረድፍ ${rowCount})`;
+          validationErrors.push(enhancedError);
+          console.warn(`⚠️ Row ${rowCount} validation error:`, error.message);
         }
-      );
-
-      // Update cache
-      cache.add(parcelKey);
-
-      return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error,
-        primaryRow: rows[0],
-      };
-    }
-  });
-
-  const results = await Promise.allSettled(processPromises);
-
-  // Process results
-  results.forEach((result, index) => {
-    const [groupKey, rows] = batchEntries[index];
-
-    if (result.status === "fulfilled") {
-      if (result.value.success) {
-        batchResults.createdCount++;
-      } else {
-        batchResults.skippedCount++;
-        handleImportErrorOptimized(
-          result.value.error,
-          result.value.primaryRow,
-          index + 1,
-          batchResults
-        );
       }
-    } else {
-      batchResults.skippedCount++;
-      handleImportErrorOptimized(
-        result.reason,
-        {
-          parcel_number: groupKey.split("_")[0],
-          plot_number: groupKey.split("_")[1],
-        },
-        index + 1,
-        batchResults
+
+      console.log(
+        `✅ Parsing completed: ${validatedData.length} valid rows, ${validationErrors.length} errors`
       );
+
+      resolve({ validatedData, validationErrors });
+    } catch (error) {
+      console.error("❌ Excel parsing failed:", error.message);
+
+      // Provide more specific error messages for common issues
+      if (
+        error.message.includes("no such file") ||
+        error.message.includes("ENOENT")
+      ) {
+        reject(new Error("ፋይሉ አልተገኘም። የቀረበው ፋይል መንገድ ትክክል መሆኑን ያረጋግጡ።"));
+      } else if (error.message.includes("file format")) {
+        reject(
+          new Error(
+            "የቀረበው ፋይል ቅርጽ ትክክል አይደለም። እባክዎ ትክክለኛ Excel ፋይል (.xlsx ወይም .xls) ያስገቡ።"
+          )
+        );
+      } else if (error.message.includes("password")) {
+        reject(new Error("ፋይሉ በይለፍ ቃል ተጠቅሷል። ያልተገደበ ፋይል ያስገቡ።"));
+      } else {
+        reject(new Error(`ፋይሉን ማንበብ አልተቻለም: ${error.message}`));
+      }
     }
   });
-
-  return batchResults;
 }
+function extractDetailedError(error, plotNumber) {
+  let errorMessage = error.message;
 
-// KEEP YOUR ORIGINAL transformXLSXData FUNCTION EXACTLY AS IS
+  // Case 1: Sequelize validation errors
+  if (error.name === "SequelizeValidationError" && error.errors) {
+    const validationErrors = error.errors.map((err) => {
+      const field = err.path || "unknown_field";
+      const message = err.message || "Validation failed";
+      return `${field}: ${message}`;
+    });
+
+    if (validationErrors.length > 0) {
+      return `የውሂብ ማረጋገጫ ስህተቶች: ${validationErrors.join("; ")}`;
+    }
+  }
+
+  // Case 2: Database constraint errors
+  if (error.original) {
+    const dbError = error.original;
+
+    // Unique constraint violation
+    if (dbError.code === "23505") {
+      if (dbError.detail && dbError.detail.includes("plot_number")) {
+        return "ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።";
+      }
+      return "ድርብ መረጃ ተገኝቷል። አንዳንድ መረጃዎች ቀደም ሲል ተመዝግተዋል።";
+    }
+
+    // Foreign key violation
+    if (dbError.code === "23503") {
+      return "የተሳሳተ ማጣቀሻ መረጃ። አንዳንድ የተዛመዱ መረጃዎች አልተገኙም።";
+    }
+
+    // Return original database message if it's meaningful
+    if (dbError.message && !dbError.message.includes("Validation error")) {
+      return dbError.message;
+    }
+  }
+
+  // Case 3: Custom error messages from our transform function
+  if (
+    errorMessage.includes("ረድፍ") ||
+    errorMessage.includes("ያስፈልጋል") ||
+    errorMessage.includes("ትክክለኛ") ||
+    errorMessage.includes("መሆን አለበት")
+  ) {
+    return errorMessage;
+  }
+
+  // Case 4: Network or connection errors
+  if (
+    errorMessage.includes("timeout") ||
+    errorMessage.includes("ECONNREFUSED") ||
+    errorMessage.includes("Network")
+  ) {
+    return "የውሂብ ጎታ ግንኙነት ስህተት። እባክዎ እንደገና ይሞክሩ።";
+  }
+
+  // Default: return the original message but clean it up
+  return errorMessage.replace("Validation error", "የ Network or connection errors");
+}
 async function transformXLSXData(rows, adminUnitId) {
   try {
     const primaryRow = rows[0];
-    const ownershipCategory = primaryRow.ownership_category?.trim();
 
-    if (!primaryRow.parcel_number || !primaryRow.plot_number) {
-      throw new Error("የ ፓርሴል ቁጥር እና የካርታ ቁጥር መያዝ አለበት።");
+    // Validation with Amharic errors
+    if (!primaryRow.plot_number) {
+      throw new Error("የካርታ ቁጥር ያስፈልጋል።");
     }
 
-    if (!primaryRow.land_use || !primaryRow.ownership_type) {
-      throw new Error("የይዞታ አግባብ እና የ መሬት አገልግሎት መያዝ አለበት።");
+    if (!primaryRow.land_use) {
+      throw new Error("የመሬት አጠቃቀም ዓይነት ያስፈልጋል።");
     }
 
+    if (!primaryRow.ownership_type) {
+      throw new Error("የባለቤትነት ዓይነት ያስፈልጋል።");
+    }
+
+    const normalizeString = (value) => {
+      if (value === undefined || value === null) return null;
+      const strValue = typeof value === "string" ? value : String(value);
+      const trimmed = strValue.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const parseBooleanValue = (value) => {
+      if (value === undefined || value === null || value === "") {
+        return null;
+      }
+      if (typeof value === "boolean") return value;
+
+      const normalized = String(value).trim().toLowerCase();
+      if (["true", "1", "yes", "አዎ", "አዎን", "ያለ"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "0", "no", "አይ", "የለም"].includes(normalized)) {
+        return false;
+      }
+      return null;
+    };
+
+    const parseDateValue = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const parseIntegerValue = (value, defaultValue = 0) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
+    };
+
+    const parseFloatValue = (value, defaultValue = 0) => {
+      const parsed = parseFloat(value);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
+    };
+
+    const ownershipCategory = primaryRow.ownership_category || "የግል";
     let owners = [];
-    if (ownershipCategory === "የጋራ") {
-      owners = rows.map((row, index) => {
-        if (!row.first_name || !row.middle_name) {
-          throw new Error(`ተጋሪ ${index + 1} ሙሉ ስም ያስፈልጋል።`);
-        }
+    let organizationInfo = null;
 
-        return {
-          first_name: row.first_name || "Unknown",
-          middle_name: row.middle_name || "unknown",
-          last_name: row.last_name || "Unknown",
-          national_id: row.national_id ? String(row.national_id).trim() : null,
-          email: row.email?.trim() || null,
-          phone_number: row.phone_number || null,
-          gender: row.gender || null,
-          relationship_type: row.relationship_type || null,
-          address: row.address || null,
-        };
-      });
-    } else if (ownershipCategory === "የግል") {
-      if (!primaryRow.first_name || !primaryRow.middle_name) {
-        throw new Error("ዋና ባለቤት ሙሉ ስም ያስፈልጋል።");
+    if (ownershipCategory === "የድርጅት") {
+      // Organization ownership - extract organization info and manager (first owner)
+      if (!primaryRow.organization_name && !primaryRow.name) {
+        throw new Error(
+          "የድርጅቱ ስም ያስፈልጋል። (organization_name or name column required)"
+        );
       }
 
+      if (!primaryRow.organization_type) {
+        throw new Error(
+          "የድርጅቱ አይነት ያስፈልጋል። (organization_type column required)"
+        );
+      }
+
+      // Manager is the first owner (required for organization)
+      if (!primaryRow.first_name || !primaryRow.middle_name) {
+        throw new Error("የድርጅቱ መሪ (manager) ስም እና የአባት ስም ያስፈልጋል።");
+      }
+
+      // Extract organization information (matches Organization model fields)
+      organizationInfo = {
+        name:
+          normalizeString(
+            primaryRow.organization_name || primaryRow.name || ""
+          ) || "",
+        organization_type:
+          normalizeString(primaryRow.organization_type || "") || "",
+        eia_document: normalizeString(primaryRow.eia_document),
+        permit_number: normalizeString(
+          primaryRow.organization_permit_number || primaryRow.permit_number
+        ),
+        permit_issue_date: parseDateValue(
+          primaryRow.organization_permit_issue_date ||
+            primaryRow.permit_issue_date
+        ),
+      };
+
+      // Manager (first owner) - required for organization
       owners.push({
-        first_name: primaryRow.first_name || "Unknown",
-        middle_name: primaryRow.middle_name || "unknown",
-        last_name: primaryRow.last_name || "Unknown",
-        national_id: primaryRow.national_id
-          ? String(primaryRow.national_id).trim()
-          : null,
-        email: primaryRow.email?.trim() || null,
-        gender: primaryRow.gender || null,
-        phone_number: primaryRow.phone_number || null,
-        relationship_type: primaryRow.relationship_type || null,
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
+      });
+    } else if (ownershipCategory === "የጋራ") {
+      // Shared ownership - since processing row by row, treat as single owner per row
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        relationship_type: normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
       });
     } else {
-      throw new Error(`የተሳሳተ የይዞታ ምድብ: ${ownershipCategory}`);
+      // Single ownership - use primary row
+      if (!primaryRow.first_name ) {
+        throw new Error("ዋና ባለቤት ስም  ያስፈልጋል።");
+      }
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
+      });
+    }
+
+    // Land record data - parcel_number can be null
+    const parsedLandLevel = parseInt(primaryRow.land_level, 10) || 1;
+    if (parsedLandLevel < 1 || parsedLandLevel > 5) {
+      throw new Error("የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።");
+    }
+
+    const parsedArea = parseFloat(primaryRow.area) || 0;
+    if (parsedArea < 0.1) {
+      throw new Error("የመሬት ስፋት ቢያንስ 0.1 ካሬ ሜትር መሆን አለበት።");
     }
 
     const landRecordData = {
-      parcel_number: primaryRow.parcel_number,
-      land_level: parseInt(primaryRow.land_level) || 1,
-      area: parseFloat(primaryRow.area) || 0,
+      parcel_number: normalizeString(primaryRow.parcel_number) || null,
+      land_level: parsedLandLevel,
+      area: parsedArea,
       administrative_unit_id: adminUnitId,
-      north_neighbor: primaryRow.north_neighbor || null,
-      east_neighbor: primaryRow.east_neighbor || null,
-      south_neighbor: primaryRow.south_neighbor || null,
-      west_neighbor: primaryRow.west_neighbor || null,
-      land_use: primaryRow.land_use,
-      ownership_type: primaryRow.ownership_type,
-      lease_ownership_type: primaryRow.lease_ownership_type || null,
-      zoning_type: primaryRow.zoning_type || null,
-      priority: primaryRow.priority || null,
-      block_number: primaryRow.block_number || null,
-      block_special_name: primaryRow.block_special_name || null,
+      north_neighbor: normalizeString(primaryRow.north_neighbor) || "north",
+      east_neighbor: normalizeString(primaryRow.east_neighbor) || "east",
+      south_neighbor: normalizeString(primaryRow.south_neighbor) || "south",
+      west_neighbor: normalizeString(primaryRow.west_neighbor) || "west",
+      land_use: normalizeString(primaryRow.land_use) || null,
+      ownership_type: normalizeString(primaryRow.ownership_type) || null,
+      zoning_type: normalizeString(primaryRow.zoning_type) || null,
+      block_number: normalizeString(primaryRow.block_number),
+      block_special_name:
+        normalizeString(primaryRow.block_special_name) || null,
       ownership_category: ownershipCategory,
-      remark: primaryRow.remark || null,
+      remark: normalizeString(primaryRow.remark) || null,
+      building_hight: normalizeString(primaryRow.building_hight),
+      notes: normalizeString(primaryRow.notes) || null,
+      plan: normalizeString(primaryRow.plan) || null,
+      land_preparation: normalizeString(primaryRow.land_preparation) || null,
+      lease_transfer_reason:
+        normalizeString(primaryRow.lease_transfer_reason) || null,
+      infrastructure_status:
+        normalizeString(primaryRow.infrastructure_status) || null,
+      land_bank_code: normalizeString(primaryRow.land_bank_code) || null,
+      land_history: normalizeString(primaryRow.land_history) || null,
+      other_land_history:
+        normalizeString(primaryRow.other_land_history) || null,
+      landbank_registrer_name:
+        normalizeString(primaryRow.landbank_registrer_name) || null,
+      has_debt: parseBooleanValue(primaryRow.has_debt) ?? false,
+      address: normalizeString(primaryRow.address) || null,
+      address_kebele: normalizeString(primaryRow.address_kebele) || null,
+      address_ketena: normalizeString(primaryRow.address_ketena) || null,
     };
 
-    const documentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
-    const documents = documentRows.map((row) => ({
+    // Documents - since row by row, use primary row
+    const documents = [{
       document_type: DOCUMENT_TYPES.TITLE_DEED,
-      plot_number: row.plot_number,
-      approver_name: row.approver_name || null,
-      preparer_name: row.preparer_name || null,
-      reference_number: row.reference_number,
-      description: row.description || null,
-      issue_date: row.issue_date ? new Date(row.issue_date) : null,
+      plot_number: normalizeString(primaryRow.plot_number) || primaryRow.plot_number,
+      approver_name: normalizeString(primaryRow.approver_name) || null,
+      verifier_name: normalizeString(primaryRow.verifier_name) || null,
+      preparer_name: normalizeString(primaryRow.preparer_name) || null,
+      shelf_number: normalizeString(primaryRow.shelf_number) || null,
+      box_number: normalizeString(primaryRow.box_number) || null,
+      file_number: normalizeString(primaryRow.file_number) || null,
+      reference_number: normalizeString(primaryRow.reference_number) || null,
+      description: normalizeString(primaryRow.description) || null,
+      issue_date: normalizeString(primaryRow.issue_date) || null,
       files: [],
-    }));
+    }];
 
-    const paymentRows = ownershipCategory === "የጋራ" ? [primaryRow] : rows;
-    const payments = paymentRows
-      .filter((row) => row.payment_type)
-      .map((row) => ({
-        payment_type: row.payment_type || PAYMENT_TYPES.TAX,
-        total_amount: parseFloat(row.total_amount) || 0,
-        paid_amount: parseFloat(row.paid_amount) || 0,
-        currency: row.currency || "ETB",
-        payment_status: calculatePaymentStatus(row),
-        description: row.payment_description || "ከ XLSX ተመጣጣኝ ክፍያ",
-      }));
+    // Payments - since row by row, use primary row
+    const derivedPaymentType =
+      landRecordData.land_preparation === LAND_PREPARATION.LEASE
+        ? PAYMENT_TYPES.LEASE_PAYMENT
+        : landRecordData.land_preparation === LAND_PREPARATION.EXISTING
+        ? PAYMENT_TYPES.TAX
+        : PAYMENT_TYPES.PENALTY;
+    const payments = [{
+      payment_type: derivedPaymentType,
+      total_amount: parseFloatValue(primaryRow.total_amount, 0),
+      paid_amount: parseFloatValue(primaryRow.paid_amount, 0),
+      lease_year: parseIntegerValue(primaryRow.lease_year, 0),
+      lease_payment_year: parseIntegerValue(primaryRow.lease_payment_year, 0),
+      annual_payment: parseFloatValue(primaryRow.annual_payment, 0),
+      initial_payment: parseFloatValue(primaryRow.initial_payment, 0),
+      penalty_rate: parseFloatValue(primaryRow.penalty_rate, 0),
+      remaining_amount: parseFloatValue(primaryRow.remaining_amount, 0),
+      receipt_number: normalizeString(primaryRow.receipt_number) || null,
+      payment_date: parseDateValue(primaryRow.payment_date) || null,
+      currency: normalizeString(primaryRow.currency) || "ETB",
+      payment_status: calculatePaymentStatus(primaryRow),
+      description: normalizeString(primaryRow.description) || null,
+    }];
 
-    return { owners, landRecordData, documents, payments };
+    return {
+      owners,
+      landRecordData,
+      documents,
+      payments,
+      organization_info: organizationInfo,
+    };
   } catch (error) {
-    throw new Error(`Failed to transform XLSX data: ${error.message}`);
+    throw new Error(`ውሂብ ማቀናበር አልተቻለም: ${error.message}`);
   }
 }
-
-// KEEP YOUR ORIGINAL calculatePaymentStatus FUNCTION
 function calculatePaymentStatus(row) {
-  try {
-    const total = parseFloat(row.total_amount) || 0;
-    const paid = parseFloat(row.paid_amount) || 0;
+  // Fast path: if no payment data, return default status
+  if (!row.total_amount && !row.paid_amount) {
+    return "አልተከፈለም";
+  }
 
+  try {
+    // Use unary plus for faster number conversion than parseFloat
+    const total = +row.total_amount || 0;
+    const paid = +row.paid_amount || 0;
+
+    // Early returns for common cases
+    if (paid <= 0) return "አልተከፈለም";
     if (paid >= total) return "ተጠናቋል";
-    if (paid > 0 && paid < total) return "በመጠባበቅ ላይ";
-    return "አልተከፈለም";
+    return "በመጠባበቅ ላይ";
   } catch (error) {
     return "አልተከፈለም";
   }
 }
-
-// OPTIMIZED: Error handling
-function handleImportErrorOptimized(error, row, index, results) {
-  const errorMsg = `Row ${index} (${row.parcel_number}): ${error.message}`;
-  results.skippedCount++;
-  results.errors.push(errorMsg);
-  results.errorDetails.push({
-    row: index,
-    parcel_number: row.parcel_number,
-    plot_number: row.plot_number,
-    error: error.message,
-    stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-  });
-}
-
-// OPTIMIZED: Cache update for new transactions
-async function updateCacheForTransaction(cache, adminUnitId, transaction) {
-  try {
-    const existingRecords = await LandRecord.findAll({
-      where: { administrative_unit_id: adminUnitId },
-      attributes: ["parcel_number"],
-      transaction,
-      raw: true,
-    });
-
-    cache.clear();
-    existingRecords.forEach((record) => {
-      cache.add(`${record.parcel_number}`);
-    });
-  } catch (error) {
-    console.warn("Cache update warning:", error.message);
-  }
-}
-//end of import xlsx
-
-const saveLandRecordAsDraftService = async (
-  data,
-  files,
-  user,
-  options = {}
-) => {
-  const { transaction, isAutoSave = false } = options;
-  const t = transaction || (await sequelize.transaction());
-
-  try {
-    const {
-      draft_id,
-      primary_user = {},
-      co_owners = [],
-      land_record = {},
-      documents = [],
-      land_payment = {},
-    } = data;
-
-    const administrative_unit_id = user.administrative_unit_id;
-    const now = new Date();
-    let landRecord;
-    let primaryOwner = null;
-    let coOwners = [];
-    let documentResults = [];
-    let landPayment = null;
-
-    if (draft_id) {
-      landRecord = await LandRecord.findOne({
-        where: {
-          id: draft_id,
-          is_draft: true,
-          created_by: user.id,
-          deletedAt: { [Op.eq]: null },
-        },
-        include: [
-          {
-            model: User,
-            as: "user",
-            attributes: [
-              "id",
-              "first_name",
-              "middle_name",
-              "last_name",
-              "email",
-            ],
-          },
-        ],
-        transaction: t,
-      });
-
-      if (!landRecord) {
-        throw new Error("Draft record not found or already submitted");
-      }
-
-      primaryOwner = landRecord.user;
-
-      await landRecord.update(
-        {
-          ...land_record,
-          coordinates: land_record.coordinates
-            ? JSON.stringify(land_record.coordinates)
-            : null,
-          updatedAt: now,
-          last_auto_save: isAutoSave ? now : null,
-        },
-        { transaction: t }
-      );
-
-      landRecord.action_log.push({
-        action: isAutoSave ? "DRAFT_AUTO_SAVED" : "DRAFT_UPDATED",
-        changed_by: user.id,
-        changed_at: now,
-      });
-
-      await landRecord.save({ transaction: t });
-    } else {
-      if (primary_user) {
-        primary_user.administrative_unit_id = administrative_unit_id;
-      }
-      if (land_record) {
-        land_record.administrative_unit_id = administrative_unit_id;
-      }
-
-      const status_history = [
-        {
-          status: RECORD_STATUSES.DRAFT,
-          changed_by: user.id,
-          changed_at: now,
-        },
-      ];
-      const action_log = [
-        {
-          action: "DRAFT_CREATED",
-          changed_by: user.id,
-          changed_at: now,
-        },
-      ];
-
-      if (primary_user && Object.keys(primary_user).length > 0) {
-        const ownerResult = await userService.createLandOwner(
-          primary_user,
-          co_owners,
-          user.id,
-          { transaction: t }
-        );
-        primaryOwner = ownerResult.primaryOwner;
-        coOwners = ownerResult.coOwners;
-      }
-
-      landRecord = await LandRecord.create(
-        {
-          ...land_record,
-          user_id: primaryOwner?.id || null,
-          created_by: user.id,
-          status: RECORD_STATUSES.DRAFT,
-          notification_status: NOTIFICATION_STATUSES.NOT_SENT,
-          priority: land_record.priority || PRIORITIES.LOW,
-          status_history,
-          action_log,
-          rejection_reason: null,
-          approver_id: null,
-          coordinates: land_record.coordinates
-            ? JSON.stringify(land_record.coordinates)
-            : null,
-          is_draft: true,
-          last_auto_save: isAutoSave ? now : null,
-        },
-        { transaction: t }
-      );
-    }
-
-    if (Array.isArray(files) && files.length > 0 && documents.length > 0) {
-      documentResults = await Promise.all(
-        documents
-          .map((doc, index) => {
-            const file = files[index];
-            if (!file) return null;
-
-            return documentService.createDocumentService(
-              {
-                ...doc,
-                land_record_id: landRecord.id,
-                preparer_name: doc.preparer_name || user.full_name || "Unknown",
-                approver_name: doc.approver_name || null,
-                is_draft: true,
-              },
-              [file],
-              user.id,
-              { transaction: t }
-            );
-          })
-          .filter(Boolean)
-      );
-
-      if (documentResults.length > 0) {
-        landRecord.action_log.push(
-          ...documentResults.map((doc) => ({
-            action: `DRAFT_DOCUMENT_UPLOADED_${doc.document_type}`,
-            changed_by: user.id,
-            changed_at: doc.createdAt || now,
-            document_id: doc.id,
-          }))
-        );
-        await landRecord.save({ transaction: t });
-      }
-    }
-
-    if (
-      land_payment &&
-      (land_payment.payment_type ||
-        land_payment.total_amount ||
-        land_payment.paid_amount)
-    ) {
-      landPayment = await landPaymentService.createLandPaymentService(
-        {
-          ...land_payment,
-          land_record_id: landRecord.id,
-          payer_id: primaryOwner?.id || null,
-          created_by: user.id,
-          is_draft: true,
-        },
-        { transaction: t }
-      );
-    }
-
-    await t.commit();
-
-    return {
-      success: true,
-      draft_id: landRecord.id,
-      landRecord,
-      primaryOwner,
-      coOwners,
-      documents: documentResults,
-      landPayment,
-      saved_at: now,
-      isAutoSave,
-    };
-  } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(
-      isAutoSave
-        ? `አውቶሴብ ስተት: ${error.message}`
-        : `የረቂቅ መዝገብ መቀመጥ ስህተት: ${error.message}`
-    );
-  }
-};
-
-const getDraftLandRecordService = async (draftId, userId, options = {}) => {
-  const { transaction } = options;
-
-  try {
-    const draftRecord = await LandRecord.findOne({
-      where: {
-        id: draftId,
-        is_draft: true,
-        created_by: userId,
-        deletedAt: { [Op.eq]: null },
-      },
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: { exclude: ["password"] },
-          include: [
-            {
-              model: User,
-              as: "coOwners",
-              attributes: { exclude: ["password"] },
-            },
-          ],
-        },
-        {
-          model: Document,
-          as: "documents",
-          where: { is_draft: true },
-          required: false,
-        },
-        {
-          model: LandPayment,
-          as: "payments",
-          where: { is_draft: true },
-          required: false,
-        },
-      ],
-      transaction,
-    });
-
-    if (!draftRecord) {
-      throw new Error("Draft record not found or already submitted");
-    }
-
-    if (draftRecord.coordinates) {
-      draftRecord.coordinates = JSON.parse(draftRecord.coordinates);
-    }
-
-    const primaryOwner = draftRecord.user?.get({ plain: true });
-    const coOwners = primaryOwner?.coOwners || [];
-
-    return {
-      success: true,
-      data: {
-        draft_id: draftRecord.id,
-        primary_user: primaryOwner,
-        co_owners: coOwners,
-        land_record: {
-          ...draftRecord.get({ plain: true }),
-          coordinates: draftRecord.coordinates,
-          user: undefined,
-        },
-        documents: draftRecord.documents,
-        land_payment: draftRecord.payments?.[0] || null,
-      },
-    };
-  } catch (error) {
-    throw new Error(`የረቂቅ መዝገብ ለማውጣት ስህተት: ${error.message}`);
-  }
-};
-
-const updateDraftLandRecordService = async (
-  draftId,
-  data,
-  files,
-  user,
-  options = {}
-) => {
-  const { transaction } = options;
-  const t = transaction || (await sequelize.transaction());
-
-  try {
-    const existingDraft = await LandRecord.findOne({
-      where: {
-        id: draftId,
-        is_draft: true,
-        created_by: user.id,
-        deletedAt: { [Op.eq]: null },
-      },
-      include: [
-        { model: User, as: "user", attributes: ["id", "national_id", "email"] },
-        {
-          model: Document,
-          as: "documents",
-          where: { is_draft: true },
-          required: false,
-        },
-        {
-          model: LandPayment,
-          as: "payments",
-          where: { is_draft: true },
-          required: false,
-        },
-      ],
-      transaction: t,
-    });
-
-    if (!existingDraft) {
-      throw new Error("Draft record not found or already submitted");
-    }
-
-    const {
-      primary_user,
-      co_owners = [],
-      land_record = {},
-      documents = [],
-      land_payment,
-    } = data;
-
-    let primaryOwnerId = existingDraft.user?.id;
-    if (primary_user) {
-      const { primaryOwner, coOwners } = await userService.createLandOwner(
-        {
-          ...primary_user,
-          administrative_unit_id: user.administrative_unit_id,
-        },
-        co_owners,
-        user.id,
-        { transaction: t }
-      );
-      primaryOwnerId = primaryOwner.id;
-      land_record.user_id = primaryOwnerId;
-    }
-
-    await existingDraft.update(
-      {
-        ...land_record,
-        user_id: primaryOwnerId || existingDraft.user_id,
-        coordinates: land_record.coordinates
-          ? JSON.stringify(land_record.coordinates)
-          : existingDraft.coordinates,
-        updated_by: user.id,
-        updatedAt: new Date(),
-      },
-      { transaction: t }
-    );
-
-    const documentResults = await Promise.all(
-      documents.map(async (doc, index) => {
-        const file = files[index];
-        if (!file && !doc.file_path) {
-          throw new Error(
-            `ዶክመንት ${doc.document_type || index + 1} የተጠናቀቀ አይደለም።`
-          );
-        }
-        const docData = {
-          ...doc,
-          land_record_id: draftId,
-          preparer_name: doc.preparer_name || user.full_name || "Unknown",
-          approver_name: doc.approver_name || null,
-          is_draft: true,
-          created_by: user.id,
-          updated_by: user.id,
-        };
-        if (doc.id) {
-          const existingDoc = await Document.findOne({
-            where: {
-              id: doc.id,
-              land_record_id: draftId,
-              is_draft: true,
-              deletedAt: { [Op.eq]: null },
-            },
-            transaction: t,
-          });
-          if (existingDoc) {
-            await existingDoc.update(
-              {
-                ...docData,
-                file_path: file
-                  ? file.path
-                  : doc.file_path || existingDoc.file_path,
-              },
-              { transaction: t }
-            );
-            return existingDoc;
-          }
-        }
-
-        return documentService.createDocumentService(docData, [file], user.id, {
-          transaction: t,
-        });
-      })
-    );
-
-    let landPayment;
-    if (land_payment) {
-      if (!land_payment.payer_id) {
-        land_payment.payer_id = primaryOwnerId || existingDraft.user_id;
-        if (!land_payment.payer_id) {
-          throw new Error("የክፍያ መፍጠር ስህተት: ትክክለኛ ክፍያ ከፋይ መታወቂያ መግለጽ አለበት።");
-        }
-      }
-      const existingPayment = existingDraft.payments?.[0];
-      if (existingPayment) {
-        await existingPayment.update(
-          {
-            ...land_payment,
-            land_record_id: draftId,
-            payer_id: land_payment.payer_id,
-            is_draft: true,
-            updated_by: user.id,
-            updatedAt: new Date(),
-          },
-          { transaction: t }
-        );
-        landPayment = existingPayment;
-      } else {
-        landPayment = await landPaymentService.createLandPaymentService(
-          {
-            ...land_payment,
-            land_record_id: draftId,
-            payer_id: land_payment.payer_id,
-            created_by: user.id,
-            is_draft: true,
-          },
-          { transaction: t }
-        );
-      }
-    }
-
-    await existingDraft.update(
-      {
-        action_log: [
-          ...(existingDraft.action_log || []),
-          {
-            action: "DRAFT_UPDATED",
-            changed_by: user.id,
-            changed_at: new Date(),
-            note: "Updated draft with new data",
-          },
-        ],
-      },
-      { transaction: t }
-    );
-
-    if (!transaction) await t.commit();
-    return {
-      success: true,
-      message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተዘምኗል።",
-      data: {
-        landRecord: existingDraft,
-        documents: documentResults,
-        landPayment,
-      },
-    };
-  } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(`የረቂቅ መዝገብ ማደስ ስህተት: ${error.message}`);
-  }
-};
-
-const submitDraftLandRecordService = async (draftId, user, options = {}) => {
-  const { transaction } = options;
-  const t = transaction || (await sequelize.transaction());
-
-  try {
-    const draftRecord = await LandRecord.findOne({
-      where: {
-        id: draftId,
-        is_draft: true,
-        created_by: user.id,
-        deletedAt: { [Op.eq]: null },
-      },
-      include: [
-        {
-          model: Document,
-          as: "documents",
-          where: { is_draft: true },
-          required: false,
-        },
-        {
-          model: LandPayment,
-          as: "payments",
-          where: { is_draft: true },
-          required: false,
-        },
-        {
-          model: User,
-          as: "user",
-          attributes: { exclude: ["password"] },
-          include: [
-            {
-              model: User,
-              as: "coOwners",
-              attributes: { exclude: ["password"] },
-            },
-          ],
-        },
-      ],
-      transaction: t,
-    });
-
-    if (!draftRecord)
-      throw new Error("Draft record not found or already submitted");
-
-    const validationErrors = [];
-    if (!draftRecord.parcel_number)
-      validationErrors.push("Parcel number is required");
-    if (!draftRecord.user)
-      validationErrors.push("Primary owner information is required");
-    if (
-      draftRecord.user.ownership_category === "የጋራ" &&
-      !draftRecord.user.coOwners.length
-    ) {
-      validationErrors.push("የጋራ ባለቤትነት ለመመዝገብ ተጋሪ ባለቤቶች ያስፈልጋሉ።");
-    }
-    if (
-      !draftRecord.documents ||
-      draftRecord.documents.length === 0 ||
-      !draftRecord.documents.some((doc) => doc.file_path)
-    ) {
-      validationErrors.push(
-        "At least one document with a valid file is required"
-      );
-    }
-    if (!draftRecord.payments || draftRecord.payments.length === 0) {
-      validationErrors.push("Payment information is required");
-    } else {
-      const payment = draftRecord.payments[0];
-      if (payment.total_amount <= 0)
-        validationErrors.push("Payment amount must be greater than 0");
-    }
-
-    if (validationErrors.length > 0)
-      throw new Error(`Validation failed: ${validationErrors.join("; ")}`);
-
-    const existingRecord = await LandRecord.findOne({
-      where: {
-        parcel_number: draftRecord.parcel_number,
-        administrative_unit_id: user.administrative_unit_id,
-        id: { [Op.ne]: draftId },
-        deletedAt: { [Op.eq]: null },
-      },
-      transaction: t,
-    });
-
-    if (existingRecord)
-      throw new Error("ይህ የመሬት ቁጥር በዚህ አስተዳደራዊ ክፍል ውስጥ ተመዝግቧል።");
-
-    const submissionData = {
-      primary_user: {
-        ...draftRecord.user.get({ plain: true }),
-        coOwners: undefined,
-      },
-      co_owners:
-        draftRecord.user.coOwners?.map((co) => ({
-          ...co.get({ plain: true }),
-          coOwners: undefined,
-          primaryOwner: undefined,
-        })) || [],
-      land_record: {
-        ...draftRecord.get({ plain: true }),
-        coordinates: draftRecord.coordinates
-          ? JSON.parse(draftRecord.coordinates)
-          : null,
-        documents: undefined,
-        payments: undefined,
-        user: undefined,
-      },
-      documents:
-        draftRecord.documents?.map((doc) => doc.get({ plain: true })) || [],
-      land_payment: draftRecord.payments?.[0]?.get({ plain: true }) || null,
-    };
-
-    const submittedRecord = await createLandRecordService(
-      submissionData,
-      [],
-      user,
-      { transaction: t, isDraftSubmission: true, draftRecordId: draftId }
-    );
-
-    await draftRecord.update(
-      {
-        is_draft: false,
-        record_status: RECORD_STATUSES.SUBMITTED,
-        submitted_at: new Date(),
-        action_log: [
-          ...(draftRecord.action_log || []),
-          {
-            action: "SUBMITTED_FROM_DRAFT",
-            changed_by: user.id,
-            changed_at: new Date(),
-            note: "Converted from draft to official record",
-          },
-        ],
-      },
-      { transaction: t }
-    );
-
-    await Promise.all([
-      Document.update(
-        { is_draft: false },
-        { where: { land_record_id: draftId }, transaction: t }
-      ),
-      LandPayment.update(
-        { is_draft: false },
-        { where: { land_record_id: draftId }, transaction: t }
-      ),
-    ]);
-
-    if (!transaction) await t.commit();
-    return {
-      success: true,
-      message: "የመሬት መዝገብ በተሳካ ሁኔታ ከረቂቅ ወደ እውነተኛ መዝገብ ቀርቧል።",
-      data: submittedRecord,
-    };
-  } catch (error) {
-    if (!transaction && t) await t.rollback();
-    throw new Error(`የረቂቅ መዝገብ ማስፈጸም ስህተት: ${error.message}`);
-  }
-};
 
 const getAllLandRecordService = async (options = {}) => {
   const { page = 1, pageSize = 10, queryParams = {} } = options;
@@ -1309,14 +1176,6 @@ const getAllLandRecordService = async (options = {}) => {
 
     if (queryParams.land_history) {
       whereClause.land_history = queryParams.land_history;
-    }
-
-    if (queryParams.priority) {
-      whereClause.priority = queryParams.priority;
-    }
-
-    if (queryParams.notification_status) {
-      whereClause.notification_status = queryParams.notification_status;
     }
 
     if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
@@ -1480,8 +1339,6 @@ const getAllLandRecordService = async (options = {}) => {
         "address",
         "institution_name",
         "landbank_registrer_name",
-        "priority",
-        "notification_status",
       ];
 
       if (validSortFields.includes(queryParams.sort_by)) {
@@ -1503,7 +1360,6 @@ const getAllLandRecordService = async (options = {}) => {
         "land_level",
         "land_use",
         "ownership_type",
-        "lease_ownership_type",
         "ownership_category",
         "zoning_type",
         "record_status",
@@ -1520,8 +1376,6 @@ const getAllLandRecordService = async (options = {}) => {
         "notes",
         "remark",
         "rejection_reason",
-        "priority",
-        "notification_status",
         "status_history",
         "action_log",
         "administrative_unit_id",
@@ -1603,127 +1457,861 @@ const getAllLandRecordService = async (options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማምጣት አልተቻለም: ${error.message}`);
   }
 };
-
-const getFilterOptionsService = async () => {
+const getFilterOptionsService = async (adminUnitId = null) => {
   try {
-    const options = await LandRecord.findAll({
+    // Base where clause for administrative unit filtering
+    const whereClause = adminUnitId
+      ? { administrative_unit_id: adminUnitId }
+      : {};
+
+    // Get distinct values from LandRecord for ONLY the specified filters
+    const landRecordOptions = await LandRecord.findAll({
       attributes: [
         "land_use",
         "ownership_type",
-        "lease_ownership_type",
+        "lease_transfer_reason",
+        "land_preparation",
+        "land_level",
         "record_status",
-        "priority",
-        "notification_status",
-        "zoning_type",
-        "infrastructure_status",
-        "land_history",
         "ownership_category",
       ],
+      where: whereClause,
       group: [
         "land_use",
         "ownership_type",
-        "lease_ownership_type",
+        "lease_transfer_reason",
+        "land_preparation",
+        "land_level",
         "record_status",
-        "priority",
-        "notification_status",
-        "zoning_type",
-        "infrastructure_status",
-        "land_history",
         "ownership_category",
       ],
       raw: true,
     });
 
-    const adminUnits = await AdministrativeUnit.findAll({
-      attributes: ["id", "name"],
+    // FIXED: Get plot_number options from Document model without GROUP BY issues
+    const documentOptions = await Document.findAll({
+      attributes: ["plot_number"],
+      where: {
+        plot_number: {
+          [Op.ne]: null,
+          [Op.ne]: "", // Also exclude empty strings
+        },
+      },
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: [], // Only include for filtering, not for selection
+          where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
+          required: true,
+        },
+      ],
       raw: true,
     });
 
+    // Alternative approach for plot numbers using separate query (more reliable)
+    const plotNumbers = await Document.aggregate("plot_number", "DISTINCT", {
+      plain: false,
+      where: {
+        plot_number: {
+          [Op.ne]: null,
+          [Op.ne]: "",
+        },
+      },
+      include: [
+        {
+          model: LandRecord,
+          as: "landRecord",
+          attributes: [],
+          where: adminUnitId ? { administrative_unit_id: adminUnitId } : {},
+          required: true,
+        },
+      ],
+    });
+
+    // Get area range for slider
+    const areaRange = await LandRecord.findOne({
+      attributes: [
+        [sequelize.fn("MIN", sequelize.col("area")), "min_area"],
+        [sequelize.fn("MAX", sequelize.col("area")), "max_area"],
+        [sequelize.fn("AVG", sequelize.col("area")), "avg_area"],
+      ],
+      where: whereClause,
+      raw: true,
+    });
+
+    // Get date range for createdAt filter
+    const dateRange = await LandRecord.findOne({
+      attributes: [
+        [sequelize.fn("MIN", sequelize.col("createdAt")), "min_date"],
+        [sequelize.fn("MAX", sequelize.col("createdAt")), "max_date"],
+      ],
+      where: whereClause,
+      raw: true,
+    });
+
+    // Get total records count for metadata
+    const totalRecords = await LandRecord.count({ where: whereClause });
+
+    // Helper function to get sorted unique values
+    const getSortedUniqueValues = (key, sortType = "alphabetical") => {
+      const values = [
+        ...new Set(landRecordOptions.map((opt) => opt[key]).filter(Boolean)),
+      ];
+
+      if (sortType === "numerical") {
+        return values.sort((a, b) => a - b);
+      } else {
+        return values.sort();
+      }
+    };
+
+    // Process plot numbers from the aggregation result
+    const processedPlotNumbers = plotNumbers
+      ? plotNumbers
+          .map((item) => item.DISTINCT)
+          .filter(Boolean)
+          .sort()
+      : [
+          ...new Set(
+            documentOptions.map((opt) => opt.plot_number).filter(Boolean)
+          ),
+        ].sort();
+
     const filterOptions = {
-      land_use: [
-        ...new Set(options.map((opt) => opt.land_use).filter(Boolean)),
+      // ==================== QUICK FILTERS ====================
+      land_use: getSortedUniqueValues("land_use"),
+      ownership_type: getSortedUniqueValues("ownership_type"),
+      land_preparation: getSortedUniqueValues("land_preparation"),
+      lease_transfer_reason: getSortedUniqueValues("lease_transfer_reason"),
+      land_level: getSortedUniqueValues("land_level", "numerical"),
+      record_status: getSortedUniqueValues("record_status"),
+      ownership_category: getSortedUniqueValues("ownership_category"),
+
+      // ==================== PLOT NUMBER FILTER ====================
+      plot_number: processedPlotNumbers,
+
+      // ==================== BOOLEAN FILTERS ====================
+      boolean_filters: {
+        has_debt: [
+          { value: "true", label: "Has Debt" },
+          { value: "false", label: "No Debt" },
+        ],
+        include_deleted: [
+          { value: "true", label: "Include Deleted" },
+          { value: "false", label: "Exclude Deleted" },
+        ],
+      },
+
+      // ==================== RANGE DATA FOR UI ====================
+      ranges: {
+        area: {
+          min: parseFloat(areaRange?.min_area) || 0,
+          max: parseFloat(areaRange?.max_area) || 100000,
+          avg: parseFloat(areaRange?.avg_area) || 0,
+          step: 0.1,
+          unit: "m²",
+          format: (value) => `${value.toLocaleString()} m²`,
+        },
+        date: {
+          min: dateRange?.min_date || new Date("2000-01-01"),
+          max: dateRange?.max_date || new Date(),
+          format: (date) => new Date(date).toLocaleDateString("en-ET"),
+        },
+        land_level: {
+          min:
+            Math.min(...getSortedUniqueValues("land_level", "numerical")) || 1,
+          max:
+            Math.max(...getSortedUniqueValues("land_level", "numerical")) || 10,
+          step: 1,
+          format: (level) => `Level ${level}`,
+        },
+      },
+
+      // ==================== SORT OPTIONS ====================
+      sort_options: [
+        { value: "createdAt_DESC", label: "Newest First", group: "date" },
+        { value: "createdAt_ASC", label: "Oldest First", group: "date" },
+        { value: "updatedAt_DESC", label: "Recently Updated", group: "date" },
+        {
+          value: "parcel_number_ASC",
+          label: "Parcel Number (A-Z)",
+          group: "identification",
+        },
+        {
+          value: "parcel_number_DESC",
+          label: "Parcel Number (Z-A)",
+          group: "identification",
+        },
+        { value: "area_DESC", label: "Largest Area First", group: "land" },
+        { value: "area_ASC", label: "Smallest Area First", group: "land" },
+        {
+          value: "land_level_DESC",
+          label: "Highest Land Level First",
+          group: "land",
+        },
+        {
+          value: "land_level_ASC",
+          label: "Lowest Land Level First",
+          group: "land",
+        },
       ],
-      ownership_type: [
-        ...new Set(options.map((opt) => opt.ownership_type).filter(Boolean)),
+
+      // ==================== SEARCH TYPES ====================
+      search_types: [
+        {
+          value: "global",
+          label: "Global Search",
+          description: "Search across all fields",
+        },
+        {
+          value: "owner_name",
+          label: "Owner Name",
+          description: "Search by owner name",
+        },
+        {
+          value: "parcel_number",
+          label: "Parcel Number",
+          description: "Search by parcel number",
+        },
+        {
+          value: "plot_number",
+          label: "Plot Number",
+          description: "Search by plot number",
+        },
+        {
+          value: "national_id",
+          label: "National ID",
+          description: "Search by national ID",
+        },
+        {
+          value: "phone_number",
+          label: "Phone Number",
+          description: "Search by phone number",
+        },
       ],
-      lease_ownership_type: [
-        ...new Set(
-          options.map((opt) => opt.lease_ownership_type).filter(Boolean)
-        ),
-      ],
-      record_status: [
-        ...new Set(options.map((opt) => opt.record_status).filter(Boolean)),
-      ],
-      priority: [
-        ...new Set(options.map((opt) => opt.priority).filter(Boolean)),
-      ],
-      notification_status: [
-        ...new Set(
-          options.map((opt) => opt.notification_status).filter(Boolean)
-        ),
-      ],
-      zoning_type: [
-        ...new Set(options.map((opt) => opt.zoning_type).filter(Boolean)),
-      ],
-      infrastructure_status: [
-        ...new Set(
-          options.map((opt) => opt.infrastructure_status).filter(Boolean)
-        ),
-      ],
-      land_history: [
-        ...new Set(options.map((opt) => opt.land_history).filter(Boolean)),
-      ],
-      ownership_category: [
-        ...new Set(
-          options.map((opt) => opt.ownership_category).filter(Boolean)
-        ),
-      ],
-      administrative_units: adminUnits.map((unit) => ({
-        id: unit.id,
-        name: unit.name,
-      })),
+
+      // ==================== FILTER GROUPS FOR ORGANIZED UI ====================
+      filter_groups: {
+        quick_filters: {
+          label: "Quick Filters",
+          filters: [
+            "land_use",
+            "ownership_type",
+            "land_preparation",
+            "lease_transfer_reason",
+            "land_level",
+          ],
+        },
+        status_filters: {
+          label: "Status Filters",
+          filters: ["record_status", "ownership_category"],
+        },
+        identification: {
+          label: "Identification",
+          filters: ["parcel_number", "plot_number"],
+        },
+        owner_search: {
+          label: "Owner Search",
+          filters: ["owner_name", "national_id", "phone_number"],
+        },
+        range_filters: {
+          label: "Range Filters",
+          filters: ["area", "date_range", "land_level_range"],
+        },
+        additional_filters: {
+          label: "Additional Filters",
+          filters: ["has_debt", "include_deleted"],
+        },
+      },
+
+      // ==================== UI CONFIGURATION ====================
+      ui_config: {
+        default_page_size: 10,
+        page_size_options: [10, 20, 50, 100],
+        max_search_results: 1000,
+        debounce_timeout: 300,
+        auto_complete_min_chars: 2,
+      },
     };
 
     return {
       success: true,
       data: filterOptions,
+      metadata: {
+        generated_at: new Date().toISOString(),
+        total_filters: Object.keys(filterOptions).length - 5, // Exclude metadata fields
+        total_records: totalRecords,
+        administrative_unit: adminUnitId || "all",
+        quick_filters_count:
+          filterOptions.filter_groups.quick_filters.filters.length,
+        status_filters_count:
+          filterOptions.filter_groups.status_filters.filters.length,
+        range_filters_count:
+          filterOptions.filter_groups.range_filters.filters.length,
+        additional_filters_count:
+          filterOptions.filter_groups.additional_filters.filters.length,
+        plot_numbers_count: processedPlotNumbers.length,
+      },
     };
   } catch (error) {
     throw new Error(`Failed to get filter options: ${error.message}`);
   }
 };
 
-const getLandRecordsStatsService = async () => {
+const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
   try {
-    const stats = await LandRecord.findAll({
-      attributes: [
-        "record_status",
-        [sequelize.fn("COUNT", sequelize.col("id")), "count"],
-      ],
-      group: ["record_status"],
-      raw: true,
-    });
-
-    const total = await LandRecord.count();
-    const withDebt = await LandRecord.count({ where: { has_debt: true } });
-    const draftCount = await LandRecord.count({ where: { is_draft: true } });
-
-    return {
-      success: true,
-      data: {
-        by_status: stats,
-        total,
-        with_debt: withDebt,
-        draft_count: draftCount,
-        approved_count:
-          stats.find((stat) => stat.record_status === "ጸድቋል")?.count || 0,
-      },
+    // Simple date helper functions without timezone complexity
+    const getStartOfDay = (date = new Date()) => {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      return start;
     };
+
+    const getStartOfWeek = (date = new Date()) => {
+      const startOfDay = getStartOfDay(date);
+      const day = startOfDay.getDay();
+      const diff = startOfDay.getDate() - day + (day === 0 ? -6 : 1); // Adjust when Sunday
+      const startOfWeek = new Date(startOfDay.setDate(diff));
+      startOfWeek.setHours(0, 0, 0, 0);
+      return startOfWeek;
+    };
+
+    const getStartOfMonth = (date = new Date()) => {
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      return start;
+    };
+
+    const getStartOfYear = (date = new Date()) => {
+      const start = new Date(date.getFullYear(), 0, 1);
+      start.setHours(0, 0, 0, 0);
+      return start;
+    };
+
+    // Current date calculations
+    const now = new Date();
+
+    // Today's range
+    const todayStart = getStartOfDay(now);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // This week start
+    const weekStart = getStartOfWeek(now);
+
+    // This month start
+    const monthStart = getStartOfMonth(now);
+
+    // This year start
+    const yearStart = getStartOfYear(now);
+
+    // For trends - last periods
+    const last12MonthsStart = new Date(monthStart);
+    last12MonthsStart.setMonth(last12MonthsStart.getMonth() - 11);
+
+    const last12WeeksStart = new Date(weekStart);
+    last12WeeksStart.setDate(last12WeeksStart.getDate() - 7 * 11);
+
+    const last3YearsStart = new Date(yearStart);
+    last3YearsStart.setFullYear(last3YearsStart.getFullYear() - 2);
+
+    // Execute all essential queries in parallel
+    const [
+      totalStats,
+      timeBasedStats,
+      landUseStats,
+      ownershipStats,
+      zoningStats,
+      landLevelStats,
+      infrastructureStats,
+      landPreparationStats,
+      landHistoryStats,
+      monthlyTrends,
+      weeklyTrends,
+      yearlyTrends,
+      leaseStats,
+      recordStatusStats,
+      recentActivity,
+    ] = await Promise.all([
+      // 1. Total Statistics
+      LandRecord.findOne({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "total_records"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+          [Sequelize.fn("MAX", Sequelize.col("area")), "max_area"],
+          [Sequelize.fn("MIN", Sequelize.col("area")), "min_area"],
+          [
+            Sequelize.fn(
+              "SUM",
+              Sequelize.literal("CASE WHEN has_debt THEN 1 ELSE 0 END")
+            ),
+            "debt_count",
+          ],
+        ],
+        raw: true,
+      }),
+
+      // 2. Time-based Statistics (Gregorian calendar)
+      LandRecord.findOne({
+        where: {
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.between]: [yearStart, todayEnd] },
+        },
+        attributes: [
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${todayStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "today_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${weekStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "weekly_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${monthStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "monthly_count",
+          ],
+          [
+            Sequelize.fn(
+              "COUNT",
+              Sequelize.literal(
+                `CASE WHEN "createdAt" >= '${yearStart.toISOString()}' THEN 1 END`
+              )
+            ),
+            "yearly_count",
+          ],
+        ],
+        raw: true,
+      }),
+
+      // 3. Land Use Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_use",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+        ],
+        group: ["land_use"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 4. Ownership Type Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "ownership_type",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+        ],
+        group: ["ownership_type"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 5. Zoning Type Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "zoning_type",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+        ],
+        group: ["zoning_type"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 6. Land Level Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_level",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+        ],
+        group: ["land_level"],
+        order: ["land_level"],
+        raw: true,
+      }),
+
+      // 7. Infrastructure Status Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "infrastructure_status",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["infrastructure_status"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 8. Land Preparation Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_preparation",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["land_preparation"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 9. Land History Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "land_history",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["land_history"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 10. Monthly Trends (Last 12 months)
+      LandRecord.findAll({
+        where: {
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.gte]: last12MonthsStart },
+        },
+        attributes: [
+          [
+            Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+            "month",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: [
+          Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+        ],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
+      }),
+
+      // 11. Weekly Trends (Last 12 weeks)
+      LandRecord.findAll({
+        where: {
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.gte]: last12WeeksStart },
+        },
+        attributes: [
+          [
+            Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt")),
+            "week",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: [Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt"))],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "week", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
+      }),
+
+      // 12. Yearly Trends (Last 3 years)
+      LandRecord.findAll({
+        where: {
+          administrative_unit_id: adminUnitId,
+          createdAt: { [Op.gte]: last3YearsStart },
+        },
+        attributes: [
+          [
+            Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt")),
+            "year",
+          ],
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: [Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt"))],
+        order: [
+          [
+            Sequelize.fn("DATE_TRUNC", "year", Sequelize.col("createdAt")),
+            "ASC",
+          ],
+        ],
+        raw: true,
+      }),
+
+      // 13. Lease Analytics
+      LandRecord.findAll({
+        where: {
+          administrative_unit_id: adminUnitId,
+        },
+        attributes: [
+          "lease_transfer_reason",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+          [Sequelize.fn("AVG", Sequelize.col("area")), "average_area"],
+        ],
+        group: ["lease_transfer_reason"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 14. Record Status Distribution
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        attributes: [
+          "record_status",
+          [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
+          [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
+        ],
+        group: ["record_status"],
+        order: [[Sequelize.fn("COUNT", Sequelize.col("id")), "DESC"]],
+        raw: true,
+      }),
+
+      // 15. Recent Activity (last 10 records)
+      LandRecord.findAll({
+        where: { administrative_unit_id: adminUnitId },
+        include: [
+          {
+            model: User,
+            as: "owners",
+            attributes: ["id", "first_name", "last_name"],
+            through: { attributes: [] },
+          },
+        ],
+        attributes: [
+          "id",
+          "parcel_number",
+          "land_use",
+          "lease_transfer_reason",
+          "ownership_type",
+          "land_preparation",
+          "area",
+          "record_status",
+          "zoning_type",
+          "land_level",
+          "infrastructure_status",
+          "land_history",
+          "building_hight",
+          "has_debt",
+          "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: 10,
+      }),
+    ]);
+
+    const totalRecords = parseInt(totalStats?.total_records) || 0;
+
+    // Process and format the data
+    const processedStats = {
+      overview: {
+        total_records: totalRecords,
+        total_area: parseFloat(totalStats?.total_area) || 0,
+        average_area: parseFloat(totalStats?.average_area) || 0,
+        max_area: parseFloat(totalStats?.max_area) || 0,
+        min_area: parseFloat(totalStats?.min_area) || 0,
+        debt_records: parseInt(totalStats?.debt_count) || 0,
+        area_unit: "square_meters",
+      },
+
+      time_analytics: {
+        today: parseInt(timeBasedStats?.today_count) || 0,
+        this_week: parseInt(timeBasedStats?.weekly_count) || 0,
+        this_month: parseInt(timeBasedStats?.monthly_count) || 0,
+        this_year: parseInt(timeBasedStats?.yearly_count) || 0,
+        calendar_type: "gregorian",
+      },
+
+      distributions: {
+        by_land_use: (landUseStats || []).map((item) => ({
+          land_use: item.land_use || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_ownership_type: (ownershipStats || []).map((item) => ({
+          ownership_type: item.ownership_type || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_zoning_type: (zoningStats || []).map((item) => ({
+          zoning_type: item.zoning_type || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_land_level: (landLevelStats || []).map((item) => ({
+          land_level: item.land_level || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_infrastructure_status: (infrastructureStats || []).map((item) => ({
+          infrastructure_status: item.infrastructure_status || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_land_preparation: (landPreparationStats || []).map((item) => ({
+          land_preparation: item.land_preparation || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_land_history: (landHistoryStats || []).map((item) => ({
+          land_history: item.land_history || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+
+        by_record_status: (recordStatusStats || []).map((item) => ({
+          record_status: item.record_status || "Unknown",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          percentage:
+            totalRecords > 0
+              ? ((parseInt(item.count) / totalRecords) * 100).toFixed(1)
+              : 0,
+        })),
+      },
+
+      trends: {
+        monthly: (monthlyTrends || []).map((item) => ({
+          month: item.month,
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+        })),
+
+        weekly: (weeklyTrends || []).map((item) => ({
+          week: item.week,
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+        })),
+
+        yearly: (yearlyTrends || []).map((item) => ({
+          year: item.year,
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+        })),
+      },
+
+      lease_analytics: {
+        summary: {
+          total_lease_records:
+            leaseStats?.reduce((sum, item) => sum + parseInt(item.count), 0) ||
+            0,
+          lease_percentage:
+            totalRecords > 0
+              ? (
+                  (leaseStats?.reduce(
+                    (sum, item) => sum + parseInt(item.count),
+                    0
+                  ) /
+                    totalRecords) *
+                  100
+                ).toFixed(1)
+              : 0,
+        },
+        by_lease_type: (leaseStats || []).map((item) => ({
+          lease_transfer_reason: item.lease_transfer_reason || "Not Specified",
+          count: parseInt(item.count),
+          total_area: parseFloat(item.total_area) || 0,
+          average_area: parseFloat(item.average_area) || 0,
+        })),
+      },
+
+      recent_activity: (recentActivity || []).map((record) => ({
+        id: record.id,
+        parcel_number: record.parcel_number,
+        land_use: record.land_use,
+        area: record.area,
+        record_status: record.record_status,
+        zoning_type: record.zoning_type,
+        land_level: record.land_level,
+        land_preparation: record.land_preparation,
+        infrastructure_status: record.infrastructure_status,
+        land_history: record.land_history,
+        building_hight: record.building_hight,
+        has_debt: record.has_debt,
+        created_at: record.createdAt,
+        owner_names:
+          record.owners
+            ?.map((owner) => `${owner.first_name} ${owner.last_name}`.trim())
+            .filter((name) => name) || [],
+      })),
+    };
+
+    return processedStats;
   } catch (error) {
-    throw new Error(`Failed to get statistics: ${error.message}`);
+    console.error("Error generating land records stats:", error);
+    throw new Error(`Failed to generate statistics: ${error.message}`);
   }
 };
-
 const getLandRecordByIdService = async (id, options = {}) => {
   const { transaction, includeDeleted = false } = options;
   const t = transaction || (await sequelize.transaction());
@@ -1749,6 +2337,9 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "phone_number",
             "profile_picture",
             "address",
+            "gender",
+            "marital_status",
+            "relationship_type",
           ],
           paranoid: !includeDeleted,
         },
@@ -1782,10 +2373,17 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "id",
             "plot_number",
             "document_type",
+            "shelf_number",
+            "box_number",
             "reference_number",
+            "file_number",
             "issue_date",
             "isActive",
             "files",
+            "verified_plan_number",
+            "preparer_name",
+            "verifier_name",
+            "approver_name",
             "createdAt",
           ],
           where: includeDeleted ? {} : { deletedAt: null },
@@ -1805,6 +2403,35 @@ const getLandRecordByIdService = async (id, options = {}) => {
             "payment_status",
             "description",
             "createdAt",
+          ],
+          where: includeDeleted ? {} : { deletedAt: null },
+          required: false,
+          paranoid: !includeDeleted,
+        },
+        {
+          model: GeoCoordinate,
+          as: "coordinates",
+          attributes: [
+            "easting",
+            "northing",
+            "latitude",
+            "longitude",
+            "sequence",
+            "label",
+          ],
+          where: includeDeleted ? {} : { deletedAt: null },
+          required: false,
+          paranoid: !includeDeleted,
+        },
+        {
+          model: Organization,
+          as: "organization",
+          attributes: [
+            "name",
+            "eia_document",
+            "permit_number",
+            "permit_issue_date"
+
           ],
           where: includeDeleted ? {} : { deletedAt: null },
           required: false,
@@ -1924,8 +2551,6 @@ const getLandRecordByUserIdService = async (userId) => {
         "ownership_type",
         "zoning_type",
         "record_status",
-        "priority",
-        "notification_status",
         "status_history",
         "action_log",
         "north_neighbor",
@@ -1973,77 +2598,113 @@ const getLandRecordByUserIdService = async (userId) => {
     throw new Error(`Failed to retrieve land records: ${error.message}`);
   }
 };
-
 const getLandRecordsByCreatorService = async (userId, options = {}) => {
   if (!userId) throw new Error("User ID is required");
 
-  const { page = 1, pageSize = 10, queryParams = {} } = options;
+  const {
+    page = 1,
+    pageSize = 10,
+    includeDeleted = false,
+    queryParams = {},
+  } = options;
 
   try {
     const offset = (page - 1) * pageSize;
 
     const whereClause = {
       created_by: userId,
-      deletedAt: null,
     };
 
-    if (queryParams.parcelNumber) {
-      whereClause.parcel_number = {
-        [Op.iLike]: `%${queryParams.parcelNumber}%`,
-      };
+    if (!includeDeleted) {
+      whereClause.deletedAt = null;
     }
 
-    if (queryParams.blockNumber) {
-      whereClause.block_number = { [Op.iLike]: `%${queryParams.blockNumber}%` };
+    // ==================== HAS_DEBT FILTER ====================
+    if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
+      whereClause.has_debt = queryParams.has_debt === "true";
     }
 
-    if (queryParams.record_status) {
-      whereClause.record_status = queryParams.record_status;
-    }
+    // ==================== QUICK FILTERS ====================
 
+    // Land characteristics
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
+    if (queryParams.land_level) {
+      whereClause.land_level = queryParams.land_level;
+    }
+
+    // Ownership details
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    if (queryParams.search) {
-      whereClause[Op.or] = [
-        { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
-        { block_number: { [Op.iLike]: `%${queryParams.search}%` } },
-        { address: { [Op.iLike]: `%${queryParams.search}%` } },
-      ];
+    if (queryParams.lease_transfer_reason) {
+      whereClause.lease_transfer_reason = queryParams.lease_transfer_reason;
     }
 
-    const totalCount = await LandRecord.count({
-      where: whereClause,
-    });
+    // ==================== RANGE FILTERS ====================
+
+    // Area range filter
+    if (
+      (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
+      (queryParams.area_max !== undefined && queryParams.area_max !== "")
+    ) {
+      whereClause.area = {};
+      if (queryParams.area_min !== undefined && queryParams.area_min !== "") {
+        whereClause.area[Op.gte] = parseFloat(queryParams.area_min);
+      }
+      if (queryParams.area_max !== undefined && queryParams.area_max !== "") {
+        whereClause.area[Op.lte] = parseFloat(queryParams.area_max);
+      }
+    }
+
+    // Date range filter
+    if (queryParams.startDate || queryParams.endDate) {
+      whereClause.createdAt = {};
+      if (queryParams.startDate) {
+        whereClause.createdAt[Op.gte] = new Date(queryParams.startDate);
+      }
+      if (queryParams.endDate) {
+        whereClause.createdAt[Op.lte] = new Date(queryParams.endDate);
+      }
+    }
+
+    // ==================== INCLUDE CONDITIONS ====================
 
     const includeConditions = [
       {
         model: User,
         as: "owners",
-        through: { attributes: [] },
+        through: { attributes: ["ownership_percentage", "verified"] },
         attributes: [
           "id",
           "first_name",
           "middle_name",
           "last_name",
-          "national_id",
+          "email",
           "phone_number",
+          "national_id",
+          "profile_picture",
+          "address",
         ],
       },
       {
         model: AdministrativeUnit,
         as: "administrativeUnit",
-        attributes: ["id", "name"],
+        attributes: ["id", "name", "max_land_levels"],
       },
       {
         model: Document,
         as: "documents",
-        attributes: ["id", "plot_number", "document_type"],
+        attributes: [
+          "id",
+          "document_type",
+          "files",
+          "plot_number",
+          "createdAt",
+        ],
       },
       {
         model: LandPayment,
@@ -2054,49 +2715,219 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           "total_amount",
           "paid_amount",
           "payment_status",
+          "currency",
+          "createdAt",
         ],
       },
     ];
 
-    if (queryParams.plotNumber) {
+    // ==================== ENHANCED GLOBAL SEARCH ====================
+
+    if (queryParams.search) {
+      // Clean and prepare search term
+      let searchTerm = queryParams.search.trim();
+
+      // Handle URL encoded characters
+      try {
+        searchTerm = decodeURIComponent(searchTerm);
+      } catch (e) {
+        // Continue with original term if decoding fails
+      }
+
+      searchTerm = searchTerm.replace(/%25/g, "%");
+
+      // Split search term by spaces to handle full names
+      const searchTerms = searchTerm
+        .split(/\s+/)
+        .filter((term) => term.length > 0);
+
+      // SIMPLIFIED AND IMPROVED SEARCH LOGIC
+      const searchConditions = {
+        [Op.or]: [
+          // LandRecord fields
+          { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
+
+          // Document fields
+          { "$documents.plot_number$": { [Op.iLike]: `%${searchTerm}%` } },
+
+          // Owner national_id and phone (always include these)
+          { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
+          { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
+        ],
+      };
+
+      // ===== SIMPLIFIED NAME SEARCH =====
+      if (searchTerms.length > 0) {
+        // For single term, search across all name fields
+        if (searchTerms.length === 1) {
+          const term = searchTerms[0];
+          searchConditions[Op.or].push(
+            { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
+          );
+        }
+        // For multiple terms (full name), use more specific matching
+        else {
+          // Search for each term in any name field (OR logic)
+          searchTerms.forEach((term) => {
+            searchConditions[Op.or].push(
+              { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
+            );
+          });
+
+          // Also search for the full combined name
+          searchConditions[Op.or].push(
+            Sequelize.where(
+              Sequelize.fn(
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
+              ),
+              { [Op.iLike]: `%${searchTerm}%` }
+            )
+          );
+        }
+      }
+
+      // Add search includes (make sure owners are included for search)
+      const ownerIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "owners"
+      );
+      if (ownerIncludeIndex !== -1) {
+        includeConditions[ownerIncludeIndex].required = false; // LEFT JOIN for search
+      }
+
+      const documentIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "documents"
+      );
+      if (documentIncludeIndex !== -1) {
+        includeConditions[documentIncludeIndex].required = false; // LEFT JOIN for search
+      }
+
+      // Apply search conditions
+      whereClause[Op.and] = [...(whereClause[Op.and] || []), searchConditions];
+    }
+
+    // ==================== SPECIFIC TEXT FILTERS ====================
+
+    // Individual parcel number filter
+    if (queryParams.parcel_number) {
+      whereClause.parcel_number = {
+        [Op.iLike]: `%${queryParams.parcel_number}%`,
+      };
+    }
+
+    // Individual plot number filter
+    if (queryParams.plot_number) {
       const documentInclude = includeConditions.find(
         (inc) => inc.as === "documents"
       );
       if (documentInclude) {
         documentInclude.where = {
-          plot_number: { [Op.iLike]: `%${queryParams.plotNumber}%` },
+          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` },
         };
+        documentInclude.required = true;
       }
     }
 
-    if (
-      queryParams.ownerName ||
-      queryParams.nationalId ||
-      queryParams.phoneNumber
-    ) {
+    // Individual owner name filter
+    if (queryParams.owner_name) {
+      const ownerNameTerm = queryParams.owner_name.trim();
+      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
+
+      if (ownerInclude) {
+        ownerInclude.where = {
+          [Op.or]: [
+            { first_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            { middle_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            { last_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            Sequelize.where(
+              Sequelize.fn(
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
+              ),
+              { [Op.iLike]: `%${ownerNameTerm}%` }
+            ),
+          ],
+        };
+        ownerInclude.required = true;
+      }
+    }
+
+    // Individual national_id filter
+    if (queryParams.national_id) {
       const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
       if (ownerInclude) {
-        ownerInclude.where = { [Op.or]: [] };
-
-        if (queryParams.ownerName) {
-          ownerInclude.where[Op.or].push(
-            { first_name: { [Op.iLike]: `%${queryParams.ownerName}%` } },
-            { middle_name: { [Op.iLike]: `%${queryParams.ownerName}%` } },
-            { last_name: { [Op.iLike]: `%${queryParams.ownerName}%` } }
-          );
-        }
-        if (queryParams.nationalId) {
-          ownerInclude.where[Op.or].push({
-            national_id: { [Op.iLike]: `%${queryParams.nationalId}%` },
-          });
-        }
-        if (queryParams.phoneNumber) {
-          ownerInclude.where[Op.or].push({
-            phone_number: { [Op.iLike]: `%${queryParams.phoneNumber}%` },
-          });
-        }
+        ownerInclude.where = {
+          national_id: { [Op.iLike]: `%${queryParams.national_id}%` },
+        };
+        ownerInclude.required = true;
       }
     }
+
+    // Individual phone_number filter
+    if (queryParams.phone_number) {
+      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
+      if (ownerInclude) {
+        ownerInclude.where = {
+          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` },
+        };
+        ownerInclude.required = true;
+      }
+    }
+
+    // ==================== SORTING ====================
+
+    let order = [["createdAt", "DESC"]];
+    if (queryParams.sortBy && queryParams.sortOrder) {
+      const validSortFields = [
+        "parcel_number",
+        "area",
+        "land_use",
+        "ownership_type",
+        "record_status",
+        "land_level",
+        "ownership_category",
+        "createdAt",
+        "updatedAt",
+      ];
+
+      if (validSortFields.includes(queryParams.sortBy)) {
+        const sortDirection =
+          queryParams.sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
+        order = [[queryParams.sortBy, sortDirection]];
+      }
+    }
+
+    // ==================== COUNT TOTAL RECORDS ====================
+
+    const countIncludes = includeConditions
+      .map((inc) => {
+        // For count, make sure we don't require the includes (to avoid INNER JOIN)
+        const includeCopy = { ...inc };
+        if (includeCopy.required) {
+          includeCopy.required = false;
+        }
+        return includeCopy;
+      })
+      .filter((inc) => inc.as !== "payments");
+
+    const totalCount = await LandRecord.count({
+      where: whereClause,
+      include: countIncludes,
+      distinct: true,
+      col: "id",
+    });
+
+    // ==================== FETCH RECORDS ====================
 
     const landRecords = await LandRecord.findAll({
       where: whereClause,
@@ -2104,56 +2935,50 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
       attributes: [
         "id",
         "parcel_number",
-        "block_number",
-        "block_special_name",
-        "area",
-        "land_level",
         "land_use",
         "ownership_type",
-        "lease_ownership_type",
-        "ownership_category",
-        "zoning_type",
+        "lease_transfer_reason",
+        "area",
+        "land_level",
         "record_status",
-        "infrastructure_status",
-        "land_bank_code",
-        "land_history",
+        "ownership_category",
         "has_debt",
-        "north_neighbor",
-        "east_neighbor",
-        "south_neighbor",
-        "west_neighbor",
-        "address",
-        "plan",
-        "notes",
-        "remark",
-        "rejection_reason",
-        "priority",
-        "notification_status",
-        "status_history",
-        "action_log",
         "administrative_unit_id",
         "created_by",
-        "approved_by",
         "createdAt",
         "updatedAt",
       ],
       limit: pageSize,
       offset: offset,
-      order: [["createdAt", "DESC"]],
+      order: order,
+      distinct: true,
       subQuery: false,
     });
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
+    // ==================== PROCESS RECORDS ====================
+
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
+      // Process owners
+      recordData.owners = recordData.owners
+        ? recordData.owners.map((owner) => ({
+            ...owner,
+            ownership_percentage: owner.LandOwner?.ownership_percentage,
+            verified: owner.LandOwner?.verified,
+          }))
+        : [];
+
+      // Calculate total payments
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
+      // Create owner names string
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2163,14 +2988,25 @@ const getLandRecordsByCreatorService = async (userId, options = {}) => {
           )
           .join(", ") || "";
 
+      // Get plot numbers from documents
+      recordData.plot_numbers =
+        recordData.documents
+          ?.map((doc) => doc.plot_number)
+          .filter(Boolean)
+          .join(", ") || "";
+
+      // Counts
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
+      // Administrative unit name
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
       return recordData;
     });
+
+    // ==================== RETURN RESULT ====================
 
     const result = {
       total: totalCount,
@@ -2368,38 +3204,37 @@ const getLandRecordsByUserAdminUnitService = async (
       whereClause.deletedAt = null;
     }
 
-    if (queryParams.parcel_number) {
-      whereClause.parcel_number = {
-        [Op.iLike]: `%${queryParams.parcel_number}%`,
-      };
+    // ==================== HAS_DEBT FILTER ====================
+    if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
+      whereClause.has_debt = queryParams.has_debt === "true";
     }
 
-    if (queryParams.block_number) {
-      whereClause.block_number = {
-        [Op.iLike]: `%${queryParams.block_number}%`,
-      };
-    }
+    // ==================== QUICK FILTERS ====================
 
-    if (queryParams.record_status) {
-      whereClause.record_status = queryParams.record_status;
-    }
-
+    // Land characteristics
     if (queryParams.land_use) {
       whereClause.land_use = queryParams.land_use;
     }
 
+    if (queryParams.land_level) {
+      whereClause.land_level = queryParams.land_level;
+    }
+
+    // Ownership details
     if (queryParams.ownership_type) {
       whereClause.ownership_type = queryParams.ownership_type;
     }
 
-    if (queryParams.ownership_category) {
-      whereClause.ownership_category = queryParams.ownership_category;
+    if (queryParams.lease_transfer_reason) {
+      whereClause.lease_transfer_reason = queryParams.lease_transfer_reason;
+    }
+    if (queryParams.land_preparation) {
+      whereClause.land_preparation = queryParams.land_preparation;
     }
 
-    if (queryParams.priority) {
-      whereClause.priority = queryParams.priority;
-    }
+    // ==================== RANGE FILTERS ====================
 
+    // Area range filter
     if (
       (queryParams.area_min !== undefined && queryParams.area_min !== "") ||
       (queryParams.area_max !== undefined && queryParams.area_max !== "")
@@ -2413,13 +3248,7 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    if (queryParams.search) {
-      whereClause[Op.or] = [
-        { parcel_number: { [Op.iLike]: `%${queryParams.search}%` } },
-        { block_number: { [Op.iLike]: `%${queryParams.search}%` } },
-      ];
-    }
-
+    // Date range filter
     if (queryParams.startDate || queryParams.endDate) {
       whereClause.createdAt = {};
       if (queryParams.startDate) {
@@ -2430,9 +3259,7 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
-    const totalCount = await LandRecord.count({
-      where: whereClause,
-    });
+    // ==================== INCLUDE CONDITIONS ====================
 
     const includeConditions = [
       {
@@ -2447,6 +3274,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "email",
           "phone_number",
           "national_id",
+          "profile_picture",
         ],
       },
       {
@@ -2463,6 +3291,7 @@ const getLandRecordsByUserAdminUnitService = async (
           "files",
           "plot_number",
           "createdAt",
+          "issue_date",
         ],
       },
       {
@@ -2480,45 +3309,184 @@ const getLandRecordsByUserAdminUnitService = async (
       },
     ];
 
-    if (
-      queryParams.owner_name ||
-      queryParams.national_id ||
-      queryParams.phone_number
-    ) {
-      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
-      if (ownerInclude) {
-        ownerInclude.where = { [Op.or]: [] };
+    // ==================== ENHANCED GLOBAL SEARCH ====================
 
-        if (queryParams.owner_name) {
-          ownerInclude.where[Op.or].push(
-            { first_name: { [Op.iLike]: `%${queryParams.owner_name}%` } },
-            { middle_name: { [Op.iLike]: `%${queryParams.owner_name}%` } },
-            { last_name: { [Op.iLike]: `%${queryParams.owner_name}%` } }
+    if (queryParams.search) {
+      // Clean and prepare search term
+      let searchTerm = queryParams.search.trim();
+
+      // Handle URL encoded characters
+      try {
+        searchTerm = decodeURIComponent(searchTerm);
+      } catch (e) {}
+
+      searchTerm = searchTerm.replace(/%25/g, "%");
+
+      // Split search term by spaces to handle full names
+      const searchTerms = searchTerm
+        .split(/\s+/)
+        .filter((term) => term.length > 0);
+
+      // SIMPLIFIED AND IMPROVED SEARCH LOGIC
+      const searchConditions = {
+        [Op.or]: [
+          // LandRecord fields
+          { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
+
+          // Document fields
+          { "$documents.plot_number$": { [Op.iLike]: `%${searchTerm}%` } },
+
+          // Owner national_id and phone (always include these)
+          { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
+          { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
+        ],
+      };
+
+      // ===== SIMPLIFIED NAME SEARCH =====
+      if (searchTerms.length > 0) {
+        // For single term, search across all name fields
+        if (searchTerms.length === 1) {
+          const term = searchTerms[0];
+          searchConditions[Op.or].push(
+            { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+            { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
           );
         }
-        if (queryParams.national_id) {
-          ownerInclude.where[Op.or].push({
-            national_id: { [Op.iLike]: `%${queryParams.national_id}%` },
+        // For multiple terms (full name), use more specific matching
+        else {
+          // Search for each term in any name field (OR logic)
+          searchTerms.forEach((term) => {
+            searchConditions[Op.or].push(
+              { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.middle_name$": { [Op.iLike]: `%${term}%` } },
+              { "$owners.last_name$": { [Op.iLike]: `%${term}%` } }
+            );
           });
-        }
-        if (queryParams.phone_number) {
-          ownerInclude.where[Op.or].push({
-            phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` },
-          });
+
+          // Also search for the full combined name
+          searchConditions[Op.or].push(
+            Sequelize.where(
+              Sequelize.fn(
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
+              ),
+              { [Op.iLike]: `%${searchTerm}%` }
+            )
+          );
         }
       }
+
+      // Add search includes (make sure owners are included for search)
+      const ownerIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "owners"
+      );
+      if (ownerIncludeIndex !== -1) {
+        includeConditions[ownerIncludeIndex].required = false; // LEFT JOIN for search
+      }
+
+      const documentIncludeIndex = includeConditions.findIndex(
+        (inc) => inc.as === "documents"
+      );
+      if (documentIncludeIndex !== -1) {
+        includeConditions[documentIncludeIndex].required = false; // LEFT JOIN for search
+      }
+
+      // Apply search conditions
+      whereClause[Op.and] = [...(whereClause[Op.and] || []), searchConditions];
     }
+
+    // ==================== SPECIFIC TEXT FILTERS ====================
+
+    // Individual parcel number filter
+    if (queryParams.parcel_number) {
+      whereClause.parcel_number = {
+        [Op.iLike]: `%${queryParams.parcel_number}%`,
+      };
+    }
+
+    // Individual plot number filter
+    if (queryParams.plot_number) {
+      const documentInclude = includeConditions.find(
+        (inc) => inc.as === "documents"
+      );
+      if (documentInclude) {
+        documentInclude.where = {
+          ...documentInclude.where,
+          plot_number: { [Op.iLike]: `%${queryParams.plot_number}%` },
+        };
+        documentInclude.required = true;
+      }
+    }
+
+    // Individual owner name filter
+    if (queryParams.owner_name) {
+      const ownerNameTerm = queryParams.owner_name.trim();
+      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
+
+      if (ownerInclude) {
+        ownerInclude.where = {
+          ...ownerInclude.where,
+          [Op.or]: [
+            { first_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            { middle_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            { last_name: { [Op.iLike]: `%${ownerNameTerm}%` } },
+            Sequelize.where(
+              Sequelize.fn(
+                "CONCAT_WS",
+                " ",
+                Sequelize.col("owners.first_name"),
+                Sequelize.col("owners.middle_name"),
+                Sequelize.col("owners.last_name")
+              ),
+              { [Op.iLike]: `%${ownerNameTerm}%` }
+            ),
+          ],
+        };
+        ownerInclude.required = true;
+      }
+    }
+
+    // Individual national_id filter
+    if (queryParams.national_id) {
+      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
+      if (ownerInclude) {
+        ownerInclude.where = {
+          ...ownerInclude.where,
+          national_id: { [Op.iLike]: `%${queryParams.national_id}%` },
+        };
+        ownerInclude.required = true;
+      }
+    }
+
+    // Individual phone_number filter
+    if (queryParams.phone_number) {
+      const ownerInclude = includeConditions.find((inc) => inc.as === "owners");
+      if (ownerInclude) {
+        ownerInclude.where = {
+          ...ownerInclude.where,
+          phone_number: { [Op.iLike]: `%${queryParams.phone_number}%` },
+        };
+        ownerInclude.required = true;
+      }
+    }
+
+    // ==================== SORTING ====================
 
     let order = [["createdAt", "DESC"]];
     if (queryParams.sortBy && queryParams.sortOrder) {
       const validSortFields = [
         "parcel_number",
-        "block_number",
         "area",
         "land_use",
         "ownership_type",
+        "land_preparation",
         "record_status",
-        "priority",
+        "land_level",
+        "ownership_category",
         "createdAt",
         "updatedAt",
       ];
@@ -2530,19 +3498,43 @@ const getLandRecordsByUserAdminUnitService = async (
       }
     }
 
+    // ==================== COUNT TOTAL RECORDS ====================
+
+    const countIncludes = includeConditions
+      .map((inc) => {
+        // For count, make sure we don't require the includes (to avoid INNER JOIN)
+        const includeCopy = { ...inc };
+        if (includeCopy.required) {
+          includeCopy.required = false;
+        }
+        return includeCopy;
+      })
+      .filter((inc) => inc.as !== "payments");
+
+    const totalCount = await LandRecord.count({
+      where: whereClause,
+      include: countIncludes,
+      distinct: true,
+      col: "id",
+    });
+
+    // ==================== FETCH RECORDS ====================
+
     const landRecords = await LandRecord.findAll({
       where: whereClause,
       include: includeConditions,
       attributes: [
         "id",
         "parcel_number",
-        "block_number",
         "land_use",
+        "land_preparation",
         "ownership_type",
+        "lease_transfer_reason",
         "area",
+        "land_level",
         "record_status",
-        "priority",
         "ownership_category",
+        "has_debt",
         "administrative_unit_id",
         "createdAt",
         "updatedAt",
@@ -2551,13 +3543,17 @@ const getLandRecordsByUserAdminUnitService = async (
       offset: offset,
       order: order,
       distinct: true,
+      subQuery: false,
     });
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
+    // ==================== PROCESS RECORDS ====================
+
     const processedRecords = landRecords.map((record) => {
       const recordData = record.toJSON();
 
+      // Process owners
       recordData.owners = recordData.owners
         ? recordData.owners.map((owner) => ({
             ...owner,
@@ -2566,12 +3562,14 @@ const getLandRecordsByUserAdminUnitService = async (
           }))
         : [];
 
+      // Calculate total payments
       recordData.total_payments =
         recordData.payments?.reduce(
           (sum, payment) => sum + parseFloat(payment.paid_amount || 0),
           0
         ) || 0;
 
+      // Create owner names string
       recordData.owner_names =
         recordData.owners
           ?.map((owner) =>
@@ -2581,14 +3579,25 @@ const getLandRecordsByUserAdminUnitService = async (
           )
           .join(", ") || "";
 
+      // Get plot numbers from documents
+      recordData.plot_numbers =
+        recordData.documents
+          ?.map((doc) => doc.plot_number)
+          .filter(Boolean)
+          .join(", ") || "";
+
+      // Counts
       recordData.document_count = recordData.documents?.length || 0;
       recordData.payment_count = recordData.payments?.length || 0;
 
+      // Administrative unit name
       recordData.administrative_unit_name =
         recordData.administrativeUnit?.name || "";
 
       return recordData;
     });
+
+    // ==================== RETURN RESULT ====================
 
     const result = {
       total: totalCount,
@@ -2631,6 +3640,7 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
             "email",
             "phone_number",
             "national_id",
+            "profile_picture",
           ],
         },
         {
@@ -2671,7 +3681,6 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
         "ownership_type",
         "area",
         "record_status",
-        "priority",
         "ownership_category",
         "administrative_unit_id",
         "createdAt",
@@ -2689,7 +3698,6 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
       ownership_type: record.ownership_type,
       area: record.area,
       record_status: record.record_status,
-      priority: record.priority,
       ownership_category: record.ownership_category,
       administrative_unit: record.administrativeUnit
         ? {
@@ -2714,7 +3722,6 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
-
 const updateLandRecordService = async (
   recordId,
   data,
@@ -2876,7 +3883,6 @@ const updateLandRecordService = async (
     throw new Error(`Land record update failed: ${error.message}`);
   }
 };
-
 const changeRecordStatusService = async (
   recordId,
   newStatus,
@@ -2909,12 +3915,7 @@ const changeRecordStatusService = async (
     }
 
     const allowedTransitions = {
-      [RECORD_STATUSES.DRAFT]: [RECORD_STATUSES.SUBMITTED],
       [RECORD_STATUSES.SUBMITTED]: [
-        RECORD_STATUSES.UNDER_REVIEW,
-        RECORD_STATUSES.REJECTED,
-      ],
-      [RECORD_STATUSES.UNDER_REVIEW]: [
         RECORD_STATUSES.APPROVED,
         RECORD_STATUSES.REJECTED,
       ],
@@ -3061,7 +4062,7 @@ const changeRecordStatusService = async (
         </div>
         
         <div style="margin-top: 30px; text-align: center;">
-          <a href="${process.env.FRONTEND_URL}/land-records/${record.id}" 
+          <a href="${process.env.CLIENT_URL}/land-records/${record.id}" 
              style="background-color: #2ecc71; color: white; padding: 10px 20px; 
                     text-decoration: none; border-radius: 5px; display: inline-block;">
             መሬት መዝገብ ለማየት ይህን ይጫኑ
@@ -3109,7 +4110,6 @@ const changeRecordStatusService = async (
     throw error;
   }
 };
-
 const moveToTrashService = async (
   recordId,
   user,
@@ -3217,7 +4217,6 @@ const moveToTrashService = async (
     throw error;
   }
 };
-
 const restoreFromTrashService = async (recordId, user, options = {}) => {
   const { transaction } = options;
   const t = transaction || (await sequelize.transaction());
@@ -3286,7 +4285,6 @@ const restoreFromTrashService = async (recordId, user, options = {}) => {
     );
   }
 };
-
 const permanentlyDeleteService = async (recordId, user, options = {}) => {
   const { transaction, ipAddress, userAgent } = options;
   const t = transaction || (await sequelize.transaction());
@@ -3353,9 +4351,19 @@ const getTrashItemsService = async (user, options = {}) => {
   const offset = (page - 1) * limit;
 
   try {
+    // Get admin_unit_id from logged-in user
+    const userAdminUnitId = user.administrative_unit_id;
+
+    if (!userAdminUnitId) {
+      throw new Error(
+        "Access denied. User does not belong to any administrative unit."
+      );
+    }
+
     const queryOptions = {
       where: {
         deletedAt: { [Op.ne]: null },
+        administrative_unit_id: userAdminUnitId,
       },
       paranoid: false,
       order: [["deletedAt", "DESC"]],
@@ -3379,6 +4387,7 @@ const getTrashItemsService = async (user, options = {}) => {
             "email",
             "phone_number",
             "national_id",
+            "profile_picture",
           ],
         },
         {
@@ -3421,6 +4430,8 @@ const getTrashItemsService = async (user, options = {}) => {
     throw new Error(
       error.message.includes("timeout")
         ? "የመረጃ ምንጭ በጣም ተጭኗል። እባክዎ ቆይታ ካደረጉ እንደገና ይሞክሩ።"
+        : error.message.includes("Access denied")
+        ? error.message
         : "የመጥፎ ቅርጫት ዝርዝር ማግኘት አልተቻለም።"
     );
   }
@@ -3430,7 +4441,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
   try {
     const pLimit = (await import("p-limit")).default;
 
-    const limit = pLimit(8); 
+    const limit = pLimit(8);
 
     const baseWhere = { deletedAt: null };
     if (adminUnitId) baseWhere.administrative_unit_id = adminUnitId;
@@ -3444,11 +4455,11 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       limit(() => LandRecord.count({ where: baseWhere })),
       limit(() => Document.count({ where: { deletedAt: null } })),
       limit(() =>
-      User.count({
-        where: adminUnitId
-        ? { administrative_unit_id: adminUnitId }
-        : { administrative_unit_id: { [Op.ne]: null } },
-      })
+        User.count({
+          where: adminUnitId
+            ? { administrative_unit_id: adminUnitId }
+            : { administrative_unit_id: { [Op.ne]: null } },
+        })
       ),
       limit(() => LandOwner.count({ distinct: true, col: "user_id" })),
     ];
@@ -3469,7 +4480,6 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       by_zoning,
       by_ownership,
       by_land_use,
-      by_lease_ownership_type,
       by_lease_transfer_reason,
     ] = await Promise.all([
       limit(() =>
@@ -3516,20 +4526,7 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
           { type: sequelize.QueryTypes.SELECT, bind }
         )
       ),
-      // NEW: Lease ownership type query
-      limit(() =>
-        sequelize.query(
-          `
-      SELECT lease_ownership_type, COUNT(*)::int AS count
-      FROM "land_records"
-      WHERE "deletedAt" IS NULL 
-        AND administrative_unit_id = $adminUnitId
-        AND lease_ownership_type IS NOT NULL
-      GROUP BY lease_ownership_type
-      `,
-          { type: sequelize.QueryTypes.SELECT, bind }
-        )
-      ),
+
       // NEW: Lease transfer reason query
       limit(() =>
         sequelize.query(
@@ -3650,10 +4647,9 @@ const getLandRecordStats = async (adminUnitId, options = {}) => {
       administrative_unit: {
         by_status,
         by_zoning,
-        by_ownership, 
+        by_ownership,
         by_land_use,
-        by_lease_ownership_type, 
-        by_lease_transfer_reason, 
+        by_lease_transfer_reason,
         area_stats: {
           total_area,
           by_zoning: area_by_zoning,
@@ -3728,18 +4724,14 @@ module.exports = {
   createLandRecordService,
   importLandRecordsFromXLSXService,
   changeRecordStatusService,
-  saveLandRecordAsDraftService,
   getAllLandRecordService,
   getLandRecordByIdService,
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
   updateLandRecordService,
-  getDraftLandRecordService,
-  updateDraftLandRecordService,
-  submitDraftLandRecordService,
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
   getLandRecordStats,
-  getLandRecordsStatsService,
+  getLandRecordsStatsByAdminUnit,
   getFilterOptionsService,
 };

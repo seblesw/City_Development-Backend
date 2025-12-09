@@ -26,6 +26,15 @@ module.exports = (db, DataTypes) => {
         allowNull: true,
         references: { model: "payment_schedules", key: "id" },
       },
+      retry_count: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+      },
+      reminder_days_before: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       global_notice_schedule_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

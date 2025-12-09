@@ -14,13 +14,13 @@ const {
   User,
   LAND_USE_TYPES,
   LEASE_TRANSFER_REASONS,
-  LEASE_OWNERSHIP_TYPE,
+  LAND_PREPARATION,
 } = require("../models");
 const createOversightOfficeService = async (data, userId, transaction) => {
   const { name, region_id, zone_id, woreda_id } = data;
 
   try {
-    
+    // Check if office with same name in same region already exists
     const existingOffice = await OversightOffice.findOne({
       where: {
         name,
@@ -33,13 +33,13 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       throw new Error("ይህ ስም ያለው ቢሮ ተመዝግቧል።");
     }
 
-    
+    // Validate region exists
     const region = await Region.findByPk(region_id, { transaction });
     if (!region) {
       throw new Error("ትክክለኛ ክልል ይምረጡ።");
     }
 
-    
+    // Validate zone if provided
     let zone = null;
     if (zone_id) {
       zone = await Zone.findByPk(zone_id, { transaction });
@@ -48,7 +48,7 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
-    
+    // Validate woreda if provided
     let woreda = null;
     if (woreda_id) {
       if (!zone_id) {
@@ -61,49 +61,24 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       }
     }
 
+    // Generate unique identifier
+    const generateUniqueId = () => {
+      const timestamp = Date.now().toString();
+      const random = Math.floor(Math.random() * 999).toString().padStart(3, '0');
+      // Take last 6 digits of timestamp + 3 random digits = 9 digit unique ID
+      return `${timestamp.slice(-6)}${random}`;
+    };
+
+    // Generate code parts
+    const regionCode = region.code;
+    const zoneCode = zone ? zone.code.split("-")[1] || "NZ" : "NZ";
+    const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
+    const uniqueId = generateUniqueId();
     
-    let code;
-    let attempts = 0;
-    const maxAttempts = 5;
-    
-    while (attempts < maxAttempts) {
-      attempts++;
-      
-      
-      const where = {
-        region_id,
-        deletedAt: { [Op.eq]: null },
-      };
+    // Create the final code
+    const code = `${regionCode}-${zoneCode}-${woredaCode}-${uniqueId}`;
 
-      if (zone_id) where.zone_id = zone_id;
-      if (woreda_id) where.woreda_id = woreda_id;
-
-      const count = await OversightOffice.count({
-        where,
-        transaction,
-      });
-
-      const regionCode = region.code;
-      const zoneCode = zone ? zone.code.split("-")[1] || "NZ" : "NZ";
-      const woredaCode = woreda ? woreda.code.split("-")[2] || "NW" : "NW";
-      code = `${regionCode}-${zoneCode}-${woredaCode}-OF${count + 1}`;
-
-      
-      const codeExists = await OversightOffice.findOne({
-        where: { code },
-        transaction,
-      });
-
-      if (!codeExists) {
-        break; 
-      }
-
-      if (attempts === maxAttempts) {
-        throw new Error("ለመፍጠር የሚሞከርበት ጊዜ አልቋል። እባክዎ እንደገና ይሞክሩ።");
-      }
-    }
-
-    
+    // Create the oversight office
     return await OversightOffice.create(
       {
         name,
@@ -116,7 +91,6 @@ const createOversightOfficeService = async (data, userId, transaction) => {
       { transaction }
     );
   } catch (error) {
-    
     throw new Error(error.message || "ቢሮ መፍጠር አልተሳካም።");
   }
 };
@@ -237,10 +211,10 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
 
     // 3. Build where clause based on office level
     const where = { deletedAt: null };
-    if (officeLevel === 'woreda') {
+    if (officeLevel === 'ጽ/ቤት') {
       where.woreda_id = oversightOffice.woreda_id;
       where.zone_id = oversightOffice.zone_id;
-    } else if (officeLevel === 'zonal') {
+    } else if (officeLevel === 'መምሪያ') {
       where.zone_id = oversightOffice.zone_id;
     }
     where.region_id = oversightOffice.region_id;
@@ -362,11 +336,12 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
         zoningTypes: unitStats.zoningTypes.count,
         zoningTypeAreas: unitStats.zoningTypes.area,
         
-        leaseOwnershipTypes: unitStats.leaseOwnershipTypes.count,
-        leaseOwnershipTypeAreas: unitStats.leaseOwnershipTypes.area,
+        landPreparationTypes: unitStats.landPreparationTypes.count,
+        landPreparationTypeAreas: unitStats.landPreparationTypes.area,
         
         leaseTransferReasons: unitStats.leaseTransferReasons.count,
         leaseTransferReasonAreas: unitStats.leaseTransferReasons.area,
+
         
         // Performance metrics
         areaPerOwner: unitStats.landownerIds.size > 0 ? unitStats.totalAreaHectares / unitStats.landownerIds.size : 0,
@@ -411,7 +386,7 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
           ownershipTypes: globalStats.ownershipTypes,
           landUses: globalStats.landUses,
           zoningTypes: globalStats.zoningTypes,
-          leaseOwnershipTypes: globalStats.leaseOwnershipTypes,
+          landPreparationTypes: globalStats.landPreparationTypes,
           leaseTransferReasons: globalStats.leaseTransferReasons
         },
         
@@ -427,7 +402,6 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
     return response;
 
   } catch (error) {
-    console.error("Error in getOversightOfficeStatsService:", error);
     throw new Error(error.message || "Failed to get oversight office statistics");
   }
 };
@@ -439,11 +413,11 @@ const getOversightOfficeStatsService = async (oversightOfficeId) => {
  */
 const determineOfficeLevel = (oversightOffice) => {
   if (oversightOffice.woreda_id && oversightOffice.zone_id && oversightOffice.region_id) {
-    return 'woreda';
+    return 'ጽ/ቤት';
   } else if (oversightOffice.zone_id && oversightOffice.region_id) {
-    return 'zonal';
+    return 'መምሪያ';
   } else if (oversightOffice.region_id) {
-    return 'regional';
+    return 'ቢሮ';
   } else {
     return 'unknown';
   }
@@ -480,8 +454,8 @@ const initializeAdminUnitStats = (adminUnitIds) => {
   const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
-  const leaseOwnershipTypeValues = Object.values(LEASE_OWNERSHIP_TYPE || {});
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
+  const landPreparationTypeValues = Object.values(LAND_PREPARATION); 
 
   adminUnitIds.forEach(adminUnitId => {
     stats[adminUnitId] = {
@@ -507,9 +481,9 @@ const initializeAdminUnitStats = (adminUnitIds) => {
         area: initializeCountObject(zoningTypeValues) 
       },
       
-      leaseOwnershipTypes: {
-        count: initializeCountObject(leaseOwnershipTypeValues),
-        area: initializeCountObject(leaseOwnershipTypeValues) 
+      landPreparationTypes: {
+        count: initializeCountObject(landPreparationTypeValues),
+        area: initializeCountObject(landPreparationTypeValues) 
       },
       
       leaseTransferReasons: {
@@ -529,8 +503,8 @@ const initializeGlobalStats = () => {
   const ownershipTypeValues = Object.values(OWNERSHIP_TYPES);
   const landUseValues = Object.values(LAND_USE_TYPES);
   const zoningTypeValues = Object.values(ZONING_TYPES);
-  const leaseOwnershipTypeValues = Object.values(LEASE_OWNERSHIP_TYPE || {});
   const leaseTransferReasonValues = Object.values(LEASE_TRANSFER_REASONS || {});
+  const landPreparationTypeValues = Object.values(LAND_PREPARATION);
 
   return {
     totalLandowners: 0,
@@ -562,9 +536,9 @@ const initializeGlobalStats = () => {
       area: initializeCountObject(zoningTypeValues) // hectares
     },
     
-    leaseOwnershipTypes: {
-      count: initializeCountObject(leaseOwnershipTypeValues),
-      area: initializeCountObject(leaseOwnershipTypeValues) // hectares
+    landPreparationTypes: {
+      count: initializeCountObject(landPreparationTypeValues),
+      area: initializeCountObject(landPreparationTypeValues) // hectares
     },
     
     leaseTransferReasons: {
@@ -608,8 +582,8 @@ const updateAdminUnitStats = (unitStats, record, areaInSquareMeters, areaInHecta
   updateTypeDistribution(unitStats.ownershipTypes, record.ownership_type, areaInHectares);
   updateTypeDistribution(unitStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(unitStats.zoningTypes, record.zoning_type, areaInHectares);
-  updateTypeDistribution(unitStats.leaseOwnershipTypes, record.lease_ownership_type, areaInHectares);
   updateTypeDistribution(unitStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
+  updateTypeDistribution(unitStats.landPreparationTypes, record.land_preparation, areaInHectares);
   
   // Update landowners
   if (record.owners && Array.isArray(record.owners)) {
@@ -644,8 +618,8 @@ const updateGlobalStats = (globalStats, record, areaInSquareMeters, areaInHectar
   updateTypeDistribution(globalStats.ownershipTypes, record.ownership_type, areaInHectares);
   updateTypeDistribution(globalStats.landUses, record.land_use, areaInHectares);
   updateTypeDistribution(globalStats.zoningTypes, record.zoning_type, areaInHectares);
-  updateTypeDistribution(globalStats.leaseOwnershipTypes, record.lease_ownership_type, areaInHectares);
   updateTypeDistribution(globalStats.leaseTransferReasons, record.lease_transfer_reason, areaInHectares);
+  updateTypeDistribution(globalStats.landPreparationTypes, record.land_preparation, areaInHectares);
   
   // Update landowners
   if (record.owners && Array.isArray(record.owners)) {
@@ -780,7 +754,7 @@ const getEmptyUnitStats = () => ({
   ownershipTypes: { count: {}, area: {} },
   landUses: { count: {}, area: {} },
   zoningTypes: { count: {}, area: {} },
-  leaseOwnershipTypes: { count: {}, area: {} },
+  landPreparationTypes: { count: {}, area: {} },
   leaseTransferReasons: { count: {}, area: {} }
 });
 

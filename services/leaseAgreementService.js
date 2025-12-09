@@ -194,7 +194,7 @@ const getAllLeaseAgreementsService = async (user, queryParams = {}) => {
   if (endDate) {
     where.lease_end_date = { [Op.lte]: new Date(endDate) };
   }
-
+//find all lease agreements with pagination and filters
   const leaseAgreements = await LeaseAgreement.findAndCountAll({
     where,
     include: [

@@ -3,6 +3,7 @@ const authController = require("../controllers/authController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const upload = require("../middlewares/fileStorage");
 const router = express.Router();
+// Defining authentication routes
 // Importing the authController methods
 router.post("/register/officials",authMiddleware.protect, upload.single("profile_picture"), authController.registerOfficialByManagerController);
 router.post("/register",authMiddleware.protect, upload.single("profile_picture"), authController.registerOfficialController);

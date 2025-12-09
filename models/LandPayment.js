@@ -1,18 +1,13 @@
-
 const PAYMENT_TYPES = {
   LEASE_PAYMENT: "የሊዝ ክፍያ",
   TAX: "የግብር ክፍያ",
-  SERVICE_FEE: "የአገልግሎት ክፍያ",
-  COMMUNITY_CONTRIBUTION: "የማህበረሰብ አስተዋጽኦ",
   PENALTY: "ቅጣት",
 };
 
 const PAYMENT_STATUSES = {
   PENDING: "በመጠባበቅ ላይ",
   COMPLETED: "ተጠናቋል",
-  PARTIAL:"ግማሽ",
-  FAILED: "አልተሳካም",
-  CANCELLED: "ተሰርዟል",
+  PARTIAL: "ግማሽ",
 };
 
 module.exports = (db, DataTypes) => {
@@ -37,6 +32,45 @@ module.exports = (db, DataTypes) => {
           isIn: {
             args: [Object.values(PAYMENT_TYPES)],
             msg: "የክፍያ አይነት ከተፈቀዱት እሴቶች ውስጥ አንዱ መሆን አለበት።",
+          },
+        },
+      },
+      lease_year: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: {
+            msg: "የሊዝ ዓመት ትክክለኛ መሆን አለበት።",
+          },
+        },
+      },
+      lease_payment_year: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      annual_payment: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የአመታዊ ክፍያ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የአመታዊ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
+          },
+        },
+      },
+      initial_payment: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+        validate: {
+          isDecimal: {
+            msg: "የመጀመሪያ ክፍያ ትክክለኛ መሆን አለበት።",
+          },
+          min: {
+            args: [0],
+            msg: "የመጀመሪያ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
           },
         },
       },
@@ -65,33 +99,6 @@ module.exports = (db, DataTypes) => {
             msg: "የተከፈለ ገንዘብ 0 ወይም ከዚያ መሆን አለበት።",
           },
         },
-      },
-      annual_payment: {
-        type: DataTypes.DECIMAL,
-        allowNull: true,
-        validate: {
-          isDecimal: {
-            msg: "የአመታዊ ክፍያ ትክክለኛ መሆን አለበት።",
-          },
-          min: {
-            args: [0],
-            msg: "የአመታዊ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
-          },
-        },
-      },
-      initial_payment:{
-        type:DataTypes.DECIMAL,
-        allowNull:true,
-        validate: {
-          isDecimal: {
-            msg: "የመጀመሪያ ክፍያ ትክክለኛ መሆን አለበት።",
-          },
-          min: {
-            args: [0],
-            msg: "የመጀመሪያ ክፍያ 0 ወይም ከዚያ መሆን አለበት።",
-          },
-        },
-      
       },
       penality_amount: {
         type: DataTypes.DECIMAL,
@@ -180,11 +187,6 @@ module.exports = (db, DataTypes) => {
             msg: "መግለጫ ከ500 ቁምፊዎች መብለጥ አይችልም።",
           },
         },
-      },
-      is_draft: {
-        type: DataTypes.BOOLEAN,
-        allowNull: true,
-        defaultValue: false,
       },
       payer_id: {
         type: DataTypes.INTEGER,

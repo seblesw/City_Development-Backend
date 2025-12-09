@@ -1,5 +1,5 @@
 const LEASE_STATUSES = {
-  ACTIVE: "ዝግጁ",
+  ACTIVE: "አክቲቭ",
   TERMINATED: "ተቋርጧል",
   EXPIRED: "ጊዜው አልፏል",
 };
@@ -24,13 +24,10 @@ module.exports = (db, DataTypes) => {
         allowNull: false,
         references: { model: "administrative_units", key: "id" },
       },
-      lessee_id: {
+      leas_user_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "lease_users", key: "id" },
-        validate: {
-          notNull: { msg: "የተከራይ መለያ መግለጽ አለበት።" },
-        },
       },
       leased_area: {
         type: DataTypes.FLOAT,
@@ -59,8 +56,20 @@ module.exports = (db, DataTypes) => {
           isDate: { msg: "የኪራይ መጀመሪያ ቀን ትክክለኛ ቀን መሆን አለበት።" },
         },
       },
-      lease_terms: {
-        type: DataTypes.TEXT,
+      lease_year: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      tolerance_year:{
+        type:DataTypes.INTEGER,
+        allowNull:true
+      },
+      lease_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      page_number: {
+        type: DataTypes.INTEGER,
         allowNull: true,
       },
       status: {
@@ -83,11 +92,8 @@ module.exports = (db, DataTypes) => {
       },
       created_by: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: "users", key: "id" },
-        validate: {
-          notNull: { msg: "ፈጣሪ መለያ መግለጽ አለበት።" },
-        },
       },
       updated_by: {
         type: DataTypes.INTEGER,

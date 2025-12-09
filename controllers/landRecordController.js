@@ -1,4 +1,4 @@
-const { sequelize, RECORD_STATUSES,LandRecord } = require("../models");
+const { sequelize, RECORD_STATUSES,LandRecord, Document } = require("../models");
 const fs = require("fs");
 const { Op } = require("sequelize");
 
@@ -9,10 +9,6 @@ const {
   updateLandRecordService,
   getLandRecordByUserIdService,
   getLandRecordsByCreatorService,
-  saveLandRecordAsDraftService,
-  getDraftLandRecordService,
-  submitDraftLandRecordService,
-  updateDraftLandRecordService,
   getMyLandRecordsService,
   getLandRecordsByUserAdminUnitService,
   changeRecordStatusService,
@@ -26,29 +22,79 @@ const {
   getLandBankRecordsService,
   getLandRecordsStatsService,
   getFilterOptionsService,
+  getLandRecordsStatsByAdminUnit,
 } = require("../services/landRecordService");
-
 
 const createLandRecord = async (req, res) => {
   try {
     const user = req.user;
 
-    
     const owners = JSON.parse(req.body.owners || "[]");
     const land_record = JSON.parse(req.body.land_record || "{}");
     const documents = JSON.parse(req.body.documents || "[]");
     const land_payment = JSON.parse(req.body.land_payment || "{}");
-
+    const organization_info = JSON.parse(req.body.organization_info || "{}"); 
+    const points = JSON.parse(req.body.points || "[]");
     const result = await createLandRecordService(
       {
         owners,
         land_record,
         documents,
         land_payment,
+        organization_info, 
+        points
       },
       req.files,
       user
     );
+
+    try {
+      const landRecord = await LandRecord.findByPk(result.landRecord.id, {
+        include: [{
+          model: Document,
+          as: 'documents',
+          attributes: ['plot_number']
+        }]
+      });
+      
+      if (landRecord) {
+        try {
+          const io = req.app.get('io');
+          const { notifyNewAction } = require('../utils/notificationUtils'); 
+          
+          if (io && notifyNewAction) {
+            const plotNumber = landRecord?.documents?.[0]?.plot_number || null;
+            
+            await notifyNewAction(io, { 
+              landRecordId: landRecord.id,
+              parcelNumber: landRecord.parcel_number,
+              action_type: 'RECORD_CREATED', 
+              performed_by: user.id, 
+              administrative_unit_id: landRecord.administrative_unit_id,
+              notes: `አዲስ የመሬት መዝገብ ተፈጥሯል - የመሬት ቁጥር: ${landRecord.parcel_number}`,
+              additional_data: {
+                status: landRecord.record_status,
+                owners_count: owners.length,
+                documents_count: documents.length,
+                changed_by_name: `${user.first_name} ${user.middle_name || ''}`.trim(),
+                plot_number: plotNumber,
+                action_description: "የመሬት መዝገብ ተፈጥሯል",
+                ownership_category: landRecord.ownership_category,
+                ...(landRecord.ownership_category === 'የድርጅት' && result.organization && {
+                  organization_name: result.organization.name,
+                  organization_type: result.organization.organization_type
+                })
+              }
+            });
+            
+          }
+        } catch (notificationError) {
+          throw new Error(' Notification error:', notificationError.message);
+        }
+      }
+    } catch (logError) {
+      throw new Error(`Logging error: ${logError.message}`);
+    }
 
     return res.status(201).json({
       status: "success",
@@ -70,9 +116,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     if (!req.file) {
       throw new Error("XLSX ፋይል ያስፈልጋል።");
     }
-
-    
-
     const results = await importLandRecordsFromXLSXService(
       req.file.path,
       req.user,
@@ -87,10 +130,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     if (fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-
-    
-
-    
     res.status(201).json({
       status: "success",
       message: `XLSX በተሳካ ሁኔታ ተጭኗል። ${results.createdCount}/${results.totalRows} መዝገቦች ተፈጥረዋል።`,
@@ -98,7 +137,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
         createdCount: results.createdCount,
         skippedCount: results.skippedCount,
         totalRows: results.totalRows,
-        totalGroups: results.totalGroups,
         errors: results.errors || [],
         errorDetails: results.errorDetails || [],
         processingTime: results.processingTime,
@@ -123,157 +161,6 @@ const importLandRecordsFromXLSX = async (req, res) => {
     });
   }
 };
-
-const cleanupFile = (filePath) => {
-  if (fs.existsSync(filePath)) {
-    fs.unlink(filePath, (err) => {
-      
-    });
-  }
-};
-const saveLandRecordAsDraft = async (req, res) => {
-  try {
-    const user = req.user;
-
-    
-    
-    const primary_user = req.body.primary_user
-      ? JSON.parse(req.body.primary_user)
-      : {};
-    const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record
-      ? JSON.parse(req.body.land_record)
-      : {};
-    const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment
-      ? JSON.parse(req.body.land_payment)
-      : {};
-
-    const result = await saveLandRecordAsDraftService(
-      {
-        primary_user,
-        co_owners,
-        land_record,
-        documents,
-        land_payment,
-      },
-      req.files || [],
-      user
-    );
-
-    return res.status(201).json({
-      status: "success",
-      message: "የመሬት ረቂቅ መዝገብ በተሳካ ሁኔታ ተቀምጧል።",
-      data: result,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      status: "error",
-      message: `የረቂቅ መዝገብ ስህተት: ${error.message}`,
-    });
-  }
-};
-const getDraftLandRecord = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const draftId = req.params.id;
-
-    const result = await getDraftLandRecordService(draftId, userId);
-
-    res.status(200).json(result);
-  } catch (error) {
-    res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-const updateDraftLandRecord = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = req.user;
-
-    
-    const primary_user = req.body.primary_user
-      ? JSON.parse(req.body.primary_user)
-      : {};
-    const co_owners = req.body.co_owners ? JSON.parse(req.body.co_owners) : [];
-    const land_record = req.body.land_record
-      ? JSON.parse(req.body.land_record)
-      : {};
-    const documents = req.body.documents ? JSON.parse(req.body.documents) : [];
-    const land_payment = req.body.land_payment
-      ? JSON.parse(req.body.land_payment)
-      : {};
-
-    const result = await updateDraftLandRecordService(
-      id,
-      {
-        primary_user,
-        co_owners,
-        land_record,
-        documents,
-        land_payment,
-      },
-      req.files || [],
-      user
-    );
-
-    return res.status(200).json({
-      status: "success",
-      message: "የረቂቅ መዝገብ በተሳካ ሁኔታ ተዘምኗል።",
-      data: result,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-const submitDraftLandRecord = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = req.user;
-
-    
-    if (!id) {
-      return res.status(400).json({
-        status: "error",
-        message: "ድራፍት ውይም ረቂቅ መዝገብ ID ያስፈልጋል።",
-      });
-    }
-
-    const result = await submitDraftLandRecordService(id, user);
-
-    return res.status(200).json({
-      status: "success",
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    
-    if (error.message.includes("Validation failed")) {
-      return res.status(422).json({
-        status: "validation_error",
-        message: error.message.replace("Validation failed: ", ""),
-        details: error.message.split("; "),
-      });
-    } else if (error.message.includes("ተመዝግቧል")) {
-      return res.status(409).json({
-        status: "conflict",
-        message: error.message,
-      });
-    }
-
-    return res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-
-
 
 const getAllLandRecords = async (req, res) => {
   try {
@@ -325,12 +212,13 @@ const getFilterOptions = async (req, res) => {
 
 const getLandRecordsStats = async (req, res) => {
   try {
-    const result = await getLandRecordsStatsService();
+    const adminUnitId = req.user.administrative_unit_id;
+    const result = await getLandRecordsStatsByAdminUnit(adminUnitId);
     
     return res.status(200).json({
       status: "success",
       message: "Statistics retrieved successfully",
-      data: result.data,
+      data: result,
     });
   } catch (error) {
     return res.status(500).json({
@@ -712,19 +600,59 @@ const changeRecordStatus = async (req, res) => {
     const { id: recordId } = req.params;
     const user = req.user;
 
-    
     if (!record_status) {
-      return res
-        .status(400)
-        .json({ status: "error", message: "Record status is required" });
+      return res.status(400).json({ status: "error", message: "Record status is required" });
     }
 
+    // Get the land record with current status BEFORE updating
+    const landRecordBeforeUpdate = await LandRecord.findByPk(recordId, {
+      include: [{
+        model: Document,
+        as: 'documents',
+        attributes: ['plot_number']
+      }]
+    });
+
+    if (!landRecordBeforeUpdate) {
+      return res.status(404).json({ status: "error", message: "Land record not found" });
+    }
+
+    const previousStatus = landRecordBeforeUpdate.record_status;
+    const plotNumber = landRecordBeforeUpdate?.documents?.[0]?.plot_number || null;
+
+    // Update the record status
     const updatedRecord = await changeRecordStatusService(
       recordId,
       record_status,
       user.id,
       { notes, rejection_reason }
     );
+
+    // Trigger  and Notification
+    try {
+      const io = req.app.get('io');
+      const { notifyNewAction } = require('../utils/notificationUtils');
+      
+      if (io && notifyNewAction) {
+        await notifyNewAction(io, {
+          landRecordId: landRecordBeforeUpdate.id,
+          parcelNumber: landRecordBeforeUpdate.parcel_number,
+          action_type: `STATUS_${record_status}`,
+          performed_by: user.id,
+          administrative_unit_id: landRecordBeforeUpdate.administrative_unit_id,
+          notes: notes || `Status changed from ${previousStatus} to ${record_status}`,
+          additional_data: {
+            status: record_status,
+            previous_status: previousStatus, 
+            rejection_reason: rejection_reason,
+            changed_by_name: `${user.first_name} ${user.middle_name}`,
+            plot_number: plotNumber 
+          }
+        });
+      }
+    } catch (notificationError) {
+throw new Error(`Notification error: ${notificationError.message}`);
+    }
 
     res.status(200).json({
       status: "success",
@@ -738,7 +666,6 @@ const changeRecordStatus = async (req, res) => {
     });
   }
 };
-
 const moveToTrash = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -868,7 +795,6 @@ module.exports = {
   getTrash,
   createLandRecord,
   importLandRecordsFromXLSX,
-  saveLandRecordAsDraft,
   getAllLandRecords,
   changeRecordStatus,
   getRejectedLandRecords,
@@ -877,9 +803,6 @@ module.exports = {
   getLandRecordByUserId,
   getLandRecordsByCreator,
   updateLandRecord,
-  getDraftLandRecord,
-  updateDraftLandRecord,
-  submitDraftLandRecord,
   getLandRecordsByUserAdminUnit,
   getRecentActions,
   getFilterOptions,
