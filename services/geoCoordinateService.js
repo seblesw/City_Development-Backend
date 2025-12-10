@@ -79,7 +79,7 @@ const createCoordinates = async ({ land_record_id, points }, transaction) => {
       const next = created[(i + 1) % n];
       const dx = next.easting - current.easting;
       const dy = next.northing - current.northing;
-      perimeter += Math.hypot(dx, dy); // Math.hypot = sqrt(dx² + dy²)
+      perimeter += Math.hypot(dx, dy); 
     }
 
     return perimeter;
@@ -103,8 +103,8 @@ const createCoordinates = async ({ land_record_id, points }, transaction) => {
         from_sequence: current.sequence,
         to_sequence: next.sequence,
         length_m: Number(distance.toFixed(2)),
-        dx_m: Number(dx.toFixed(2)),  // East-West difference
-        dy_m: Number(dy.toFixed(2)),  // North-South difference
+        dx_m: Number(dx.toFixed(2)), 
+        dy_m: Number(dy.toFixed(2)), 
         bearing: calculateBearing(current.easting, current.northing, next.easting, next.northing),
         is_closing_line: i === n - 1  // Last segment closes the polygon
       });
@@ -736,86 +736,104 @@ const updateCoordinatesService = async (
       return { message: "No coordinates to update" };
     }
 
-    // If we have existing coordinates, update them
-    if (existingCoordinates && existingCoordinates.length > 0) {
-      // Update each existing coordinate with new easting/northing
-      for (let i = 0; i < existingCoordinates.length && i < newCoordinates.length; i++) {
-        const existingCoord = existingCoordinates[i];
-        const newCoord = newCoordinates[i];
-        
-        // Only update if we have easting and northing in new data
-        if (newCoord.easting !== undefined && newCoord.northing !== undefined) {
-          await GeoCoordinate.update(
-            {
-              easting: newCoord.easting,
-              northing: newCoord.northing,
-              updated_by: updater.id,
-              updated_at: new Date()
-            },
-            {
-              where: { 
-                id: existingCoord.id,
-                land_record_id: recordId 
-              },
-              transaction: t,
-              individualHooks: true
-            }
-          );
-        }
+    // Separate coordinates with IDs (updates) and without IDs (new)
+    const updates = [];
+    const newPoints = [];
+
+    newCoordinates.forEach((coord, index) => {
+      if (coord.id) {
+        // This is an update to existing coordinate
+        updates.push({
+          ...coord,
+          sequence: coord.sequence !== undefined ? coord.sequence : index
+        });
+      } else {
+        // This is a new coordinate
+        newPoints.push({
+          ...coord,
+          sequence: coord.sequence !== undefined ? coord.sequence : index
+        });
       }
+    });
+
+    // 1. Update existing coordinates by ID
+    for (const updateCoord of updates) {
+      const { id, ...updateFields } = updateCoord;
       
-      // If we have more new coordinates than existing, create the extra ones
-      if (newCoordinates.length > existingCoordinates.length) {
-        const coordinatesToCreate = [];
-        
-        for (let i = existingCoordinates.length; i < newCoordinates.length; i++) {
-          const newCoord = newCoordinates[i];
-          
-          if (newCoord.easting !== undefined && newCoord.northing !== undefined) {
-            coordinatesToCreate.push({
-              easting: newCoord.easting,
-              northing: newCoord.northing,
-              land_record_id: recordId,
-              sequence: i,
-              created_by: updater.id,
-              updated_by: updater.id
-            });
-          }
-        }
-        
-        if (coordinatesToCreate.length > 0) {
-          await GeoCoordinate.bulkCreate(coordinatesToCreate, {
-            transaction: t,
-            individualHooks: true
-          });
-        }
-      }
-    } else {
-      // No existing coordinates, create new ones
-      const coordinatesToCreate = newCoordinates
-        .filter(coord => coord.easting !== undefined && coord.northing !== undefined)
-        .map((coord, index) => ({
-          easting: coord.easting,
-          northing: coord.northing,
-          land_record_id: recordId,
-          sequence: index,
-          created_by: updater.id,
-          updated_by: updater.id
-        }));
+      // Find if this coordinate exists and belongs to this land record
+      const existingCoord = existingCoordinates.find(c => c.id == id && c.land_record_id == recordId);
       
-      if (coordinatesToCreate.length > 0) {
-        await GeoCoordinate.bulkCreate(coordinatesToCreate, {
+      if (existingCoord) {
+        // Prepare update data
+        const updateData = {
+          updated_by: updater.id,
+          updated_at: new Date()
+        };
+        
+        // Only update easting/northing if provided
+        if (updateFields.easting !== undefined) updateData.easting = updateFields.easting;
+        if (updateFields.northing !== undefined) updateData.northing = updateFields.northing;
+        if (updateFields.sequence !== undefined) updateData.sequence = updateFields.sequence;
+        if (updateFields.label !== undefined) updateData.label = updateFields.label;
+        if (updateFields.description !== undefined) updateData.description = updateFields.description;
+        
+        await GeoCoordinate.update(updateData, {
+          where: { 
+            id: id,
+            land_record_id: recordId 
+          },
           transaction: t,
           individualHooks: true
         });
+      } else {
+        // ID exists but coordinate doesn't belong to this land record or doesn't exist
+        // Add it to newPoints to be created
+        newPoints.push(updateFields);
       }
+    }
+
+    // 2. Create new coordinates (without IDs)
+    if (newPoints.length > 0) {
+      // Convert to the format expected by createCoordinates
+      const pointsForCreation = newPoints.map(point => ({
+        easting: point.easting,
+        northing: point.northing,
+        label: point.label,
+        description: point.description,
+        sequence: point.sequence
+      }));
+
+      // Call the createCoordinates service for new points
+      const createResult = await createCoordinates({
+        land_record_id: recordId,
+        points: pointsForCreation
+      }, t);
+    }
+
+    // 3. Handle deletions: if some existing coordinates are not in newCoordinates
+    const newCoordinateIds = updates.map(coord => coord.id).filter(id => id);
+    const coordinatesToDelete = existingCoordinates.filter(
+      coord => !newCoordinateIds.includes(coord.id)
+    );
+
+    if (coordinatesToDelete.length > 0) {
+      const idsToDelete = coordinatesToDelete.map(coord => coord.id);
+      await GeoCoordinate.destroy({
+        where: {
+          id: idsToDelete,
+          land_record_id: recordId
+        },
+        transaction: t
+      });
     }
 
     if (!transaction) await t.commit();
 
     return { 
       message: "Coordinates updated successfully",
-      updatedCount: Math.min(existingCoordinates?.length || 0, newCoordinates.length)
+      updated: updates.length,
+      created: newPoints.length,
+      deleted: coordinatesToDelete.length
     };
 
   } catch (error) {
