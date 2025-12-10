@@ -24,7 +24,7 @@ const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
-const { createCoordinates } = require("./geoCoordinateService");
+const { createCoordinates, updateCoordinatesService } = require("./geoCoordinateService");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
   const { transaction: externalTransaction, isImport = false } = options;
