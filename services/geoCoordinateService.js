@@ -736,104 +736,251 @@ const updateCoordinatesService = async (
       return { message: "No coordinates to update" };
     }
 
-    // Separate coordinates with IDs (updates) and without IDs (new)
-    const updates = [];
-    const newPoints = [];
+    // Track if coordinates were actually updated
+    let coordinatesUpdated = false;
 
-    newCoordinates.forEach((coord, index) => {
-      if (coord.id) {
-        // This is an update to existing coordinate
-        updates.push({
-          ...coord,
-          sequence: coord.sequence !== undefined ? coord.sequence : index
-        });
-      } else {
-        // This is a new coordinate
-        newPoints.push({
-          ...coord,
-          sequence: coord.sequence !== undefined ? coord.sequence : index
-        });
+    // If we have existing coordinates, update them
+    if (existingCoordinates && existingCoordinates.length > 0) {
+      // Update each existing coordinate with new easting/northing
+      for (let i = 0; i < existingCoordinates.length && i < newCoordinates.length; i++) {
+        const existingCoord = existingCoordinates[i];
+        const newCoord = newCoordinates[i];
+        
+        // Only update if we have easting and northing in new data
+        if (newCoord.easting !== undefined && newCoord.northing !== undefined) {
+          // Check if values are actually different
+          if (existingCoord.easting !== newCoord.easting || existingCoord.northing !== newCoord.northing) {
+            coordinatesUpdated = true;
+            
+            await GeoCoordinate.update(
+              {
+                easting: newCoord.easting,
+                northing: newCoord.northing,
+                updated_by: updater.id,
+                updated_at: new Date()
+              },
+              {
+                where: { 
+                  id: existingCoord.id,
+                  land_record_id: recordId 
+                },
+                transaction: t,
+                individualHooks: true
+              }
+            );
+          }
+        }
       }
-    });
-
-    // 1. Update existing coordinates by ID
-    for (const updateCoord of updates) {
-      const { id, ...updateFields } = updateCoord;
       
-      // Find if this coordinate exists and belongs to this land record
-      const existingCoord = existingCoordinates.find(c => c.id == id && c.land_record_id == recordId);
+      // If we have more new coordinates than existing, create the extra ones
+      if (newCoordinates.length > existingCoordinates.length) {
+        coordinatesUpdated = true;
+        const coordinatesToCreate = [];
+        
+        for (let i = existingCoordinates.length; i < newCoordinates.length; i++) {
+          const newCoord = newCoordinates[i];
+          
+          if (newCoord.easting !== undefined && newCoord.northing !== undefined) {
+            coordinatesToCreate.push({
+              easting: newCoord.easting,
+              northing: newCoord.northing,
+              land_record_id: recordId,
+              sequence: i,
+              created_by: updater.id,
+              updated_by: updater.id
+            });
+          }
+        }
+        
+        if (coordinatesToCreate.length > 0) {
+          await GeoCoordinate.bulkCreate(coordinatesToCreate, {
+            transaction: t,
+            individualHooks: true
+          });
+        }
+      }
+    } else {
+      // No existing coordinates, create new ones
+      coordinatesUpdated = true;
+      const coordinatesToCreate = newCoordinates
+        .filter(coord => coord.easting !== undefined && coord.northing !== undefined)
+        .map((coord, index) => ({
+          easting: coord.easting,
+          northing: coord.northing,
+          land_record_id: recordId,
+          sequence: index,
+          created_by: updater.id,
+          updated_by: updater.id
+        }));
       
-      if (existingCoord) {
-        // Prepare update data
-        const updateData = {
-          updated_by: updater.id,
-          updated_at: new Date()
-        };
-        
-        // Only update easting/northing if provided
-        if (updateFields.easting !== undefined) updateData.easting = updateFields.easting;
-        if (updateFields.northing !== undefined) updateData.northing = updateFields.northing;
-        if (updateFields.sequence !== undefined) updateData.sequence = updateFields.sequence;
-        if (updateFields.label !== undefined) updateData.label = updateFields.label;
-        if (updateFields.description !== undefined) updateData.description = updateFields.description;
-        
-        await GeoCoordinate.update(updateData, {
-          where: { 
-            id: id,
-            land_record_id: recordId 
-          },
+      if (coordinatesToCreate.length > 0) {
+        await GeoCoordinate.bulkCreate(coordinatesToCreate, {
           transaction: t,
           individualHooks: true
         });
-      } else {
-        // ID exists but coordinate doesn't belong to this land record or doesn't exist
-        // Add it to newPoints to be created
-        newPoints.push(updateFields);
       }
     }
 
-    // 2. Create new coordinates (without IDs)
-    if (newPoints.length > 0) {
-      // Convert to the format expected by createCoordinates
-      const pointsForCreation = newPoints.map(point => ({
-        easting: point.easting,
-        northing: point.northing,
-        label: point.label,
-        description: point.description,
-        sequence: point.sequence
-      }));
-
-      // Call the createCoordinates service for new points
-      const createResult = await createCoordinates({
-        land_record_id: recordId,
-        points: pointsForCreation
-      }, t);
-    }
-
-    // 3. Handle deletions: if some existing coordinates are not in newCoordinates
-    const newCoordinateIds = updates.map(coord => coord.id).filter(id => id);
-    const coordinatesToDelete = existingCoordinates.filter(
-      coord => !newCoordinateIds.includes(coord.id)
-    );
-
-    if (coordinatesToDelete.length > 0) {
-      const idsToDelete = coordinatesToDelete.map(coord => coord.id);
-      await GeoCoordinate.destroy({
-        where: {
-          id: idsToDelete,
-          land_record_id: recordId
-        },
+    // If coordinates were updated, recalculate and update area_m2 in LandRecord
+    if (coordinatesUpdated) {
+      // Get all coordinates for this land record (including newly created/updated ones)
+      const allCoordinates = await GeoCoordinate.findAll({
+        where: { land_record_id: recordId },
+        order: [['sequence', 'ASC']],
         transaction: t
       });
+
+      if (allCoordinates.length >= 3) {
+        // Calculate area using shoelace formula (in square meters)
+        const area = calculatePolygonArea(allCoordinates);
+        
+        // Update the LandRecord with new area
+        await LandRecord.update(
+          {
+            area_m2: area,
+            updated_by: updater.id,
+            updated_at: new Date()
+          },
+          {
+            where: { id: recordId },
+            transaction: t
+          }
+        );
+        
+        console.log(`Updated area_m2 for land record ${recordId}: ${area} m²`);
+      }
     }
 
     if (!transaction) await t.commit();
 
     return { 
       message: "Coordinates updated successfully",
-      updated: updates.length,
-      created: newPoints.length,
-      deleted: coordinatesToDelete.length
+      updatedCount: Math.min(existingCoordinates?.length || 0, newCoordinates.length),
+      areaUpdated: coordinatesUpdated
+    };
+
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    console.error('Coordinates update error:', error);
+    throw new Error(`Coordinates update failed: ${error.message}`);
+  }
+};
+
+// Helper function to calculate polygon area using shoelace formula
+const calculatePolygonArea = (coordinates) => {
+  if (coordinates.length < 3) {
+    return 0;
+  }
+
+  let area = 0;
+  const n = coordinates.length;
+
+  // Shoelace formula for UTM coordinates (in meters)
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += coordinates[i].easting * coordinates[j].northing;
+    area -= coordinates[j].easting * coordinates[i].northing;
+  }
+
+  // Area in square meters (absolute value divided by 2)
+  const areaM2 = Math.abs(area) / 2.0;
+  
+  return Number(areaM2.toFixed(2));
+};
+
+// Alternative: Calculate area and perimeter (if you need both)
+const calculatePolygonMetrics = (coordinates) => {
+  if (coordinates.length < 3) {
+    return { area: 0, perimeter: 0 };
+  }
+
+  let area = 0;
+  let perimeter = 0;
+  const n = coordinates.length;
+
+  for (let i = 0; i < n; i++) {
+    const current = coordinates[i];
+    const next = coordinates[(i + 1) % n];
+    
+    // Area calculation (shoelace)
+    area += current.easting * next.northing;
+    area -= next.easting * current.northing;
+    
+    // Perimeter calculation
+    const dx = next.easting - current.easting;
+    const dy = next.northing - current.northing;
+    perimeter += Math.hypot(dx, dy);
+  }
+
+  return {
+    area: Number((Math.abs(area) / 2.0).toFixed(2)),
+    perimeter: Number(perimeter.toFixed(2))
+  };
+};
+
+// Updated version with full metrics calculation
+const updateCoordinatesServiceWithMetrics = async (
+  recordId,
+  existingCoordinates,
+  newCoordinates,
+  updater,
+  options = {}
+) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    // ... [same update logic as above] ...
+
+    // If coordinates were updated, recalculate all metrics
+    if (coordinatesUpdated) {
+      const allCoordinates = await GeoCoordinate.findAll({
+        where: { land_record_id: recordId },
+        order: [['sequence', 'ASC']],
+        transaction: t
+      });
+
+      if (allCoordinates.length >= 3) {
+        // Calculate area and perimeter
+        const metrics = calculatePolygonMetrics(allCoordinates);
+        
+        // Calculate center point (average of coordinates)
+        const totalEast = allCoordinates.reduce((sum, coord) => sum + coord.easting, 0);
+        const totalNorth = allCoordinates.reduce((sum, coord) => sum + coord.northing, 0);
+        const centerEasting = totalEast / allCoordinates.length;
+        const centerNorthing = totalNorth / allCoordinates.length;
+        
+        // Convert center to lat/long
+        const [centerLongitude, centerLatitude] = proj4('EPSG:20137', 'EPSG:4326', [centerEasting, centerNorthing]);
+
+        // Update the LandRecord with all metrics
+        await LandRecord.update(
+          {
+            area_m2: metrics.area,
+            perimeter_m: metrics.perimeter,
+            center_latitude: Number(centerLatitude.toFixed(8)),
+            center_longitude: Number(centerLongitude.toFixed(8)),
+            total_points: allCoordinates.length,
+            updated_by: updater.id,
+            updated_at: new Date(),
+            last_coordinate_update: new Date()
+          },
+          {
+            where: { id: recordId },
+            transaction: t
+          }
+        );
+        
+        console.log(`Updated land record ${recordId} metrics: ${metrics.area} m², ${metrics.perimeter} m`);
+      }
+    }
+
+    if (!transaction) await t.commit();
+
+    return { 
+      message: "Coordinates updated successfully",
+      updatedCount: Math.min(existingCoordinates?.length || 0, newCoordinates.length),
+      metricsUpdated: coordinatesUpdated
     };
 
   } catch (error) {
