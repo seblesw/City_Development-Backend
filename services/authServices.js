@@ -18,7 +18,7 @@ const registerOfficial = async (data, options = {}) => {
   try {
     if (
       !data.first_name ||
-      !data.last_name ||
+      !data.middle_name ||
       !data.phone_number ||
       !data.national_id ||
       !data.role_id
@@ -105,7 +105,7 @@ const registerOfficialByManagerService = async (data, user, options = {}) => {
   try {
     if (
       !data.first_name ||
-      !data.last_name ||
+      !data.middle_name ||
       !data.phone_number ||
       !data.national_id ||
       !data.role_id
