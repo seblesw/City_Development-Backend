@@ -185,7 +185,11 @@ module.exports = (db, DataTypes) => {
       paranoid: true,
       freezeTableName: true,
       indexes: [
-        { unique: true, fields: ["plot_number", "land_record_id"] },
+        {
+          unique: true,
+          fields: ["plot_number", "administrative_unit_id"],
+          where: { deletedAt: null },
+        },
         { fields: ["reference_number"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },

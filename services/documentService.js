@@ -142,7 +142,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     // Create ActionLog entry for document creation
     await ActionLog.create({
       land_record_id: data.land_record_id,
-      admin_unit_id: data.administrative_unit_id, // Add admin unit to ActionLog
+      admin_unit_id: data.administrative_unit_id, 
       performed_by: creatorId,
       action_type: 'DOCUMENT_CREATED',
       notes: `ሰነድ ተፈጥሯል - የካርታ ቁጥር: ${data.plot_number}, የሰነድ አይነት: ${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
