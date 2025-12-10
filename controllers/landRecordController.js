@@ -443,7 +443,7 @@ const updateLandRecord = async (req, res) => {
       payments: req.body.payments
         ? safeJsonParse(req.body.payments, "payments")
         : undefined,
-      coordinates: req.body.coordinates  // Changed from geo_coordinates to coordinates
+      coordinates: req.body.coordinates  
         ? safeJsonParse(req.body.coordinates, "coordinates")
         : undefined,
     };
