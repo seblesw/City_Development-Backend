@@ -720,4 +720,185 @@ const getCoordinatesByLandRecord = async (land_record_id) => {
   };
 };
 
-module.exports = { createCoordinates, getCoordinatesByLandRecord };
+const updateCoordinatesService = async (
+  recordId,
+  existingCoordinates,
+  newCoordinates,
+  updater,
+  options = {}
+) => {
+  const { transaction } = options;
+  const t = transaction || (await sequelize.transaction());
+
+  try {
+    // Validate coordinates data for easting/northing
+    validateCoordinates(newCoordinates);
+
+    // Track changes for logging
+    const coordinateChanges = {
+      added: [],
+      updated: [],
+      removed: []
+    };
+
+    // If new coordinates is empty array, delete all existing
+    if (newCoordinates.length === 0) {
+      await GeoCoordinate.destroy({
+        where: { land_record_id: recordId },
+        transaction: t
+      });
+      
+      coordinateChanges.removed = existingCoordinates.map(c => c.id);
+      await logCoordinateChangesToRecord(recordId, coordinateChanges, updater, { transaction: t });
+      
+      return { changes: coordinateChanges };
+    }
+
+    // Create a map of existing coordinates by ID
+    const existingMap = {};
+    existingCoordinates.forEach(coord => {
+      if (coord.id) existingMap[coord.id] = coord;
+    });
+
+    // Process coordinates
+    const coordinatesToCreate = [];
+    const coordinatesToUpdate = [];
+    const coordinateIdsToKeep = new Set();
+
+    newCoordinates.forEach((coordData, index) => {
+      const { id, ...coordFields } = coordData;
+      
+      // Prepare coordinate data - use sequence instead of order_index
+      const coordinateData = {
+        ...coordFields,
+        land_record_id: recordId,
+        sequence: coordFields.sequence !== undefined ? coordFields.sequence : index,
+        updated_by: updater.id,
+        updated_at: new Date()
+      };
+
+      // Remove latitude/longitude if provided - they will be auto-generated from hooks
+      if (coordinateData.latitude) delete coordinateData.latitude;
+      if (coordinateData.longitude) delete coordinateData.longitude;
+
+      if (id && existingMap[id]) {
+        // Update existing coordinate
+        coordinateData.id = id;
+        coordinatesToUpdate.push(coordinateData);
+        coordinateIdsToKeep.add(id);
+        coordinateChanges.updated.push({
+          id,
+          easting: coordFields.easting,
+          northing: coordFields.northing,
+          sequence: coordinateData.sequence
+        });
+      } else {
+        // Create new coordinate
+        coordinateData.created_by = updater.id;
+        coordinatesToCreate.push(coordinateData);
+        coordinateChanges.added.push({
+          easting: coordFields.easting,
+          northing: coordFields.northing,
+          sequence: coordinateData.sequence
+        });
+      }
+    });
+
+    // Determine coordinates to delete
+    const coordinateIdsToDelete = existingCoordinates
+      .filter(coord => !coordinateIdsToKeep.has(coord.id))
+      .map(coord => coord.id);
+    
+    coordinateChanges.removed = coordinateIdsToDelete;
+
+    // Execute database operations
+    if (coordinatesToCreate.length > 0) {
+      await GeoCoordinate.bulkCreate(coordinatesToCreate, {
+        transaction: t,
+        validate: true,
+        individualHooks: true
+      });
+    }
+
+    if (coordinatesToUpdate.length > 0) {
+      await Promise.all(
+        coordinatesToUpdate.map(coord => {
+          const { id, ...updateFields } = coord;
+          return GeoCoordinate.update(updateFields, {
+            where: { id },
+            transaction: t,
+            individualHooks: true
+          });
+        })
+      );
+    }
+
+    if (coordinateIdsToDelete.length > 0) {
+      await GeoCoordinate.destroy({
+        where: {
+          id: coordinateIdsToDelete,
+          land_record_id: recordId
+        },
+        transaction: t
+      });
+    }
+
+    if (!transaction) await t.commit();
+
+    return { changes: coordinateChanges };
+  } catch (error) {
+    if (!transaction && t) await t.rollback();
+    throw new Error(`Coordinates update failed: ${error.message}`);
+  }
+};
+
+// Validation function for easting/northing coordinates
+const validateCoordinates = (coordinates) => {
+  if (!Array.isArray(coordinates)) {
+    throw new Error("Coordinates must be an array");
+  }
+
+  if (coordinates.length < 3) {
+    throw new Error("At least 3 coordinates are required to define a polygon");
+  }
+
+  coordinates.forEach((coord, index) => {
+    // Validate required fields for the model
+    if (coord.easting === undefined || coord.northing === undefined) {
+      throw new Error(`Coordinate at index ${index} must have easting and northing values`);
+    }
+
+    if (typeof coord.easting !== 'number' || typeof coord.northing !== 'number') {
+      throw new Error(`Coordinate at index ${index} must have numeric easting and northing values`);
+    }
+
+    // Validate Adindan UTM Zone 37N ranges
+    if (coord.easting < 500000 || coord.easting > 800000) {
+      console.warn(`Coordinate at index ${index} has unusual easting value: ${coord.easting}`);
+    }
+
+    if (coord.northing < 0 || coord.northing > 10000000) {
+      console.warn(`Coordinate at index ${index} has unusual northing value: ${coord.northing}`);
+    }
+
+    // Optional: Check label if provided
+    if (coord.label && coord.label.length > 10) {
+      throw new Error(`Coordinate at index ${index} label exceeds 10 characters`);
+    }
+
+    // Ensure sequence is not negative
+    if (coord.sequence !== undefined && coord.sequence < 0) {
+      throw new Error(`Coordinate at index ${index} sequence must be >= 0`);
+    }
+  });
+
+  // Check for duplicate sequences
+  const sequences = coordinates.map(coord => coord.sequence || 0);
+  const uniqueSequences = new Set(sequences);
+  if (uniqueSequences.size !== coordinates.length) {
+    throw new Error("Duplicate sequence numbers found in coordinates");
+  }
+};
+
+
+module.exports = { createCoordinates, getCoordinatesByLandRecord,updateCoordinatesService };
