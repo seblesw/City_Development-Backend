@@ -65,7 +65,6 @@ const getAllActionLogs = async (req, res) => {
       admin_unit_id: userAdminUnitId
     };
 
-    // Filter by performer
     if (performer) {
       whereConditions.performed_by = performer;
     }
