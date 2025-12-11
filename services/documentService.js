@@ -21,16 +21,12 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የሰነድ መረጃዎች (plot_number) አስፈላጊ ናቸው።");
     }
 
-    // Check if administrative_unit_id is provided (required for uniqueness check)
-    if (!data.administrative_unit_id) {
-      throw new Error("የአስተዳደር ክልል መታወቂያ (administrative_unit_id) አስፈላጊ ነው።");
-    }
+  
 
     // Check for duplicate plot_number within the same administrative unit
     const existingDocument = await Document.findOne({
       where: {
         plot_number: data.plot_number,
-        administrative_unit_id: data.administrative_unit_id,
         deletedAt: null,
       },
       transaction: t,
@@ -61,7 +57,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         where: {
           land_record_id: data.land_record_id,
           plot_number: data.plot_number,
-          administrative_unit_id: data.administrative_unit_id,
           deletedAt: null,
         },
         transaction: t,
@@ -93,7 +88,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       }
     }
 
-    // Create the document with administrative_unit_id
+    // Create the document with 
     const document = await Document.create(
       {
         plot_number: data.plot_number,
@@ -106,7 +101,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         files: fileMetadata,
         version,
         land_record_id: data.land_record_id,
-        administrative_unit_id: data.administrative_unit_id, // Add this field
         verified_plan_number: data.verified_plan_number || null,
         preparer_name: data.preparer_name || null,
         verifier_name: data.verifier_name || null,
@@ -132,7 +126,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     let creator = null;
     try {
       creator = await User.findByPk(creatorId, {
-        attributes: ["id", "first_name", "middle_name", "last_name", "administrative_unit_id"],
+        attributes: ["id", "first_name", "middle_name", "last_name"],
         transaction: t,
       });
     } catch (e) {
@@ -142,7 +136,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     // Create ActionLog entry for document creation
     await ActionLog.create({
       land_record_id: data.land_record_id,
-      admin_unit_id: data.administrative_unit_id, 
       performed_by: creatorId,
       action_type: 'DOCUMENT_CREATED',
       notes: `ሰነድ ተፈጥሯል - የካርታ ቁጥር: ${data.plot_number}, የሰነድ አይነት: ${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
@@ -153,7 +146,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         reference_number: data.reference_number,
         files_added: fileMetadata.length,
         version: version,
-        administrative_unit_id: data.administrative_unit_id, // Include in log
         changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
         parcel_number: landRecord.parcel_number,
         file_details: fileMetadata.map(file => ({
