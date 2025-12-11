@@ -45,7 +45,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       throw new Error("የባለቤትነት ክፍል (ownership_category) መግለጽ አለበት።");
     }
 
-    // Validate organization data if ownership category is organization
+    //Validate organization data if ownership category is organization
     if (land_record.ownership_category === "የድርጅት") {
       if (!organization_info.name) {
         throw new Error("የድርጅቱ ስም መግለጽ አለበት።");
@@ -58,47 +58,13 @@ const createLandRecordService = async (data, files, user, options = {}) => {
       }
     }
 
-    // PLOT NUMBER UNIQUENESS CHECK FOR ALL OPERATIONS
-    // Extract plot_number from documents array (first document's plot_number)
-    const plotNumber = documents[0]?.plot_number;
-    
-    if (plotNumber) {
-      // Check for duplicate plot_number in the same administrative unit
-      const existingPlotDocument = await Document.findOne({
-        where: {
-          administrative_unit_id: adminunit,
-          plot_number: plotNumber,
-          deletedAt: null,
-        },
-        attributes: ["id", "plot_number", "land_record_id"],
-        transaction: t,
-      });
-
-      if (existingPlotDocument) {
-        // Fetch the associated land record to get parcel_number for better error message
-        const existingLandRecord = await LandRecord.findOne({
-          where: {
-            id: existingPlotDocument.land_record_id,
-            deletedAt: null,
-          },
-          attributes: ["parcel_number"],
-          transaction: t,
-        });
-
-        const existingParcelNumber = existingLandRecord?.parcel_number || 'Unknown';
-        throw new Error(
-          `ይህ ካርታ ሰነድ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል። አሁን በዝግጅት ላይ ያለው መሬት ቁጥር: ${existingParcelNumber}`
-        );
-      }
-    }
-
-    // For imports, also check plot_number in documents table (redundant but keeps original logic)
+    // For imports, check plot_number in documents table
     if (isImport) {
+      const plotNumber = documents[0]?.plot_number;
       if (!plotNumber) {
         throw new Error("የካርታ ሰነድ ቁጥር (plot_number) ከሰነዶች አልተገኘም።");
       }
 
-      // The check above already handles this, but we keep the original logic for clarity
       const existingDocument = await Document.findOne({
         where: {
           administrative_unit_id: adminunit,
@@ -115,7 +81,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         );
       }
     } else {
-      // Original duplicate check for parcel number (keep this for backward compatibility)
+      // Original duplicate check for normal operations
       const existingRecord = await LandRecord.findOne({
         where: {
           parcel_number: land_record.parcel_number,
@@ -272,7 +238,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           notes: "የመሬት መዝገብ ተፈጥሯል",
           additional_data: {
             parcel_number: landRecord.parcel_number,
-            plot_number: plotNumber, // Include plot number in log
             administrative_unit_id: adminunit,
             owners_count: owners.length,
             documents_count: documents.length,
@@ -407,7 +372,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
                 perimeter_m: coordinateResult.perimeter_m,
                 center_lat: coordinateResult.center.latitude,
                 center_lng: coordinateResult.center.longitude,
-                plot_number: plotNumber, // Include plot number in coordinate log
                 action_description: `የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል (${coordinateResult.area_m2} ሜ², ${coordinateResult.perimeter_m} ሜ)`,
               },
             },
@@ -446,7 +410,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             return documentService.createDocumentService(
               {
                 ...doc,
-                administrative_unit_id: adminunit,
                 land_record_id: landRecord.id,
                 file_path: relativePath,
               },
@@ -460,7 +423,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         // Bulk create documents for imports
         const documentData = documents.map((doc) => ({
           ...doc,
-          administrative_unit_id: adminunit,
           land_record_id: landRecord.id,
           created_by: user.id,
           createdAt: new Date(),
@@ -549,7 +511,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
             perimeter_m: coordinateResult.perimeter_m,
           }
         : null,
-      plot_number: plotNumber, // Include plot number in response
     };
   } catch (error) {
     if (!externalTransaction) {
@@ -578,11 +539,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
 //importLandRecordsFromXLSXService
 const importLandRecordsFromXLSXService = async (filePath, user) => {
   const startTime = Date.now();
-  let cleanupAttempted = false;
-
-  // Define constants at the top level so they're accessible everywhere
-  const BATCH_SIZE = 500; // Move this to top level
-  const CONCURRENCY = 3;  // Move this to top level
 
   try {
     if (!user?.administrative_unit_id) {
@@ -592,8 +548,9 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
     const adminUnitId = user.administrative_unit_id;
 
     // Stream and parse XLSX file
-    console.log(`📊 Reading Excel file: ${filePath}`);
-    const { validatedData, validationErrors } = await streamAndParseXLSX(filePath);
+    const { validatedData, validationErrors } = await streamAndParseXLSX(
+      filePath
+    );
 
     if (validatedData.length === 0 && validationErrors.length === 0) {
       throw new Error("ፋይሉ ባዶ ነው ወይም ምንም የሚገባ ውሂብ አልተገኘም።");
@@ -603,9 +560,7 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       throw new Error("ሁሉም የተጻፉ ውሂቦች ስህተት አላቸው። ከላይ ያሉትን ስህተቶች ይመልከቱ።");
     }
 
-    console.log(`✅ Validation complete: ${validatedData.length} valid rows, ${validationErrors.length} errors`);
-
-    // Initialize results
+    //    - let createLandRecordService handle duplicates
     const results = {
       createdCount: 0,
       skippedCount: 0,
@@ -613,221 +568,123 @@ const importLandRecordsFromXLSXService = async (filePath, user) => {
       errors: validationErrors,
       errorDetails: [],
       processingTime: 0,
-      performance: {},
-      progressUpdates: []
     };
 
     if (validatedData.length === 0) {
       throw new Error("ሁሉም ውሂቦች ባዶ ናቸው።");
     }
 
-    // Create a single transaction for the entire import
-    const mainTransaction = await sequelize.transaction();
+    const CONCURRENCY = 5;
+    const pLimit = (await import("p-limit")).default;
+    const limiter = pLimit(CONCURRENCY);
 
-    try {
-      // Process in batches to avoid memory issues and track progress
-      const totalBatches = Math.ceil(validatedData.length / BATCH_SIZE);
-      
-      console.log(`🔄 Starting import: ${validatedData.length} rows in ${totalBatches} batches (${BATCH_SIZE} rows per batch)`);
-      
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        const batchStart = batchIndex * BATCH_SIZE;
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, validatedData.length);
-        const batch = validatedData.slice(batchStart, batchEnd);
-        const batchStartTime = Date.now();
+    const creationResults = await Promise.all(
+      validatedData.map((row) =>
+        limiter(async () => {
+          try {
+            const transformedData = await transformXLSXData([row], adminUnitId);
 
-        console.log(`🔄 Processing batch ${batchIndex + 1}/${totalBatches}: rows ${batchStart + 1}-${batchEnd}`);
+            await createLandRecordService(
+              {
+                land_record: transformedData.landRecordData,
+                owners: transformedData.owners,
+                documents: transformedData.documents,
+                land_payment: transformedData.payments[0],
+                organization_info: transformedData.organization_info || null,
+              },
+              [],
+              user,
+              { isImport: true }
+            );
 
-        // Process batch with controlled concurrency
-        const pLimit = (await import("p-limit")).default;
-        const limiter = pLimit(CONCURRENCY);
-
-        const batchResults = await Promise.all(
-          batch.map((row, rowIndex) =>
-            limiter(async () => {
-              const absoluteIndex = batchStart + rowIndex;
-              
-              try {
-                const transformedData = await transformXLSXData([row], adminUnitId);
-
-                await createLandRecordService(
-                  {
-                    land_record: transformedData.landRecordData,
-                    owners: transformedData.owners,
-                    documents: transformedData.documents,
-                    land_payment: transformedData.payments[0],
-                    organization_info: transformedData.organization_info || null,
-                  },
-                  [],
-                  user,
-                  { 
-                    isImport: true,
-                    transaction: mainTransaction // Use the shared transaction
-                  }
-                );
-
-                return { success: true, plotNumber: row.plot_number };
-              } catch (error) {
-                const detailedError = extractDetailedError(error, row.plot_number);
-                return {
-                  success: false,
-                  plotNumber: row.plot_number,
-                  error: detailedError,
-                  row_data: row,
-                  index: absoluteIndex
-                };
-              }
-            })
-          )
-        );
-
-        // Process batch results
-        let batchCreated = 0;
-        let batchSkipped = 0;
-        
-        batchResults.forEach((result, index) => {
-          const absoluteIndex = batchStart + index;
-          
-          if (result.success) {
-            batchCreated++;
-          } else {
-            batchSkipped++;
-            const errorMessage = `ካርታ ${result.plotNumber}: ${result.error}`;
-            results.errors.push(errorMessage);
-            results.errorDetails.push({
-              plot_number: result.plotNumber,
-              error: result.error,
-              row_data: result.row_data,
-              index: absoluteIndex,
-              timestamp: new Date().toISOString(),
-              batch: batchIndex + 1
-            });
+            return { success: true, plotNumber: row.plot_number };
+          } catch (error) {
+            const detailedError = extractDetailedError(error, row.plot_number);
+            return {
+              success: false,
+              plotNumber: row.plot_number,
+              error: detailedError,
+              row_data: row,
+            };
           }
-        });
+        })
+      )
+    );
 
-        results.createdCount += batchCreated;
-        results.skippedCount += batchSkipped;
-
-        // Calculate batch performance
-        const batchTime = (Date.now() - batchStartTime) / 1000;
-        const rowsPerSecond = batch.length / batchTime;
-        
-        results.progressUpdates.push({
-          stage: 'processing',
-          message: `Batch ${batchIndex + 1}/${totalBatches}: ${batchCreated} created, ${batchSkipped} skipped`,
+    creationResults.forEach((result, index) => {
+      if (result.success) {
+        results.createdCount++;
+      } else {
+        results.skippedCount++;
+        const errorMessage = `ካርታ ${result.plotNumber}: ${result.error}`;
+        results.errors.push(errorMessage);
+        results.errorDetails.push({
+          plot_number: result.plotNumber,
+          error: result.error,
+          row_data: result.row_data,
+          index,
           timestamp: new Date().toISOString(),
-          batch: batchIndex + 1,
-          totalBatches: totalBatches,
-          processed: batch.length,
-          created: batchCreated,
-          skipped: batchSkipped,
-          rowsPerSecond: rowsPerSecond.toFixed(2),
-          batchTime: `${batchTime.toFixed(2)}s`
         });
-
-        console.log(`✅ Batch ${batchIndex + 1}/${totalBatches} complete: ${batchCreated} created, ${batchSkipped} skipped (${rowsPerSecond.toFixed(2)} rows/sec)`);
-
-        // Force garbage collection hint (if available)
-        if (global.gc) {
-          global.gc();
-        }
       }
+    });
 
-      // Commit the transaction
-      await mainTransaction.commit();
-      console.log(`✅ Transaction committed successfully`);
-
-      results.progressUpdates.push({
-        stage: 'complete',
-        message: `Import completed: ${results.createdCount} created, ${results.skippedCount} skipped`,
-        timestamp: new Date().toISOString(),
-        totalCreated: results.createdCount,
-        totalSkipped: results.skippedCount
-      });
-
-    } catch (transactionError) {
-      await mainTransaction.rollback();
-      console.error('❌ Transaction rolled back:', transactionError.message);
-      
-      // Add transaction error to results
-      results.errors.push(`Transaction error: ${transactionError.message}`);
-      results.errorDetails.push({
-        error: transactionError.message,
-        timestamp: new Date().toISOString(),
-        stage: 'transaction'
-      });
-      
-      throw transactionError;
-    }
-
-    // Calculate performance metrics
     const endTime = Date.now();
     results.processingTime = (endTime - startTime) / 1000;
-    
     results.performance = {
-      rowsPerSecond: results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
+      rowsPerSecond:
+        results.totalRows > 0 ? results.totalRows / results.processingTime : 0,
       rowsProcessed: results.createdCount,
-      successRate: results.totalRows > 0 ? 
-        ((results.createdCount / results.totalRows) * 100).toFixed(2) + "%" : "0%",
+      successRate:
+        ((results.createdCount / validatedData.length) * 100).toFixed(2) + "%",
       totalTime: `${Math.round(results.processingTime)}s`,
-      memoryUsage: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
-      batchesProcessed: Math.ceil(results.totalRows / BATCH_SIZE),
-      averageBatchTime: (results.processingTime / Math.ceil(results.totalRows / BATCH_SIZE)).toFixed(2) + "s"
     };
 
-    console.log(`📊 Import Performance Summary:`);
-    console.log(`   Total time: ${results.performance.totalTime}`);
-    console.log(`   Rows per second: ${results.performance.rowsPerSecond.toFixed(2)}`);
-    console.log(`   Success rate: ${results.performance.successRate}`);
-    console.log(`   Memory used: ${results.performance.memoryUsage}`);
-    console.log(`   Batches processed: ${results.performance.batchesProcessed}`);
-    console.log(`   Average batch time: ${results.performance.averageBatchTime}`);
-
     // Cleanup file
-    cleanupAttempted = true;
     try {
       await fs.promises.unlink(filePath);
-      console.log(`🗑️ Temporary file cleaned up: ${filePath}`);
     } catch (cleanupError) {
-      console.warn(`⚠️ Could not delete temporary file: ${cleanupError.message}`);
+      throw new Error(
+        "⚠️ Could not delete temporary file after import:",
+        cleanupError.message
+      );
     }
-
     return results;
-
   } catch (error) {
     // Cleanup file on error
-    if (!cleanupAttempted) {
-      try {
-        await fs.promises.unlink(filePath);
-      } catch (cleanupError) {
-        console.warn(`⚠️ Could not delete temporary file after error: ${cleanupError.message}`);
-      }
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (cleanupError) {
+      throw new Error(
+        "⚠️ Could not delete temporary file after import error:",
+        cleanupError.message
+      );
     }
 
-    console.error("❌ Import failed:", error.message);
-    
     const amharicErrors = ["የተጠቃሚው", "ምንም የሚገባ", "ሁሉም ውሂቦች", "ፋይሉ", "የተጻፉ"];
     const isAmharicError = amharicErrors.some((phrase) =>
       error.message.includes(phrase)
     );
 
     if (isAmharicError) {
+      console.error("❌ Import failed with Amharic error:", error.message);
       throw error;
     }
 
+    console.error("❌ Import failed:", error.message);
     throw new Error(`የ Excel ፋይል ማስገቢያ አልተሳካም: ${error.message}`);
   }
 };
 async function streamAndParseXLSX(filePath) {
   return new Promise((resolve, reject) => {
+    const validatedData = [];
+    const validationErrors = [];
+    let rowCount = 0;
+
     try {
-      // Read workbook
       const workbook = XLSX.readFile(filePath, {
         cellDates: true,
-        dense: false,
-        sheetStubs: false,
-        cellStyles: false,
-        cellFormula: false,
+        dense: true,
+        sheetStubs: true,
       });
 
       // Check if worksheet exists
@@ -842,76 +699,41 @@ async function streamAndParseXLSX(filePath) {
         throw new Error("የመጀመሪያው ሉህ ባዶ ነው።");
       }
 
-      // Get all data at once (for smaller files this is fine)
       const jsonData = XLSX.utils.sheet_to_json(worksheet, {
         raw: false,
         defval: null,
         blankrows: false,
       });
 
-      console.log(`📊 Found ${jsonData.length} rows of data in Excel file (excluding header)`);
+      console.log(`📊 Found ${jsonData.length} rows in Excel file`);
 
       if (jsonData.length === 0) {
         throw new Error("በ Excel ፋይሉ ውስጥ ምንም ውሂብ አልተገኘም።");
       }
 
-      const validatedData = [];
-      const validationErrors = [];
-      let emptyRows = 0;
-      let rowsWithPlotNumber = 0;
-
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
-        const rowNumber = i + 2; // +1 for header, +1 for 1-based index
+        rowCount = i + 2;
 
         try {
-          // Store original row number
+          // Store original row number for error reporting
           row.__rowNum__ = i;
 
-          // Check if row is essentially empty (no meaningful data)
-          const isEmptyRow = Object.keys(row).length === 0 || 
-                            (Object.keys(row).length === 1 && row.__rowNum__ !== undefined);
-          
-          if (isEmptyRow) {
-            emptyRows++;
-            continue; // Skip empty rows entirely
+          // Critical validation with Amharic errors
+          if (!row.plot_number) {
+            throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ያስፈልጋል።`);
           }
 
-          // CRITICAL FIX: Check if plot_number exists in the row object
-          // Excel might store it with different capitalization or spaces
-          let plotNumberValue = row.plot_number;
-          
-          // If plot_number not found with exact key, try to find it
-          if (plotNumberValue === undefined) {
-            // Try alternative column names
-            const possibleKeys = ['plot_number', 'plotnumber', 'plot number', 'plot', 'ቁጥር', 'ካርታ ቁጥር'];
-            for (const key of possibleKeys) {
-              if (row[key] !== undefined) {
-                plotNumberValue = row[key];
-                row.plot_number = plotNumberValue; // Normalize the key
-                break;
-              }
-            }
-          }
-
-          // Now check if we have a plot number
-          if (!plotNumberValue) {
-            throw new Error(`ረድፍ ${rowNumber} የካርታ ቁጥር ያስፈልጋል።`);
-          }
-
-          rowsWithPlotNumber++;
-
-          // Continue with other validations...
           if (!row.land_use) {
-            throw new Error(`ረድፍ ${rowNumber} የመሬት አጠቃቀም ዓይነት ያስፈልጋል።`);
+            throw new Error(`ረድፍ ${rowCount} የመሬት አጠቃቀም ዓይነት ያስፈልጋል።`);
           }
 
           if (!row.ownership_type) {
-            throw new Error(`ረድፍ ${rowNumber} የባለቤትነት ዓይነት ያስፈልጋል።`);
+            throw new Error(`ረድፍ ${rowCount} የባለቤትነት ዓይነት ያስፈልጋል።`);
           }
 
           // Data normalization with validation
-          row.plot_number = String(plotNumberValue).trim();
+          row.plot_number = String(row.plot_number).trim();
           row.land_use = String(row.land_use).trim();
           row.ownership_type = String(row.ownership_type).trim();
           row.parcel_number = row.parcel_number
@@ -924,22 +746,22 @@ async function streamAndParseXLSX(filePath) {
           // Validate plot number format
           if (
             row.plot_number === "null" ||
-            row.plot_number === "undefined" ||
-            row.plot_number === "" ||
-            row.plot_number.toLowerCase() === "n/a"
+            row.plot_number === "undefined"
+            // row.plot_number === "ሰ_ን_ማ" ||
+            // row.plot_number.length < 2
           ) {
-            throw new Error(`ረድፍ ${rowNumber} የካርታ ቁጥር ትክክለኛ አይደለም።`);
+            throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ትክክለኛ አይደለም።`);
           }
 
           // Numeric fields with validation
           row.land_level = parseInt(row.land_level) || 1;
           if (row.land_level < 1 || row.land_level > 5) {
-            throw new Error(`ረድፍ ${rowNumber} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`);
+            throw new Error(`ረድፍ ${rowCount} የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።`);
           }
 
           row.area = parseFloat(row.area) || 0;
           if (row.area < 0) {
-            throw new Error(`ረድፍ ${rowNumber} ስፋት አሉታዊ መሆን አይችልም።`);
+            throw new Error(`ረድፍ ${rowCount} ስፋት አሉታዊ መሆን አይችልም።`);
           }
 
           // Fix common ownership category spelling
@@ -951,80 +773,34 @@ async function streamAndParseXLSX(filePath) {
           }
 
           validatedData.push(row);
-          
         } catch (error) {
           // Add row context to error
-          const enhancedError = `${error.message} (ረድፍ ${rowNumber})`;
+          const enhancedError = `${error.message} (ረድፍ ${rowCount})`;
           validationErrors.push(enhancedError);
-          
-          // Log only first few errors to avoid console spam
-          if (validationErrors.length <= 5) {
-            console.warn(`⚠️ Row ${rowNumber} validation error:`, error.message);
-          }
+          console.warn(`⚠️ Row ${rowCount} validation error:`, error.message);
         }
       }
 
-      console.log(`📈 Analysis:`);
-      console.log(`   Total rows in file: ${jsonData.length}`);
-      console.log(`   Empty rows skipped: ${emptyRows}`);
-      console.log(`   Rows with plot number: ${rowsWithPlotNumber}`);
-      console.log(`   Valid rows: ${validatedData.length}`);
-      console.log(`   Validation errors: ${validationErrors.length}`);
+      console.log(
+        `✅ Parsing completed: ${validatedData.length} valid rows, ${validationErrors.length} errors`
+      );
 
-      // If we have some valid data, proceed with import
-      if (validatedData.length > 0) {
-        console.log(`✅ Parsing completed: ${validatedData.length} valid rows, ${validationErrors.length} errors`);
-        
-        // Log summary of errors if there are many
-        if (validationErrors.length > 5) {
-          console.log(`⚠️ ${validationErrors.length} validation errors occurred. Showing first 5:`);
-          validationErrors.slice(0, 5).forEach((error, index) => {
-            console.log(`  ${index + 1}. ${error}`);
-          });
-        }
-        
-        resolve({ validatedData, validationErrors });
-      } else {
-        // If no valid data at all, check why
-        if (rowsWithPlotNumber === 0) {
-          console.error(`❌ No rows found with plot_number column`);
-          console.log(`🔍 Available columns in first row:`, Object.keys(jsonData[0] || {}));
-          
-          // Try to help user identify the issue
-          if (jsonData.length > 0 && jsonData[0]) {
-            const firstRowKeys = Object.keys(jsonData[0]);
-            console.log(`🔍 First row has these columns:`, firstRowKeys);
-            
-            // Look for potential plot number columns
-            const potentialPlotColumns = firstRowKeys.filter(key => 
-              key.toLowerCase().includes('plot') || 
-              key.toLowerCase().includes('ቁጥር') ||
-              key.toLowerCase().includes('number')
-            );
-            
-            if (potentialPlotColumns.length > 0) {
-              console.log(`💡 Found potential plot number columns:`, potentialPlotColumns);
-              console.log(`💡 Try renaming column '${potentialPlotColumns[0]}' to 'plot_number'`);
-            }
-          }
-          
-          reject(new Error("ምንም የካርታ ቁጥር አልተገኘም። እባክዎ 'plot_number' የሚለው አምድ መኖሩን ያረጋግጡ።"));
-        } else if (validationErrors.length > 0) {
-          console.error(`❌ All ${validationErrors.length} rows failed validation`);
-          reject(new Error(`ሁሉም ${validationErrors.length} የተጻፉ ውሂቦች ስህተት አላቸው። ከላይ ያሉትን ስህተቶች ይመልከቱ።`));
-        } else {
-          reject(new Error("ምንም የሚገባ ውሂብ አልተገኘም።"));
-        }
-      }
-
+      resolve({ validatedData, validationErrors });
     } catch (error) {
       console.error("❌ Excel parsing failed:", error.message);
 
-      // Provide more specific error messages
-      if (error.message.includes("no such file") || error.message.includes("ENOENT")) {
+      // Provide more specific error messages for common issues
+      if (
+        error.message.includes("no such file") ||
+        error.message.includes("ENOENT")
+      ) {
         reject(new Error("ፋይሉ አልተገኘም። የቀረበው ፋይል መንገድ ትክክል መሆኑን ያረጋግጡ።"));
       } else if (error.message.includes("file format")) {
-        reject(new Error("የቀረበው ፋይል ቅርጽ ትክክል አይደለም። እባክዎ ትክክለኛ Excel ፋይል (.xlsx ወይም .xls) ያስገቡ።"));
+        reject(
+          new Error(
+            "የቀረበው ፋይል ቅርጽ ትክክል አይደለም። እባክዎ ትክክለኛ Excel ፋይል (.xlsx ወይም .xls) ያስገቡ።"
+          )
+        );
       } else if (error.message.includes("password")) {
         reject(new Error("ፋይሉ በይለፍ ቃል ተጠቅሷል። ያልተገደበ ፋይል ያስገቡ።"));
       } else {
@@ -1034,48 +810,36 @@ async function streamAndParseXLSX(filePath) {
   });
 }
 function extractDetailedError(error, plotNumber) {
-  // Early return for common cases to improve performance
-  const errorMessage = error.message || "Unknown error";
-  
-  // Case 1: Sequelize validation errors (most common during imports)
+  let errorMessage = error.message;
+
+  // Case 1: Sequelize validation errors
   if (error.name === "SequelizeValidationError" && error.errors) {
-    // Use string concatenation instead of array join for better performance
-    let validationErrorStr = "የውሂብ ማረጋገጫ ስህተቶች: ";
-    for (let i = 0; i < Math.min(error.errors.length, 3); i++) {
-      const err = error.errors[i];
+    const validationErrors = error.errors.map((err) => {
       const field = err.path || "unknown_field";
       const message = err.message || "Validation failed";
-      if (i > 0) validationErrorStr += "; ";
-      validationErrorStr += `${field}: ${message}`;
+      return `${field}: ${message}`;
+    });
+
+    if (validationErrors.length > 0) {
+      return `የውሂብ ማረጋገጫ ስህተቶች: ${validationErrors.join("; ")}`;
     }
-    if (error.errors.length > 3) {
-      validationErrorStr += `; እና ${error.errors.length - 3} ተጨማሪ ስህተቶች`;
-    }
-    return validationErrorStr;
   }
 
-  // Case 2: Database constraint errors (PostgreSQL specific)
+  // Case 2: Database constraint errors
   if (error.original) {
     const dbError = error.original;
 
-    // Check error codes first (fastest check)
-    if (dbError.code === "23505") { // Unique constraint violation
+    // Unique constraint violation
+    if (dbError.code === "23505") {
       if (dbError.detail && dbError.detail.includes("plot_number")) {
-        return `ይህ የካርታ ቁጥር (${plotNumber}) በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።`;
+        return "ይህ የመሬት ቁጥር በዚህ መዘጋጃ ቤት ውስጥ ተመዝግቧል።";
       }
       return "ድርብ መረጃ ተገኝቷል። አንዳንድ መረጃዎች ቀደም ሲል ተመዝግተዋል።";
     }
 
-    if (dbError.code === "23503") { // Foreign key violation
+    // Foreign key violation
+    if (dbError.code === "23503") {
       return "የተሳሳተ ማጣቀሻ መረጃ። አንዳንድ የተዛመዱ መረጃዎች አልተገኙም።";
-    }
-
-    if (dbError.code === "23514") { // Check constraint violation
-      return "የውሂብ ገደብ ስህተት። አንዳንድ እሴቶች ተቀባይነት የላቸውም።";
-    }
-
-    if (dbError.code === "23502") { // Not null violation
-      return "የግዴታ መስኮች ባዶ ናቸው። ሁሉንም አስፈላጊ መስኮች ይሙሉ።";
     }
 
     // Return original database message if it's meaningful
@@ -1084,217 +848,182 @@ function extractDetailedError(error, plotNumber) {
     }
   }
 
-  // Case 3: Custom error messages from our transform/validation functions
-  // Pre-compiled regex for Amharic error detection (better performance)
-  const amharicErrorPattern = /ረድፍ|ያስፈልጋል|ትክክለኛ|መሆን አለበት|ስህተት|ባዶ|ቅርጽ|ይለፍ ቃል|ማንበብ|መዝገብ|ካርታ|መሬት|ባለቤትነት/;
-  
-  if (amharicErrorPattern.test(errorMessage)) {
+  // Case 3: Custom error messages from our transform function
+  if (
+    errorMessage.includes("ረድፍ") ||
+    errorMessage.includes("ያስፈልጋል") ||
+    errorMessage.includes("ትክክለኛ") ||
+    errorMessage.includes("መሆን አለበት")
+  ) {
     return errorMessage;
   }
 
-  // Case 4: Network, timeout, or connection errors
-  const networkErrorPattern = /timeout|ECONNREFUSED|Network|connection|socket|ETIMEDOUT|EHOSTUNREACH/i;
-  if (networkErrorPattern.test(errorMessage)) {
-    return "የውሂብ ጎታ ግንኙነት ስህተት። እባክዎ ከጥቂት ቅጽበት በኋላ እንደገና ይሞክሩ።";
+  // Case 4: Network or connection errors
+  if (
+    errorMessage.includes("timeout") ||
+    errorMessage.includes("ECONNREFUSED") ||
+    errorMessage.includes("Network")
+  ) {
+    return "የውሂብ ጎታ ግንኙነት ስህተት። እባክዎ እንደገና ይሞክሩ።";
   }
 
-  // Case 5: File system errors (common during imports)
-  const fileSystemPattern = /ENOENT|no such file|file not found|permission denied|EACCES/i;
-  if (fileSystemPattern.test(errorMessage)) {
-    return "የፋይል ስርዓት ስህተት። ፋይሉ አልተገኘም ወይም መዳረሻ የለውም።";
-  }
-
-  // Case 6: Memory errors (for large imports)
-  const memoryPattern = /out of memory|heap|allocation|memory|exceeded/i;
-  if (memoryPattern.test(errorMessage)) {
-    return "የማህደረ ትውስታ ስህተት። ፋይሉ በጣም ትልቅ ሊሆን ይችላል። ወደ ትናንሽ ፋይሎች ይከፋፍሉት።";
-  }
-
-  // Case 7: Syntax or parsing errors
-  const syntaxPattern = /syntax|parse|JSON|XML|format|invalid/i;
-  if (syntaxPattern.test(errorMessage)) {
-    return "የውሂብ ቅርጽ ስህተት። ፋይሉ በትክክል አልተቀየረም።";
-  }
-
-  // Case 8: Transaction/Deadlock errors
-  const transactionPattern = /deadlock|transaction|lock|serialization/i;
-  if (transactionPattern.test(errorMessage)) {
-    return "የውሂብ ጎታ ክልከላ ስህተት። እባክዎ እንደገና ይሞክሩ።";
-  }
-
-  // Default: Clean up common technical terms for user-friendly message
-  let cleanMessage = errorMessage
-    .replace("Validation error", "የውሂብ ማረጋገጫ ስህተት")
-    .replace("Sequelize", "")
-    .replace("Error:", "")
-    .replace("error:", "")
-    .trim();
-
-  // Add plot number context if available
-  if (plotNumber && cleanMessage.length < 100) { // Only if message is not too long
-    cleanMessage = `ካርታ ${plotNumber}: ${cleanMessage}`;
-  }
-
-  // Ensure message is not empty
-  return cleanMessage || "ያልታወቀ ስህተት ተከስቷል።";
+  // Default: return the original message but clean it up
+  return errorMessage.replace("Validation error", "የ Network or connection errors");
 }
 async function transformXLSXData(rows, adminUnitId) {
   try {
     const primaryRow = rows[0];
 
-    // EARLY VALIDATION - Fast fail for missing critical fields
+    // Validation with Amharic errors
     if (!primaryRow.plot_number) {
       throw new Error("የካርታ ቁጥር ያስፈልጋል።");
     }
+
     if (!primaryRow.land_use) {
       throw new Error("የመሬት አጠቃቀም ዓይነት ያስፈልጋል።");
     }
+
     if (!primaryRow.ownership_type) {
       throw new Error("የባለቤትነት ዓይነት ያስፈልጋል።");
     }
 
-    // OPTIMIZED HELPER FUNCTIONS (moved outside try block for reuse)
     const normalizeString = (value) => {
-      if (value == null) return null; // Covers both undefined and null
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed.length > 0 ? trimmed : null;
-      }
-      const strValue = String(value).trim();
-      return strValue.length > 0 ? strValue : null;
+      if (value === undefined || value === null) return null;
+      const strValue = typeof value === "string" ? value : String(value);
+      const trimmed = strValue.trim();
+      return trimmed.length > 0 ? trimmed : null;
     };
 
-    // Optimized boolean parser with Set for O(1) lookup
-    const TRUE_VALUES = new Set(['true', '1', 'yes', 'አዎ', 'አዎን', 'ያለ']);
-    const FALSE_VALUES = new Set(['false', '0', 'no', 'አይ', 'የለም']);
-    
     const parseBooleanValue = (value) => {
-      if (value == null || value === '') return null;
-      if (typeof value === 'boolean') return value;
-      
+      if (value === undefined || value === null || value === "") {
+        return null;
+      }
+      if (typeof value === "boolean") return value;
+
       const normalized = String(value).trim().toLowerCase();
-      if (TRUE_VALUES.has(normalized)) return true;
-      if (FALSE_VALUES.has(normalized)) return false;
+      if (["true", "1", "yes", "አዎ", "አዎን", "ያለ"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "0", "no", "አይ", "የለም"].includes(normalized)) {
+        return false;
+      }
       return null;
     };
 
-    // Optimized date parser with regex for common formats
-    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/;
     const parseDateValue = (value) => {
       if (!value) return null;
-      // Quick check for date-like strings
-      if (typeof value === 'string' && DATE_REGEX.test(value)) {
-        const parsed = new Date(value);
-        return isNaN(parsed.getTime()) ? null : parsed;
-      }
-      // Handle Date objects and timestamps
       const parsed = new Date(value);
       return isNaN(parsed.getTime()) ? null : parsed;
     };
 
-    // Optimized numeric parsers
     const parseIntegerValue = (value, defaultValue = 0) => {
-      if (value == null || value === '') return defaultValue;
       const parsed = parseInt(value, 10);
       return Number.isNaN(parsed) ? defaultValue : parsed;
     };
 
     const parseFloatValue = (value, defaultValue = 0) => {
-      if (value == null || value === '') return defaultValue;
       const parsed = parseFloat(value);
       return Number.isNaN(parsed) ? defaultValue : parsed;
     };
 
-    // EARLY DATA NORMALIZATION - Do this once at the beginning
-    const plotNumber = normalizeString(primaryRow.plot_number);
-    const landUse = normalizeString(primaryRow.land_use);
-    const ownershipType = normalizeString(primaryRow.ownership_type);
-    const ownershipCategory = normalizeString(primaryRow.ownership_category) || "የግል";
-    
-    // Fix common ownership category spelling early
-    const finalOwnershipCategory = 
-      (ownershipCategory === "የገራ" || ownershipCategory === "የጋር") 
-        ? "የጋራ" 
-        : ownershipCategory;
-
+    const ownershipCategory = primaryRow.ownership_category || "የግል";
     let owners = [];
     let organizationInfo = null;
 
-    // OWNER PROCESSING - Optimized with early returns and minimal object creation
-    if (finalOwnershipCategory === "የድርጅት") {
-      // Organization ownership
-      const orgName = normalizeString(primaryRow.organization_name || primaryRow.name);
-      const orgType = normalizeString(primaryRow.organization_type);
-      const firstName = normalizeString(primaryRow.first_name);
-      const middleName = normalizeString(primaryRow.middle_name);
+    if (ownershipCategory === "የድርጅት") {
+      // Organization ownership - extract organization info and manager (first owner)
+      if (!primaryRow.organization_name && !primaryRow.name) {
+        throw new Error(
+          "የድርጅቱ ስም ያስፈልጋል። (organization_name or name column required)"
+        );
+      }
 
-      if (!orgName) {
-        throw new Error("የድርጅቱ ስም ያስፈልጋል።");
+      if (!primaryRow.organization_type) {
+        throw new Error(
+          "የድርጅቱ አይነት ያስፈልጋል። (organization_type column required)"
+        );
       }
-      if (!orgType) {
-        throw new Error("የድርጅቱ አይነት ያስፈልጋል።");
-      }
-      if (!firstName || !middleName) {
+
+      // Manager is the first owner (required for organization)
+      if (!primaryRow.first_name || !primaryRow.middle_name) {
         throw new Error("የድርጅቱ መሪ (manager) ስም እና የአባት ስም ያስፈልጋል።");
       }
 
-      // Organization info - create minimal object
+      // Extract organization information (matches Organization model fields)
       organizationInfo = {
-        name: orgName,
-        organization_type: orgType,
+        name:
+          normalizeString(
+            primaryRow.organization_name || primaryRow.name || ""
+          ) || "",
+        organization_type:
+          normalizeString(primaryRow.organization_type || "") || "",
         eia_document: normalizeString(primaryRow.eia_document),
-        permit_number: normalizeString(primaryRow.organization_permit_number || primaryRow.permit_number),
-        permit_issue_date: parseDateValue(primaryRow.organization_permit_issue_date || primaryRow.permit_issue_date),
+        permit_number: normalizeString(
+          primaryRow.organization_permit_number || primaryRow.permit_number
+        ),
+        permit_issue_date: parseDateValue(
+          primaryRow.organization_permit_issue_date ||
+            primaryRow.permit_issue_date
+        ),
       };
 
-      // Manager (first owner)
-      owners = [{
-        first_name: firstName,
-        middle_name: middleName,
-        last_name: normalizeString(primaryRow.last_name) || "",
-        national_id: normalizeString(primaryRow.national_id),
-        email: normalizeString(primaryRow.email),
-        gender: normalizeString(primaryRow.gender),
-        phone_number: normalizeString(primaryRow.phone_number),
-        relationship_type: normalizeString(primaryRow.relationship_type),
-        address: normalizeString(primaryRow.address),
-      }];
-    } else {
-      // Single or shared ownership
-      const firstName = normalizeString(primaryRow.first_name);
-      
-      if (!firstName) {
-        throw new Error("ዋና ባለቤት ስም ያስፈልጋል።");
-      }
-
-      owners = [{
-        first_name: firstName,
+      // Manager (first owner) - required for organization
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "",
         middle_name: normalizeString(primaryRow.middle_name) || "",
         last_name: normalizeString(primaryRow.last_name) || "",
-        national_id: normalizeString(primaryRow.national_id),
-        email: normalizeString(primaryRow.email),
-        gender: normalizeString(primaryRow.gender),
-        phone_number: normalizeString(primaryRow.phone_number),
-        relationship_type: normalizeString(primaryRow.relationship_type),
-        address: normalizeString(primaryRow.address),
-      }];
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
+      });
+    } else if (ownershipCategory === "የጋራ") {
+      // Shared ownership - since processing row by row, treat as single owner per row
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        relationship_type: normalizeString(primaryRow.relationship_type) || null,
+        address: normalizeString(primaryRow.address) || null,
+      });
+    } else {
+      // Single ownership - use primary row
+      if (!primaryRow.first_name ) {
+        throw new Error("ዋና ባለቤት ስም  ያስፈልጋል።");
+      }
+      owners.push({
+        first_name: normalizeString(primaryRow.first_name) || "",
+        middle_name: normalizeString(primaryRow.middle_name) || "",
+        last_name: normalizeString(primaryRow.last_name) || "",
+        national_id: normalizeString(primaryRow.national_id) || null,
+        email: normalizeString(primaryRow.email) || null,
+        gender: normalizeString(primaryRow.gender) || null,
+        phone_number: normalizeString(primaryRow.phone_number) || null,
+        relationship_type:
+          normalizeString(primaryRow.relationship_type) || null,
+      });
     }
 
-    // LAND RECORD DATA - Optimized with batch normalization
-    // Validate numeric fields early
-    const parsedLandLevel = parseIntegerValue(primaryRow.land_level, 1);
+    // Land record data - parcel_number can be null
+    const parsedLandLevel = parseInt(primaryRow.land_level, 10) || 1;
     if (parsedLandLevel < 1 || parsedLandLevel > 5) {
       throw new Error("የመሬት ደረጃ በ1 እና 5 መካከል መሆን አለበት።");
     }
 
-    const parsedArea = parseFloatValue(primaryRow.area, 0);
+    const parsedArea = parseFloat(primaryRow.area) || 0;
     if (parsedArea < 0.1) {
       throw new Error("የመሬት ስፋት ቢያንስ 0.1 ካሬ ሜትር መሆን አለበት።");
     }
 
-    // Create land record data with direct property assignment
     const landRecordData = {
-      parcel_number: normalizeString(primaryRow.parcel_number),
+      parcel_number: normalizeString(primaryRow.parcel_number) || null,
       land_level: parsedLandLevel,
       area: parsedArea,
       administrative_unit_id: adminUnitId,
@@ -1302,55 +1031,57 @@ async function transformXLSXData(rows, adminUnitId) {
       east_neighbor: normalizeString(primaryRow.east_neighbor) || "east",
       south_neighbor: normalizeString(primaryRow.south_neighbor) || "south",
       west_neighbor: normalizeString(primaryRow.west_neighbor) || "west",
-      land_use: landUse,
-      ownership_type: ownershipType,
-      zoning_type: normalizeString(primaryRow.zoning_type),
+      land_use: normalizeString(primaryRow.land_use) || null,
+      ownership_type: normalizeString(primaryRow.ownership_type) || null,
+      zoning_type: normalizeString(primaryRow.zoning_type) || null,
       block_number: normalizeString(primaryRow.block_number),
-      block_special_name: normalizeString(primaryRow.block_special_name),
-      ownership_category: finalOwnershipCategory,
-      remark: normalizeString(primaryRow.remark),
+      block_special_name:
+        normalizeString(primaryRow.block_special_name) || null,
+      ownership_category: ownershipCategory,
+      remark: normalizeString(primaryRow.remark) || null,
       building_hight: normalizeString(primaryRow.building_hight),
-      notes: normalizeString(primaryRow.notes),
-      plan: normalizeString(primaryRow.plan),
-      land_preparation: normalizeString(primaryRow.land_preparation),
-      lease_transfer_reason: normalizeString(primaryRow.lease_transfer_reason),
-      infrastructure_status: normalizeString(primaryRow.infrastructure_status),
-      land_bank_code: normalizeString(primaryRow.land_bank_code),
-      land_history: normalizeString(primaryRow.land_history),
-      other_land_history: normalizeString(primaryRow.other_land_history),
-      landbank_registrer_name: normalizeString(primaryRow.landbank_registrer_name),
+      notes: normalizeString(primaryRow.notes) || null,
+      plan: normalizeString(primaryRow.plan) || null,
+      land_preparation: normalizeString(primaryRow.land_preparation) || null,
+      lease_transfer_reason:
+        normalizeString(primaryRow.lease_transfer_reason) || null,
+      infrastructure_status:
+        normalizeString(primaryRow.infrastructure_status) || null,
+      land_bank_code: normalizeString(primaryRow.land_bank_code) || null,
+      land_history: normalizeString(primaryRow.land_history) || null,
+      other_land_history:
+        normalizeString(primaryRow.other_land_history) || null,
+      landbank_registrer_name:
+        normalizeString(primaryRow.landbank_registrer_name) || null,
       has_debt: parseBooleanValue(primaryRow.has_debt) ?? false,
-      address: normalizeString(primaryRow.address),
-      address_kebele: normalizeString(primaryRow.address_kebele),
-      address_ketena: normalizeString(primaryRow.address_ketena),
+      address: normalizeString(primaryRow.address) || null,
+      address_kebele: normalizeString(primaryRow.address_kebele) || null,
+      address_ketena: normalizeString(primaryRow.address_ketena) || null,
     };
 
-    // DOCUMENTS - Minimal object creation
+    // Documents - since row by row, use primary row
     const documents = [{
       document_type: DOCUMENT_TYPES.TITLE_DEED,
-      plot_number: plotNumber,
-      approver_name: normalizeString(primaryRow.approver_name),
-      verifier_name: normalizeString(primaryRow.verifier_name),
-      preparer_name: normalizeString(primaryRow.preparer_name),
-      shelf_number: normalizeString(primaryRow.shelf_number),
-      box_number: normalizeString(primaryRow.box_number),
-      file_number: normalizeString(primaryRow.file_number),
-      reference_number: normalizeString(primaryRow.reference_number),
-      description: normalizeString(primaryRow.description),
-      issue_date: normalizeString(primaryRow.issue_date),
+      plot_number: normalizeString(primaryRow.plot_number) || primaryRow.plot_number,
+      approver_name: normalizeString(primaryRow.approver_name) || null,
+      verifier_name: normalizeString(primaryRow.verifier_name) || null,
+      preparer_name: normalizeString(primaryRow.preparer_name) || null,
+      shelf_number: normalizeString(primaryRow.shelf_number) || null,
+      box_number: normalizeString(primaryRow.box_number) || null,
+      file_number: normalizeString(primaryRow.file_number) || null,
+      reference_number: normalizeString(primaryRow.reference_number) || null,
+      description: normalizeString(primaryRow.description) || null,
+      issue_date: normalizeString(primaryRow.issue_date) || null,
       files: [],
     }];
 
-    // PAYMENTS - Optimized payment type derivation
-    const landPreparation = landRecordData.land_preparation;
-    let derivedPaymentType = PAYMENT_TYPES.PENALTY; // Default
-    
-    if (landPreparation === LAND_PREPARATION.LEASE) {
-      derivedPaymentType = PAYMENT_TYPES.LEASE_PAYMENT;
-    } else if (landPreparation === LAND_PREPARATION.EXISTING) {
-      derivedPaymentType = PAYMENT_TYPES.TAX;
-    }
-
+    // Payments - since row by row, use primary row
+    const derivedPaymentType =
+      landRecordData.land_preparation === LAND_PREPARATION.LEASE
+        ? PAYMENT_TYPES.LEASE_PAYMENT
+        : landRecordData.land_preparation === LAND_PREPARATION.EXISTING
+        ? PAYMENT_TYPES.TAX
+        : PAYMENT_TYPES.PENALTY;
     const payments = [{
       payment_type: derivedPaymentType,
       total_amount: parseFloatValue(primaryRow.total_amount, 0),
@@ -1361,11 +1092,11 @@ async function transformXLSXData(rows, adminUnitId) {
       initial_payment: parseFloatValue(primaryRow.initial_payment, 0),
       penalty_rate: parseFloatValue(primaryRow.penalty_rate, 0),
       remaining_amount: parseFloatValue(primaryRow.remaining_amount, 0),
-      receipt_number: normalizeString(primaryRow.receipt_number),
-      payment_date: parseDateValue(primaryRow.payment_date),
+      receipt_number: normalizeString(primaryRow.receipt_number) || null,
+      payment_date: parseDateValue(primaryRow.payment_date) || null,
       currency: normalizeString(primaryRow.currency) || "ETB",
       payment_status: calculatePaymentStatus(primaryRow),
-      description: normalizeString(primaryRow.description),
+      description: normalizeString(primaryRow.description) || null,
     }];
 
     return {
@@ -1376,9 +1107,7 @@ async function transformXLSXData(rows, adminUnitId) {
       organization_info: organizationInfo,
     };
   } catch (error) {
-    // Preserve original error with context
-    const originalMessage = error.message || "Unknown error";
-    throw new Error(`ውሂብ ማቀናበር አልተቻለም: ${originalMessage}`);
+    throw new Error(`ውሂብ ማቀናበር አልተቻለም: ${error.message}`);
   }
 }
 function calculatePaymentStatus(row) {
