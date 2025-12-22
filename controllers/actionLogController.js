@@ -350,7 +350,6 @@ const getActionLogStats = async (req, res) => {
   }
 };
 
-// Alternative simplified version without complex grouping - UPDATED with admin unit filter
 const getActionLogFilters = async (req, res) => {
   try {
     // Get admin_unit_id from logged-in user
