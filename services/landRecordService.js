@@ -24,7 +24,7 @@ const { sendEmail } = require("../utils/statusEmail");
 const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
-const { createCoordinates } = require("./geoCoordinateService");
+const { createCoordinates, updateCoordinatesService } = require("./geoCoordinateService");
 
 const createLandRecordService = async (data, files, user, options = {}) => {
   const { transaction: externalTransaction, isImport = false } = options;
@@ -3733,6 +3733,7 @@ const updateLandRecordService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
+    // Load existing record with all related data including geo-coordinates
     const existingRecord = await LandRecord.findOne({
       where: { id: recordId, deletedAt: null },
       include: [
@@ -3755,6 +3756,12 @@ const updateLandRecordService = async (
           where: { deletedAt: null },
           required: false,
         },
+        {
+          model: GeoCoordinate,
+          as: "coordinates", 
+          where: { deletedAt: null },
+          required: false,
+        },
       ],
       transaction: t,
     });
@@ -3763,117 +3770,161 @@ const updateLandRecordService = async (
       throw new Error("Land record not found");
     }
 
+    // Track if any updates were made
+    let updatesMade = false;
+    const updateOperations = [];
+
+    // 1. Update land_record details
     if (data.land_record && Object.keys(data.land_record).length > 0) {
-      const previousStatus = existingRecord.record_status;
-      const newStatus = RECORD_STATUSES.SUBMITTED;
+      updatesMade = true;
+      updateOperations.push(
+        (async () => {
+          const previousStatus = existingRecord.record_status;
+          const newStatus = RECORD_STATUSES.SUBMITTED;
 
-      const changes = {};
-      Object.keys(data.land_record).forEach((key) => {
-        if (
-          existingRecord[key] !== data.land_record[key] &&
-          key !== "updated_at" &&
-          key !== "created_at"
-        ) {
-          changes[key] = {
-            from: existingRecord[key],
-            to: data.land_record[key],
+          const changes = {};
+          Object.keys(data.land_record).forEach((key) => {
+            if (
+              existingRecord[key] !== data.land_record[key] &&
+              key !== "updated_at" &&
+              key !== "created_at"
+            ) {
+              changes[key] = {
+                from: existingRecord[key],
+                to: data.land_record[key],
+              };
+            }
+          });
+
+          const updatePayload = {
+            ...data.land_record,
+            updated_by: updater.id,
+            record_status: newStatus,
           };
-        }
-      });
 
-      const updatePayload = {
-        ...data.land_record,
-        updated_by: updater.id,
-        record_status: newStatus,
-      };
+          if (newStatus !== previousStatus) {
+            const currentStatusHistory = Array.isArray(
+              existingRecord.status_history
+            )
+              ? existingRecord.status_history
+              : [];
 
-      if (newStatus !== previousStatus) {
-        const currentStatusHistory = Array.isArray(
-          existingRecord.status_history
-        )
-          ? existingRecord.status_history
-          : [];
+            updatePayload.status_history = [
+              ...currentStatusHistory,
+              {
+                status: newStatus,
+                changed_at: new Date(),
+                changed_by: updater.id,
+                notes: data.land_record.status_notes || null,
+              },
+            ];
+          }
 
-        updatePayload.status_history = [
-          ...currentStatusHistory,
-          {
-            status: newStatus,
-            changed_at: new Date(),
-            changed_by: updater.id,
-            notes: data.land_record.status_notes || null,
-          },
-        ];
-      }
+          await existingRecord.update(updatePayload, { transaction: t });
 
-      await existingRecord.update(updatePayload, { transaction: t });
+          const currentLog = Array.isArray(existingRecord.action_log)
+            ? existingRecord.action_log
+            : [];
+          const newLog = [
+            ...currentLog,
+            {
+              action: "LAND_RECORD_UPDATED",
+              changes: Object.keys(changes).length > 0 ? changes : undefined,
+              status_change:
+                newStatus !== previousStatus
+                  ? {
+                      from: previousStatus,
+                      to: newStatus,
+                    }
+                  : undefined,
+              changed_by: {
+                id: updater.id,
+                first_name: updater.first_name,
+                middle_name: updater.middle_name,
+                last_name: updater.last_name,
+              },
+              changed_at: new Date(),
+            },
+          ];
 
-      const currentLog = Array.isArray(existingRecord.action_log)
-        ? existingRecord.action_log
-        : [];
-      const newLog = [
-        ...currentLog,
-        {
-          action: "LAND_RECORD_UPDATED",
-          changes: Object.keys(changes).length > 0 ? changes : undefined,
-          status_change:
-            newStatus !== previousStatus
-              ? {
-                  from: previousStatus,
-                  to: newStatus,
-                }
-              : undefined,
-          changed_by: {
-            id: updater.id,
-            first_name: updater.first_name,
-            middle_name: updater.middle_name,
-            last_name: updater.last_name,
-          },
-          changed_at: new Date(),
-        },
-      ];
-
-      await LandRecord.update(
-        { action_log: newLog },
-        {
-          where: { id: recordId },
-          transaction: t,
-        }
+          await LandRecord.update(
+            { action_log: newLog },
+            {
+              where: { id: recordId },
+              transaction: t,
+            }
+          );
+        })()
       );
     }
 
+    // 2. Update owners
     if (data.owners && data.owners.length > 0) {
-      await userService.updateLandOwnersService(
-        recordId,
-        existingRecord.owners,
-        data.owners,
-        updater,
-        { transaction: t }
+      updatesMade = true;
+      updateOperations.push(
+        userService.updateLandOwnersService(
+          recordId,
+          existingRecord.owners,
+          data.owners,
+          updater,
+          { transaction: t }
+        )
       );
     }
 
+    // 3. Update documents
     if (data.documents && data.documents.length > 0) {
-      await documentService.updateDocumentsService(
-        recordId,
-        existingRecord.documents,
-        data.documents,
-        files || [],
-        updater,
-        { transaction: t }
+      updatesMade = true;
+      updateOperations.push(
+        documentService.updateDocumentsService(
+          recordId,
+          existingRecord.documents,
+          data.documents,
+          files || [],
+          updater,
+          { transaction: t }
+        )
       );
     }
 
+    // 4. Update payments
     if (data.payments && data.payments.length > 0) {
-      await landPaymentService.updateLandPaymentsService(
-        recordId,
-        existingRecord.payments,
-        data.payments,
-        updater,
-        { transaction: t }
+      updatesMade = true;
+      updateOperations.push(
+        landPaymentService.updateLandPaymentsService(
+          recordId,
+          existingRecord.payments,
+          data.payments,
+          updater,
+          { transaction: t }
+        )
       );
     }
+
+    // 5. Update coordinates 
+    if (data.coordinates && data.coordinates.length > 0) {
+      updatesMade = true;
+      updateOperations.push(
+        updateCoordinatesService(
+          recordId,
+          existingRecord.coordinates || [],
+          data.coordinates,
+          updater,
+          { transaction: t }
+        )
+      );
+    }
+
+    if (!updatesMade) {
+      throw new Error("No valid update data provided");
+    }
+
+    // Execute all update operations
+    await Promise.all(updateOperations);
 
     if (!transaction) await t.commit();
 
+    // Return updated record with all includes
     return await getLandRecordByIdService(recordId, {
       transaction: t,
       includeAll: true,

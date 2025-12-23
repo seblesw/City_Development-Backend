@@ -88,13 +88,21 @@ app.use('/api/v1/action-logs', actionLogsRoutes);
 app.use('/api/v1/geo-coordinates', coordinateRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     database: db.authenticated ? 'Connected' : 'Disconnected'
   });
 });
+//serve the dist folder for frontend on backend server
+// app.use(express.static(path.join(__dirname, 'dist')));
+// app.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// });
+// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+
+
 
 // Database sync function with better error handling
 const syncDatabase = async () => {
@@ -110,7 +118,7 @@ const syncDatabase = async () => {
     // await db.sync({ force: });
     
     // Option 3: Alter sync (modifies tables to match model definitions)
-    await db.sync({ alter: true });
+    // await db.sync({ alter: true });
     
     console.log('Database synchronized successfully at', new Date().toISOString());
     return true;

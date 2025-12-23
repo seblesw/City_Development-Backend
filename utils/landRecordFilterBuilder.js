@@ -1,11 +1,6 @@
 const { Op } = require('sequelize');
 const { LandPayment, Document, User, AdministrativeUnit } = require('../models');
 
-/**
- * Build robust filter conditions for LandRecord queries
- * @param {Object} queryParams - Request query parameters
- * @returns {Object} Sequelize where conditions
- */
 const buildLandRecordFilters = (queryParams) => {
   const {
     // Basic filters

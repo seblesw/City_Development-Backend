@@ -423,7 +423,6 @@ const updateLandRecord = async (req, res) => {
     const user = req.user;
     const recordId = req.params.id;
 
-    
     if (!recordId) {
       throw new Error("የመሬት አይዲ ያስገቡ");
     }
@@ -431,7 +430,6 @@ const updateLandRecord = async (req, res) => {
       throw new Error("ተጠቃሚው መለያ ቁጥር አልተገለጸም።");
     }
 
-    
     const updateData = {
       owners: req.body.owners
         ? safeJsonParse(req.body.owners, "owners")
@@ -445,9 +443,11 @@ const updateLandRecord = async (req, res) => {
       payments: req.body.payments
         ? safeJsonParse(req.body.payments, "payments")
         : undefined,
+      coordinates: req.body.coordinates  
+        ? safeJsonParse(req.body.coordinates, "coordinates")
+        : undefined,
     };
 
-    
     const hasUpdates = Object.values(updateData).some(
       (field) =>
         field !== undefined && (!Array.isArray(field) || field.length > 0)
@@ -456,7 +456,6 @@ const updateLandRecord = async (req, res) => {
       throw new Error("ቢያንስ አንድ የሚያዘምኑ መረጃ አለብዎት።");
     }
 
-    
     const updatedRecord = await updateLandRecordService(
       recordId,
       updateData,
@@ -476,6 +475,7 @@ const updateLandRecord = async (req, res) => {
         land_record_updated: !!updateData.land_record,
         documents_updated: !!updateData.documents,
         payment_updated: !!updateData.payments,
+        coordinates_updated: !!updateData.coordinates, // Changed to coordinates_updated
       },
     });
   } catch (error) {
