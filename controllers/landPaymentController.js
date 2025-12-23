@@ -21,7 +21,7 @@ const createNewPaymentController = async (req, res) => {
     }  
 
     // Validate payment data
-    const { total_amount, paid_amount,initial_payment,anual_payment, lease_year,lease_payment_year } = req.body;
+    const { total_amount, paid_amount,initial_payment,annual_payment, lease_year,lease_payment_year } = req.body;
 
 
     // Find land record with owners
@@ -51,7 +51,7 @@ const createNewPaymentController = async (req, res) => {
     const paymentData = {
       land_record_id: land_record_id,
       initial_payment: parseFloat(initial_payment) || 0,
-      anual_payment: parseFloat(anual_payment) || 0,
+      annual_payment: parseFloat(annual_payment) || 0,
       lease_year: lease_year ? parseInt(lease_year) : null,
       currency: "ETB",
       total_amount: parseFloat(total_amount),
@@ -141,7 +141,7 @@ const addNewPaymentController = async (req, res) => {
       paid_amount, 
       total_amount, 
       initial_payment, 
-      anual_payment, 
+      annual_payment, 
       lease_year, 
       lease_payment_year,
       description,
@@ -195,7 +195,7 @@ const addNewPaymentController = async (req, res) => {
         paid_amount,
         total_amount,
         initial_payment,
-        anual_payment,
+        annual_payment,
         lease_year,
         lease_payment_year,
         description,
