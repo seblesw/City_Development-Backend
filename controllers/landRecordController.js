@@ -194,14 +194,20 @@ const getAllLandRecords = async (req, res) => {
 
 const getFilterOptions = async (req, res) => {
   try {
-    const result = await getFilterOptionsService();
+    // 1. ከተጠቃሚው ፕሮፋይል (Token/Session) የአስተዳደር ክፍል መለያውን መውሰድ
+    // እንደ ሲስተምህ አወቃቀር req.user.administrative_unit_id ወይም req.user.adminUnitId ሊሆን ይችላል
+    const adminUnitId = req.user?.administrative_unit_id || null;
+
+    // 2. መለያውን ወደ ሰርቪሱ ማስተላለፍ
+    const result = await getFilterOptionsService(adminUnitId);
     
     return res.status(200).json({
       status: "success",
-      message: "Filter options retrieved successfully",
+      message: "የፊልተር አማራጮች በትክክል ተገኝተዋል",
       data: result.data,
     });
   } catch (error) {
+    console.error(`[Controller Error]: ${error.message}`);
     return res.status(500).json({
       status: "error",
       message: error.message,
@@ -341,10 +347,10 @@ const getLandRecordsByUserAdminUnit = async (req, res) => {
   try {
     const user = req.user;
 
-    if (!user || !user.id || !user.administrative_unit_id) {
+    if (!user?.id || !user?.administrative_unit_id) {
       return res.status(401).json({
         status: "error",
-        message: "ያልተፈቀደ መዳረሻ ወይም የአስተዳደር ክፍል አልተገለጸም። እባክዎ ይግቡ።",
+        message: "ያልተፈቀደ ባለቤት እባክዎ በትክክል መግባትዎን ያረጋግጡ።",
         code: "unauthorized",
       });
     }

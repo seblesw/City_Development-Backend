@@ -66,7 +66,7 @@ router.get(
   // getLimiter,
   landRecordController.getAllLandRecords
 );
-router.get('/filter-options', landRecordController.getFilterOptions);
+router.get('/filter-options', authMiddleware.protect, landRecordController.getFilterOptions);
 
 router.get('/admin-stat',
   authMiddleware.protect,
