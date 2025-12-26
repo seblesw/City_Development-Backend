@@ -356,28 +356,6 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           },
           { transaction: t }
         );
-
-        // Add coordinate info to ActionLog if not import
-        if (!isImport) {
-          await ActionLog.create(
-            {
-              land_record_id: landRecord.id,
-              admin_unit_id: adminunit,
-              performed_by: user.id,
-              action_type: "COORDINATES_CREATED",
-              notes: "የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል",
-              additional_data: {
-                coordinates_count: coordinateResult.coordinates.length,
-                area_m2: coordinateResult.area_m2,
-                perimeter_m: coordinateResult.perimeter_m,
-                center_lat: coordinateResult.center.latitude,
-                center_lng: coordinateResult.center.longitude,
-                action_description: `የመሬት ጂኦግራፊካ ኮኦርዲኔት ተመዝግቧል (${coordinateResult.area_m2} ሜ², ${coordinateResult.perimeter_m} ሜ)`,
-              },
-            },
-            { transaction: t }
-          );
-        }
       } catch (coordError) {
         throw new Error(`የኮኦርዲኔት ዝርዝር መመዝገብ ስህተት: ${coordError.message}`);
       }
@@ -386,7 +364,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
     }
     // ====================================
 
-    // Document processing - FIXED FILE PATH HANDLING
+    // Document processing
     let documentResults = [];
     if (documents.length > 0) {
       // Handle document files properly
@@ -412,6 +390,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
                 ...doc,
                 land_record_id: landRecord.id,
                 file_path: relativePath,
+                administrative_unit_id: adminunit,
               },
               file ? [file] : [],
               user.id,
@@ -424,6 +403,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
         const documentData = documents.map((doc) => ({
           ...doc,
           land_record_id: landRecord.id,
+          administrative_unit_id: adminunit,
           created_by: user.id,
           createdAt: new Date(),
         }));
@@ -945,8 +925,8 @@ async function transformXLSXData(rows, adminUnitId) {
       }
 
       // Manager is the first owner (required for organization)
-      if (!primaryRow.first_name || !primaryRow.middle_name) {
-        throw new Error("የድርጅቱ መሪ (manager) ስም እና የአባት ስም ያስፈልጋል።");
+      if (!primaryRow.first_name ) {
+        throw new Error("የድርጅቱ መሪ (manager) ስም  ያስፈልጋል።");
       }
 
       // Extract organization information (matches Organization model fields)
@@ -1027,10 +1007,10 @@ async function transformXLSXData(rows, adminUnitId) {
       land_level: parsedLandLevel,
       area: parsedArea,
       administrative_unit_id: adminUnitId,
-      north_neighbor: normalizeString(primaryRow.north_neighbor) || "north",
-      east_neighbor: normalizeString(primaryRow.east_neighbor) || "east",
-      south_neighbor: normalizeString(primaryRow.south_neighbor) || "south",
-      west_neighbor: normalizeString(primaryRow.west_neighbor) || "west",
+      north_neighbor: normalizeString(primaryRow.north_neighbor) || "ሰሜን",
+      east_neighbor: normalizeString(primaryRow.east_neighbor) || "ደቡብ",
+      south_neighbor: normalizeString(primaryRow.south_neighbor) || "ምስራቅ",
+      west_neighbor: normalizeString(primaryRow.west_neighbor) || "ምዕራብ",
       land_use: normalizeString(primaryRow.land_use) || null,
       ownership_type: normalizeString(primaryRow.ownership_type) || null,
       zoning_type: normalizeString(primaryRow.zoning_type) || null,

@@ -9,7 +9,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const path = require("path");
-const {fs} = require("fs");
+const fs = require("fs");
 
 const createDocumentService = async (data, files, creatorId, options = {}) => {
   const { transaction } = options;
@@ -21,12 +21,16 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       throw new Error("የሰነድ መረጃዎች (plot_number) አስፈላጊ ናቸው።");
     }
 
-  
+    // CRITICAL: Add this validation
+    if (!data.administrative_unit_id) {
+      throw new Error("የአስተዳደር ክልል መታወቂያ (administrative_unit_id) አስፈላጊ ነው።");
+    }
 
-    // Check for duplicate plot_number within the same administrative unit
+    // UPDATED: Check for duplicate plot_number within the same administrative unit
     const existingDocument = await Document.findOne({
       where: {
         plot_number: data.plot_number,
+        administrative_unit_id: data.administrative_unit_id, 
         deletedAt: null,
       },
       transaction: t,
@@ -44,7 +48,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       });
 
       const existingParcelNumber = existingLandRecord?.parcel_number || 'Unknown';
-      throw new Error(`ይህ የካርታ ቁጥር (${data.plot_number}) ከዚህ በፊት በዚህ መዘጋጃ ቤት ተመዝግቧል። አሁን በዝግጅት ላይ ያለው መሬት ቁጥር: ${existingParcelNumber}`);
+      throw new Error(`ይህ የካርታ ቁጥር (${data.plot_number}) በዚህ መዘጋጃ ቤት ተመዝግቧል። አሁን በዝግጅት ላይ ያለው መሬት ቁጥር: ${existingParcelNumber}`);
     }
 
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
@@ -57,6 +61,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         where: {
           land_record_id: data.land_record_id,
           plot_number: data.plot_number,
+          administrative_unit_id: data.administrative_unit_id,
           deletedAt: null,
         },
         transaction: t,
@@ -88,10 +93,11 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       }
     }
 
-    // Create the document with 
+    // UPDATED: Create the document with administrative_unit_id
     const document = await Document.create(
       {
         plot_number: data.plot_number,
+        administrative_unit_id: data.administrative_unit_id, // <-- ADD THIS
         document_type: data.document_type || DOCUMENT_TYPES.TITLE_DEED,
         reference_number: data.reference_number,
         shelf_number: data.shelf_number || null,
@@ -132,30 +138,6 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     } catch (e) {
       creator = null;
     }
-
-    // Create ActionLog entry for document creation
-    await ActionLog.create({
-      land_record_id: data.land_record_id,
-      performed_by: creatorId,
-      action_type: 'DOCUMENT_CREATED',
-      notes: `ሰነድ ተፈጥሯል - የካርታ ቁጥር: ${data.plot_number}, የሰነድ አይነት: ${data.document_type || DOCUMENT_TYPES.TITLE_DEED}`,
-      additional_data: {
-        document_id: document.id,
-        plot_number: data.plot_number,
-        document_type: data.document_type || DOCUMENT_TYPES.TITLE_DEED,
-        reference_number: data.reference_number,
-        files_added: fileMetadata.length,
-        version: version,
-        changed_by_name: creator ? `${creator.first_name} ${creator.middle_name || ''} ${creator.last_name}`.trim() : 'Unknown',
-        parcel_number: landRecord.parcel_number,
-        file_details: fileMetadata.map(file => ({
-          file_name: file.file_name,
-          file_size: file.file_size,
-          mime_type: file.mime_type
-        }))
-      }
-    }, { transaction: t });
-
     if (!transaction) await t.commit();
     return document;
   } catch (error) {
@@ -333,7 +315,6 @@ const importPDFs = async ({ files, uploaderId }) => {
     }
   };
 
-  console.log(`🔍 Starting document matching for ${files.length} files, uploader: ${uploaderId}`);
 
   try {
     // Get all documents once for efficient matching
@@ -365,17 +346,14 @@ const importPDFs = async ({ files, uploaderId }) => {
       }
     });
 
-    console.log(`📊 Created lookup maps for ${allDocuments.length} documents`);
-
     // Process files with proper uploaderId passing
     const BATCH_SIZE = 50;
     for (let i = 0; i < files.length; i += BATCH_SIZE) {
       const batch = files.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i/BATCH_SIZE) + 1;
-      console.log(`🔄 Processing batch ${batchNumber} (${batch.length} files)`);
       
       const batchPromises = batch.map(async (file) => {
-        return await processSingleFile(file, uploaderId, { // FIX: Pass uploaderId here
+        return await processSingleFile(file, uploaderId, { 
           exactMatchMap,
           normalizedMatchMap,
           cleanMatchMap,
@@ -399,11 +377,10 @@ const importPDFs = async ({ files, uploaderId }) => {
             results.matchStatistics[fileResult.matchType]++;
           }
         } else {
-          console.error('❌ Batch promise rejected:', result.reason);
+          
         }
       });
 
-      console.log(`✅ Batch ${batchNumber} completed: ${results.updatedDocuments.length} successful so far`);
     }
 
   } catch (error) {
@@ -417,10 +394,6 @@ const importPDFs = async ({ files, uploaderId }) => {
     results.unmatchedLogs.length, 
     results.skippedFiles.length
   );
-
-  console.log(`✅ Import completed: ${summaryMessage}`);
-  console.log(`📊 Match statistics:`, results.matchStatistics);
-  console.log(`📈 Final results: ${results.updatedDocuments.length} updated, ${results.skippedFiles.length} skipped, ${results.unmatchedLogs.length} unmatched`);
 
   return {
     message: summaryMessage,
