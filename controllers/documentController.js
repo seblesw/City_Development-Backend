@@ -76,9 +76,11 @@ const importPDFDocuments = async (req, res) => {
     }
 
     const uploaderId = req.user.id;
+    const adminUnitId = req.user.administrative_unit_id;
     const files = req.files;
     const totalFiles = files.length;
 
+    
     console.log(`⚡ Processing ${totalFiles} files for user ${uploaderId}`);
 
     // Optimized file processing - parallelize filename decoding
@@ -136,6 +138,7 @@ const importPDFDocuments = async (req, res) => {
     // Call service with timing
     const serviceStart = Date.now();
     const result = await importPDFs({
+      adminUnitId,
       files: processedFiles,
       uploaderId
     });

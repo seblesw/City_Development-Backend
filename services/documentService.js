@@ -30,7 +30,7 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
     const existingDocument = await Document.findOne({
       where: {
         plot_number: data.plot_number,
-        administrative_unit_id: data.administrative_unit_id, 
+        administrative_unit_id: data.administrative_unit_id,
         deletedAt: null,
       },
       transaction: t,
@@ -47,8 +47,11 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
         transaction: t,
       });
 
-      const existingParcelNumber = existingLandRecord?.parcel_number || 'Unknown';
-      throw new Error(`ይህ የካርታ ቁጥር (${data.plot_number}) በዚህ መዘጋጃ ቤት ተመዝግቧል። አሁን በዝግጅት ላይ ያለው መሬት ቁጥር: ${existingParcelNumber}`);
+      const existingParcelNumber =
+        existingLandRecord?.parcel_number || "Unknown";
+      throw new Error(
+        `ይህ የካርታ ቁጥር (${data.plot_number}) በዚህ መዘጋጃ ቤት ተመዝግቧል። አሁን በዝግጅት ላይ ያለው መሬት ቁጥር: ${existingParcelNumber}`
+      );
     }
 
     if (!data.land_record_id || typeof data.land_record_id !== "number") {
@@ -73,12 +76,9 @@ const createDocumentService = async (data, files, creatorId, options = {}) => {
       for (const file of files) {
         // Convert absolute path to server-relative path
         const serverRelativePath = path
-          .relative(
-            path.join(__dirname, ".."), 
-            file.path
-          )
+          .relative(path.join(__dirname, ".."), file.path)
           .split(path.sep)
-          .join("/"); 
+          .join("/");
 
         fileMetadata.push({
           file_path: serverRelativePath,
@@ -223,7 +223,6 @@ const addFilesToDocumentService = async (
       throw new Error("ቢያንስ አንድ ፋይል መጨመር አለበት።");
     }
 
-    
     const normalizedExistingFiles = Array.isArray(document.files)
       ? document.files.map((file) =>
           typeof file === "string"
@@ -239,7 +238,6 @@ const addFilesToDocumentService = async (
         )
       : [];
 
-    
     const newFiles = files.map((file) => ({
       file_path: file.serverRelativePath,
       file_name: file.originalname,
@@ -249,10 +247,8 @@ const addFilesToDocumentService = async (
       uploaded_by: updaterId,
     }));
 
-    
     const updatedFiles = [...normalizedExistingFiles, ...newFiles];
 
-    
     await document.update(
       {
         files: updatedFiles,
@@ -262,12 +258,10 @@ const addFilesToDocumentService = async (
       { transaction: t }
     );
 
-    
     const landRecord = await LandRecord.findByPk(document.land_record_id, {
       transaction: t,
     });
     if (landRecord) {
-      
       const updater = await User.findByPk(updaterId, {
         attributes: ["id", "first_name", "middle_name", "last_name"],
         transaction: t,
@@ -298,7 +292,8 @@ const addFilesToDocumentService = async (
     throw new Error(`የሰነድ ፋይሎች መጨመር ስህተት: ${error.message}`);
   }
 };
-const importPDFs = async ({ files, uploaderId }) => {
+
+const importPDFs = async ({ files, uploaderId, adminUnitId }) => {
   const results = {
     updatedDocuments: [],
     unmatchedLogs: [],
@@ -311,34 +306,49 @@ const importPDFs = async ({ files, uploaderId }) => {
       case_insensitive: 0,
       clean_special_chars: 0,
       fuzzy: 0,
-      not_found: 0
-    }
+      not_found: 0,
+    },
   };
 
-
   try {
-    // Get all documents once for efficient matching
-    const allDocuments = await Document.findAll();
-    
+    // Get all documents once for efficient matching - FILTERED BY ADMIN UNIT
+    const allDocuments = await Document.findAll({
+      where: {
+        administrative_unit_id: adminUnitId,
+        deletedAt: null,
+        plot_number: {
+          [Op.ne]: null,
+          [Op.ne]: "",
+        },
+      },
+      attributes: [
+        "id",
+        "plot_number",
+        "administrative_unit_id",
+        "document_type",
+        "files",
+      ],
+    });
+
     // Create optimized lookup maps
     const exactMatchMap = new Map();
     const normalizedMatchMap = new Map();
     const cleanMatchMap = new Map();
 
-    allDocuments.forEach(doc => {
+    allDocuments.forEach((doc) => {
       if (!doc.plot_number) return;
 
       const plotNumber = doc.plot_number.trim();
-      
+
       // Exact match
       exactMatchMap.set(plotNumber, doc);
-      
+
       // Case-insensitive normalized match
       const normalized = plotNumber.toLowerCase().trim();
       if (!normalizedMatchMap.has(normalized)) {
         normalizedMatchMap.set(normalized, doc);
       }
-      
+
       // Clean alphanumeric only match
       const cleanPlot = plotNumber.replace(/[^\p{L}\p{N}]/gu, "");
       if (cleanPlot && !cleanMatchMap.has(cleanPlot)) {
@@ -350,48 +360,46 @@ const importPDFs = async ({ files, uploaderId }) => {
     const BATCH_SIZE = 50;
     for (let i = 0; i < files.length; i += BATCH_SIZE) {
       const batch = files.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i/BATCH_SIZE) + 1;
-      
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+
       const batchPromises = batch.map(async (file) => {
-        return await processSingleFile(file, uploaderId, { 
+        return await processSingleFile(file, uploaderId, {
           exactMatchMap,
           normalizedMatchMap,
           cleanMatchMap,
-          allDocuments
+          allDocuments,
+          adminUnitId, // Pass adminUnitId to processSingleFile
         });
       });
 
       const batchResults = await Promise.allSettled(batchPromises);
-      
+
       // Aggregate results
-      batchResults.forEach(result => {
-        if (result.status === 'fulfilled') {
+      batchResults.forEach((result) => {
+        if (result.status === "fulfilled") {
           const fileResult = result.value;
-          Object.keys(results).forEach(key => {
+          Object.keys(results).forEach((key) => {
             if (Array.isArray(results[key]) && Array.isArray(fileResult[key])) {
               results[key].push(...fileResult[key]);
             }
           });
           // Update match statistics
-          if (fileResult.matchType && fileResult.matchType !== 'not_found') {
+          if (fileResult.matchType && fileResult.matchType !== "not_found") {
             results.matchStatistics[fileResult.matchType]++;
           }
         } else {
-          
         }
       });
-
     }
-
   } catch (error) {
-    console.error('❌ PDF import service error:', error);
+    console.error("❌ PDF import service error:", error);
     throw error;
   }
 
   // Generate summary
   const summaryMessage = generateSummaryMessage(
-    results.updatedDocuments.length, 
-    results.unmatchedLogs.length, 
+    results.updatedDocuments.length,
+    results.unmatchedLogs.length,
     results.skippedFiles.length
   );
 
@@ -403,12 +411,12 @@ const importPDFs = async ({ files, uploaderId }) => {
       successful: results.updatedDocuments.length,
       failed: results.unmatchedLogs.length,
       skipped: results.skippedFiles.length,
-      processingErrors: results.processingErrors.length
+      processingErrors: results.processingErrors.length,
     },
   };
 };
 
-// FIXED: Add uploaderId as separate parameter
+// Add uploaderId as separate parameter
 async function processSingleFile(file, uploaderId, maps) {
   const result = {
     updatedDocuments: [],
@@ -417,13 +425,15 @@ async function processSingleFile(file, uploaderId, maps) {
     processedFiles: [],
     skippedFiles: [],
     processingErrors: [],
-    matchType: 'not_found'
+    matchType: "not_found",
   };
 
   try {
     // Skip files with processing errors from controller
     if (file.processingError) {
-      result.processingErrors.push(`File processing error for ${file.originalname}: ${file.processingError}`);
+      result.processingErrors.push(
+        `File processing error for ${file.originalname}: ${file.processingError}`
+      );
       return result;
     }
 
@@ -438,7 +448,7 @@ async function processSingleFile(file, uploaderId, maps) {
         filename: file.originalname,
         error: "Invalid filename format - empty or malformed",
         plotNumberAttempted: plotNumberToMatch,
-        type: "validation_error"
+        type: "validation_error",
       });
       await safeFileDelete(file.path, file.originalname);
       return result;
@@ -448,57 +458,72 @@ async function processSingleFile(file, uploaderId, maps) {
     let document = null;
     let matchType = "not_found";
 
-    const { exactMatchMap, normalizedMatchMap, cleanMatchMap, allDocuments } = maps;
+    const {
+      exactMatchMap,
+      normalizedMatchMap,
+      cleanMatchMap,
+      allDocuments,
+      adminUnitId,
+    } = maps;
 
     // 1. Exact match (highest priority)
     if (exactMatchMap.has(plotNumberToMatch)) {
       document = exactMatchMap.get(plotNumberToMatch);
       matchType = "exact";
-      console.log(`✅ Exact match: ${plotNumberToMatch} -> ${document.plot_number}`);
+      console.log(
+        `✅ Exact match: ${plotNumberToMatch} -> ${document.plot_number}`
+      );
     }
-    
+
     // 2. Case-insensitive match
     else if (normalizedMatchMap.has(plotNumberToMatch.toLowerCase())) {
       document = normalizedMatchMap.get(plotNumberToMatch.toLowerCase());
       matchType = "case_insensitive";
-      console.log(`✅ Case-insensitive match: ${plotNumberToMatch} -> ${document.plot_number}`);
+      console.log(
+        `✅ Case-insensitive match: ${plotNumberToMatch} -> ${document.plot_number}`
+      );
     }
-    
+
     // 3. Clean alphanumeric match
     else if (cleanPlotNumber && cleanMatchMap.has(cleanPlotNumber)) {
       document = cleanMatchMap.get(cleanPlotNumber);
       matchType = "clean_special_chars";
-      console.log(`✅ Clean match: ${plotNumberToMatch} -> ${document.plot_number}`);
+      console.log(
+        `✅ Clean match: ${plotNumberToMatch} -> ${document.plot_number}`
+      );
     }
 
     // 4. Enhanced fuzzy matching for Ethiopian characters and common issues
     if (!document) {
-      const fuzzyMatch = allDocuments.find(doc => {
+      const fuzzyMatch = allDocuments.find((doc) => {
         if (!doc.plot_number) return false;
-        
+
         const docPlot = doc.plot_number.trim();
         const filePlot = plotNumberToMatch.trim();
-        
+
         // Generate common variations for fuzzy matching
         const variations = [
           docPlot,
-          docPlot.replace(/[_-]/g, ' '), // underscores/hyphens to spaces
-          docPlot.replace(/\s+/g, '_'), // spaces to underscores
-          docPlot.replace(/\s+/g, '-'), // spaces to hyphens
-          docPlot.replace(/[^\p{L}\p{N}]/gu, ''), // alphanumeric only
+          docPlot.replace(/[_-]/g, " "), // underscores/hyphens to spaces
+          docPlot.replace(/\s+/g, "_"), // spaces to underscores
+          docPlot.replace(/\s+/g, "-"), // spaces to hyphens
+          docPlot.replace(/[^\p{L}\p{N}]/gu, ""), // alphanumeric only
         ];
-        
-        return variations.some(variant => 
-          variant.toLowerCase() === filePlot.toLowerCase() ||
-          variant.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase() === 
-            filePlot.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase()
+
+        return variations.some(
+          (variant) =>
+            variant.toLowerCase() === filePlot.toLowerCase() ||
+            variant.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase() ===
+              filePlot.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase()
         );
       });
-      
+
       if (fuzzyMatch) {
         document = fuzzyMatch;
         matchType = "fuzzy";
-        console.log(`✅ Fuzzy match: ${plotNumberToMatch} -> ${document.plot_number}`);
+        console.log(
+          `✅ Fuzzy match: ${plotNumberToMatch} -> ${document.plot_number}`
+        );
       }
     }
 
@@ -509,9 +534,28 @@ async function processSingleFile(file, uploaderId, maps) {
         filename: file.originalname,
         plotNumberAttempted: plotNumberToMatch,
         cleanPlotNumber: cleanPlotNumber,
-        error: "No matching document found after multiple matching strategies",
-        matchAttempts: ["exact", "case_insensitive", "clean_special_chars", "fuzzy"],
-        type: "no_match"
+        error: `No matching document found in admin unit ${adminUnitId}`,
+        matchAttempts: [
+          "exact",
+          "case_insensitive",
+          "clean_special_chars",
+          "fuzzy",
+        ],
+        type: "no_match",
+      });
+      await safeFileDelete(file.path, file.originalname);
+      return result;
+    }
+
+    // Optional: Double-check admin unit (safety check)
+    if (document.administrative_unit_id !== adminUnitId) {
+      const logMsg = `Document found but belongs to different admin unit. File: '${file.originalname}'.`;
+      result.unmatchedLogs.push(logMsg);
+      result.errorFiles.push({
+        filename: file.originalname,
+        plotNumberAttempted: plotNumberToMatch,
+        error: `Document belongs to admin unit ${document.administrative_unit_id}, not ${adminUnitId}`,
+        type: "admin_unit_mismatch",
       });
       await safeFileDelete(file.path, file.originalname);
       return result;
@@ -521,7 +565,7 @@ async function processSingleFile(file, uploaderId, maps) {
 
     // Enhanced duplicate checking
     const filesArray = Array.isArray(document.files)
-      ? document.files.map(f => 
+      ? document.files.map((f) =>
           typeof f === "string"
             ? {
                 file_path: f,
@@ -536,8 +580,10 @@ async function processSingleFile(file, uploaderId, maps) {
       : [];
 
     // Check for duplicate filename (case-insensitive)
-    const fileNameExists = filesArray.some(f => 
-      f.file_name && f.file_name.toLowerCase() === file.originalname.toLowerCase()
+    const fileNameExists = filesArray.some(
+      (f) =>
+        f.file_name &&
+        f.file_name.toLowerCase() === file.originalname.toLowerCase()
     );
 
     if (fileNameExists) {
@@ -549,7 +595,7 @@ async function processSingleFile(file, uploaderId, maps) {
         documentId: document.id,
         reason: "Duplicate filename",
         matchType: matchType,
-        type: "duplicate_filename"
+        type: "duplicate_filename",
       });
       await safeFileDelete(file.path, file.originalname);
       return result;
@@ -557,7 +603,9 @@ async function processSingleFile(file, uploaderId, maps) {
 
     // Check for duplicate file path
     const serverRelativePath = file.serverRelativePath || file.path;
-    const filePathExists = filesArray.some(f => f.file_path === serverRelativePath);
+    const filePathExists = filesArray.some(
+      (f) => f.file_path === serverRelativePath
+    );
 
     if (filePathExists) {
       const skipMsg = `File path already exists in document: '${serverRelativePath}' for plot ${document.plot_number}`;
@@ -568,7 +616,7 @@ async function processSingleFile(file, uploaderId, maps) {
         documentId: document.id,
         reason: "Duplicate file path",
         matchType: matchType,
-        type: "duplicate_file_path"
+        type: "duplicate_file_path",
       });
       await safeFileDelete(file.path, file.originalname);
       return result;
@@ -583,7 +631,7 @@ async function processSingleFile(file, uploaderId, maps) {
       uploaded_at: new Date(),
       uploaded_by: uploaderId, // FIX: Now using the passed uploaderId
       import_timestamp: new Date().toISOString(),
-      match_type: matchType
+      match_type: matchType,
     };
 
     filesArray.push(newFileMetadata);
@@ -602,7 +650,7 @@ async function processSingleFile(file, uploaderId, maps) {
       document_type: document.document_type,
       files_count: filesArray.length,
       new_file: newFileMetadata,
-      match_type: matchType
+      match_type: matchType,
     });
 
     result.processedFiles.push({
@@ -610,14 +658,12 @@ async function processSingleFile(file, uploaderId, maps) {
       plotNumber: document.plot_number,
       documentId: document.id,
       status: "success",
-      matchType: matchType
+      matchType: matchType,
     });
 
-    console.log(`✅ Successfully attached file to plot ${document.plot_number}`);
-
-    // Update land record with enhanced logging
-    await updateLandRecordActionLog(document, uploaderId, file, matchType);
-
+    console.log(
+      `✅ Successfully attached file to plot ${document.plot_number}`
+    );
   } catch (error) {
     const errorMsg = `Error processing file '${file.originalname}': ${error.message}`;
     result.unmatchedLogs.push(errorMsg);
@@ -626,10 +672,10 @@ async function processSingleFile(file, uploaderId, maps) {
       plotNumberAttempted: file.filenameForMatching,
       error: error.message,
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-      type: "processing_error"
+      type: "processing_error",
     });
     result.processingErrors.push(errorMsg);
-    
+
     await safeFileDelete(file.path, file.originalname);
   }
 
@@ -647,59 +693,17 @@ const safeFileDelete = async (filePath, filename) => {
   }
 };
 
-// Helper function to update land record action log
-const updateLandRecordActionLog = async (document, uploaderId, file, matchType) => {
-  try {
-    const landRecord = await LandRecord.findByPk(document.land_record_id);
-    if (!landRecord) return;
-
-    const actionLog = Array.isArray(landRecord.action_log) ? landRecord.action_log : [];
-
-    let uploader = null;
-    try {
-      uploader = await User.findByPk(uploaderId, {
-        attributes: ["id", "first_name", "middle_name", "last_name"],
-      });
-    } catch (userError) {
-    }
-
-    actionLog.push({
-      action: `DOCUMENT_UPLOAD_${document.document_type || "PDF"}`,
-      document_id: document.id,
-      changed_by: uploader ? {
-        id: uploader.id,
-        first_name: uploader.first_name,
-        middle_name: uploader.middle_name,
-        last_name: uploader.last_name,
-      } : { id: uploaderId },
-      changed_at: new Date().toISOString(),
-      details: {
-        file_name: file.originalname,
-        file_path: file.serverRelativePath || file.path,
-        file_size: file.size,
-        plot_number: document.plot_number,
-        match_type: matchType,
-        upload_method: "bulk_pdf_import"
-      },
-    });
-
-    await landRecord.update({
-      action_log: actionLog,
-      updated_at: new Date(),
-    });
-  } catch (logError) {
-  }
-};
-
 // Helper function for summary message
 const generateSummaryMessage = (successful, unmatched, skipped) => {
   const parts = [];
-  if (successful > 0) parts.push(`${successful} document(s) successfully updated`);
+  if (successful > 0)
+    parts.push(`${successful} document(s) successfully updated`);
   if (unmatched > 0) parts.push(`${unmatched} file(s) could not be matched`);
   if (skipped > 0) parts.push(`${skipped} file(s) skipped (duplicates)`);
-  
-  return parts.length > 0 ? parts.join(', ') : 'No files processed';
+
+  return parts.length > 0 ? parts.join(", ") : "No files processed";
 };
+
 const getDocumentByIdService = async (id, options = {}) => {
   const { transaction } = options;
   try {
@@ -781,7 +785,6 @@ const getDocumentsByLandRecordId = async (landRecordId, options = {}) => {
       transaction,
     });
 
-    
     return documents || [];
   } catch (error) {
     throw new Error(`የሰነድ መልሶ ማግኘት ስህተት: ${error.message}`);
@@ -799,7 +802,6 @@ const updateDocumentsService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       transaction: t,
@@ -816,11 +818,9 @@ const updateDocumentsService = async (
           throw new Error(`አይዲ ${docData.id} ያለው ሰነድ በዚህ መዝገብ አልተገኘም`);
         }
 
-        
         const changes = {};
         const fileChanges = [];
 
-        
         Object.keys(docData).forEach((key) => {
           if (
             document[key] !== docData[key] &&
@@ -835,25 +835,20 @@ const updateDocumentsService = async (
           }
         });
 
-        
         const updatePayload = {
           ...docData,
           updated_by: updater.id,
         };
 
-        
         if (files[index]) {
-          
           const existingFiles = document.files ? [...document.files] : [];
 
-          
           fileChanges.push({
             action: "ለማሻሻል ሰነድ ተጨምሯል",
             file_name: files[index].originalname,
             mime_type: files[index].mimetype,
           });
 
-          
           existingFiles.push({
             file_path: files[index].path,
             file_name: files[index].originalname,
@@ -862,13 +857,11 @@ const updateDocumentsService = async (
             uploaded_by: updater.id,
           });
 
-          
           updatePayload.files = existingFiles;
         }
 
         await document.update(updatePayload, { transaction: t });
 
-        
         if (Object.keys(changes).length > 0 || fileChanges.length > 0) {
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
@@ -919,7 +912,6 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ሰነድ አልተገኘም።`);
     }
 
-    
     const landRecord = await LandRecord.findByPk(document.land_record_id, {
       transaction: t,
     });
@@ -935,7 +927,7 @@ const deleteDocumentService = async (id, deleterId, options = {}) => {
       ];
       await landRecord.save({ transaction: t });
     }
-    
+
     await document.destroy({ transaction: t });
     if (!transaction) await t.commit();
     return { message: `መለያ ቁጥር ${id} ያለው ሰነድ በተሳካ ሁኔታ ተሰርዟል።` };
@@ -956,7 +948,6 @@ const toggleDocumentStatusService = async (
     throw new Error("የሰነድ መለያ ቁጥር አልተገኘም።");
   }
 
-  
   if (action === "activate" && document.isActive) {
     throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ ሁኗል");
   }
@@ -964,10 +955,8 @@ const toggleDocumentStatusService = async (
     throw new Error("ይህ ሰነድ አስቀድሞ አክቲቭ አይደለም");
   }
 
-  
   document.isActive = action === "activate";
 
-  
   if (action === "deactivate") {
     document.inActived_reason = reason;
     document.inactived_by = userId;
