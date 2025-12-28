@@ -71,7 +71,7 @@ const createLandRecordService = async (data, files, user, options = {}) => {
           plot_number: plotNumber,
           deletedAt: null,
         },
-        attributes: ["id"],
+        attributes: ["id", "plot_number", "administrative_unit_id"],
         transaction: t,
       });
 
@@ -727,8 +727,6 @@ async function streamAndParseXLSX(filePath) {
           if (
             row.plot_number === "null" ||
             row.plot_number === "undefined"
-            // row.plot_number === "ሰ_ን_ማ" ||
-            // row.plot_number.length < 2
           ) {
             throw new Error(`ረድፍ ${rowCount} የካርታ ቁጥር ትክክለኛ አይደለም።`);
           }
@@ -3113,7 +3111,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       offset: offset,
       order: order,
       distinct: true, 
-      subQuery: false, // Performance: Necessary when using 'separate' alongside regular includes
+      subQuery: false, 
     });
 
     // 6. Efficient Post-Processing
