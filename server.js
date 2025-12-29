@@ -43,7 +43,7 @@ const port = process.env.PORT || 3000;
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
@@ -51,7 +51,7 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
 }));
 app.use(bodyParser.json());
@@ -96,11 +96,11 @@ app.get('/health', (req, res) => {
     });
     });
 //serve the dist folder for frontend on backend server
-// app.use(express.static(path.join(__dirname, 'dist')));
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-// });
-// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 
 
