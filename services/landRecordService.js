@@ -2983,7 +2983,6 @@ const getMyLandRecordsService = async (userId, options = {}) => {
     throw new Error(`Failed to get user land records: ${error.message}`);
   }
 };
-
 const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) => {
   const {
     page = 1,
@@ -3005,38 +3004,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       whereClause.deletedAt = null;
     }
 
-    // --- PLOT NUMBER FILTER (The Key Enhancement) ---
-    if (queryParams.plot_number) {
-      // Sequelize notation to filter on an associated model column
-      whereClause["$documents.plot_number$"] = queryParams.plot_number;
-    }
-
-    // Debt Filter
-    if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
-      whereClause.has_debt = queryParams.has_debt === "true";
-    }
-
-    // Characteristic Filters
-    if (queryParams.land_use) whereClause.land_use = queryParams.land_use;
-    if (queryParams.land_level) whereClause.land_level = queryParams.land_level;
-    if (queryParams.ownership_type) whereClause.ownership_type = queryParams.ownership_type;
-    if (queryParams.lease_transfer_reason) whereClause.lease_transfer_reason = queryParams.lease_transfer_reason;
-    if (queryParams.land_preparation) whereClause.land_preparation = queryParams.land_preparation;
-
-    // Range Filters (Area & Date)
-    if (queryParams.area_min || queryParams.area_max) {
-      whereClause.area = {};
-      if (queryParams.area_min) whereClause.area[Op.gte] = parseFloat(queryParams.area_min);
-      if (queryParams.area_max) whereClause.area[Op.lte] = parseFloat(queryParams.area_max);
-    }
-
-    if (queryParams.startDate || queryParams.endDate) {
-      whereClause.createdAt = {};
-      if (queryParams.startDate) whereClause.createdAt[Op.gte] = new Date(queryParams.startDate);
-      if (queryParams.endDate) whereClause.createdAt[Op.lte] = new Date(queryParams.endDate);
-    }
-
-    // 2. Optimized Include Conditions
+    // 2. Initialize include conditions
     const includeConditions = [
       {
         model: User,
@@ -3051,15 +3019,6 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
         attributes: ["id", "name", "max_land_levels"],
       },
       {
-        model: Document,
-        as: "documents",
-        // IMPORTANT: 'separate' must be false when filtering by a column in this model
-        separate: queryParams.plot_number ? false : true,
-        attributes: ["id", "document_type", "files", "plot_number", "createdAt", "issue_date"],
-        // If plot_number is requested, only return LandRecords that have that matching document
-        required: !!queryParams.plot_number, 
-      },
-      {
         model: LandPayment,
         as: "payments",
         separate: true,
@@ -3067,19 +3026,93 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       }
     ];
 
-    // 3. Search Logic
-    if (queryParams.search) {
+    // 3. Handle Document Inclusion (for plot number filtering)
+    const hasPlotNumberFilter = queryParams.plot_number && queryParams.plot_number.trim() !== '';
+    
+    // Add documents to include conditions
+    includeConditions.push({
+      model: Document,
+      as: "documents",
+      attributes: ["id", "document_type", "files", "plot_number", "createdAt", "issue_date"],
+      required: hasPlotNumberFilter, // Only require documents when filtering by plot number
+      separate: false, // Keep as false to allow proper querying
+    });
+
+    // 4. Apply Plot Number Filter in Main Where Clause
+    if (hasPlotNumberFilter) {
+      const plotNumber = queryParams.plot_number.trim();
+      whereClause["$documents.plot_number$"] = {
+        [Op.iLike]: `%${plotNumber}%`
+      };
+    }
+
+    // 5. Apply Other Filters
+    // Debt Filter
+    if (queryParams.has_debt !== undefined && queryParams.has_debt !== "") {
+      whereClause.has_debt = queryParams.has_debt === "true";
+    }
+
+    // Characteristic Filters
+    if (queryParams.land_use && queryParams.land_use.trim() !== "") {
+      whereClause.land_use = queryParams.land_use;
+    }
+    
+    if (queryParams.land_level && queryParams.land_level.trim() !== "") {
+      whereClause.land_level = queryParams.land_level;
+    }
+    
+    if (queryParams.ownership_type && queryParams.ownership_type.trim() !== "") {
+      whereClause.ownership_type = queryParams.ownership_type;
+    }
+    
+    if (queryParams.lease_transfer_reason && queryParams.lease_transfer_reason.trim() !== "") {
+      whereClause.lease_transfer_reason = queryParams.lease_transfer_reason;
+    }
+    
+    if (queryParams.land_preparation && queryParams.land_preparation.trim() !== "") {
+      whereClause.land_preparation = queryParams.land_preparation;
+    }
+
+    // Range Filters (Area)
+    if (queryParams.area_min || queryParams.area_max) {
+      whereClause.area = {};
+      if (queryParams.area_min && queryParams.area_min.trim() !== "") {
+        whereClause.area[Op.gte] = parseFloat(queryParams.area_min);
+      }
+      if (queryParams.area_max && queryParams.area_max.trim() !== "") {
+        whereClause.area[Op.lte] = parseFloat(queryParams.area_max);
+      }
+    }
+
+    // Date Range Filters
+    if (queryParams.startDate || queryParams.endDate) {
+      whereClause.createdAt = {};
+      if (queryParams.startDate && queryParams.startDate.trim() !== "") {
+        whereClause.createdAt[Op.gte] = new Date(queryParams.startDate);
+      }
+      if (queryParams.endDate && queryParams.endDate.trim() !== "") {
+        whereClause.createdAt[Op.lte] = new Date(queryParams.endDate);
+      }
+    }
+
+    // 6. General Search Logic (for owners name, parcel number, phone, national ID, AND plot number)
+    if (queryParams.search && queryParams.search.trim() !== "") {
       const searchTerm = decodeURIComponent(queryParams.search.trim()).replace(/%25/g, "%");
       const searchTerms = searchTerm.split(/\s+/).filter(t => t.length > 0);
 
       const searchConditions = {
-        [Op.or]: [
-          { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
-          { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
-          { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
-        ]
+        [Op.or]: []
       };
 
+      // Add search for the main search term
+      searchConditions[Op.or].push(
+        { parcel_number: { [Op.iLike]: `%${searchTerm}%` } },
+        { "$owners.national_id$": { [Op.iLike]: `%${searchTerm}%` } },
+        { "$owners.phone_number$": { [Op.iLike]: `%${searchTerm}%` } },
+        { "$documents.plot_number$": { [Op.iLike]: `%${searchTerm}%` } } // Search in plot numbers too
+      );
+
+      // Add name searches for individual terms
       searchTerms.forEach(term => {
         searchConditions[Op.or].push(
           { "$owners.first_name$": { [Op.iLike]: `%${term}%` } },
@@ -3091,14 +3124,14 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       whereClause[Op.and] = [...(whereClause[Op.and] || []), searchConditions];
     }
 
-    // 4. Sorting
+    // 7. Sorting Logic
     let order = [["createdAt", "DESC"]];
     const validSortFields = ["parcel_number", "area", "land_use", "createdAt", "updatedAt"];
     if (queryParams.sortBy && validSortFields.includes(queryParams.sortBy)) {
       order = [[queryParams.sortBy, queryParams.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC"]];
     }
 
-    // 5. Execution
+    // 8. Execute Query
     const { count, rows: landRecords } = await LandRecord.findAndCountAll({
       where: whereClause,
       include: includeConditions,
@@ -3110,26 +3143,55 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       limit: limit,
       offset: offset,
       order: order,
-      distinct: true, 
-      subQuery: false, 
+      distinct: true,
+      subQuery: false,
     });
 
-    // 6. Efficient Post-Processing
+    // 9. Process Results
     const processedData = landRecords.map(record => {
       const data = record.get({ plain: true });
 
+      // Process owners
       data.owners = data.owners?.map(owner => ({
         ...owner,
         ownership_percentage: owner.LandOwner?.ownership_percentage,
         verified: owner.LandOwner?.verified,
       })) || [];
 
+      // Calculate totals
       data.total_payments = data.payments?.reduce((sum, p) => sum + parseFloat(p.paid_amount || 0), 0) || 0;
-      data.owner_names = data.owners.map(o => `${o.first_name || ""} ${o.middle_name || ""} ${o.last_name || ""}`.trim()).join(", ");
-      data.plot_numbers = data.documents?.map(d => d.plot_number).filter(Boolean).join(", ") || "";
+      
+      // Generate combined owner names
+      data.owner_names = data.owners.map(owner => {
+        const nameParts = [];
+        if (owner.first_name) nameParts.push(owner.first_name);
+        if (owner.middle_name) nameParts.push(owner.middle_name);
+        if (owner.last_name) nameParts.push(owner.last_name);
+        return nameParts.join(" ");
+      }).filter(name => name.trim() !== "").join(", ");
+      
+      // Extract plot numbers from documents
+      data.plot_numbers = data.documents
+        ?.map(doc => doc.plot_number)
+        .filter(plotNum => plotNum && plotNum.trim() !== "")
+        .join(", ") || "";
+      
+      // Counts
       data.document_count = data.documents?.length || 0;
       data.payment_count = data.payments?.length || 0;
       data.administrative_unit_name = data.administrativeUnit?.name || "";
+
+      // If filtering by plot number, ensure only matching documents are shown
+      if (hasPlotNumberFilter && data.documents) {
+        const plotNumberFilter = queryParams.plot_number.trim().toLowerCase();
+        data.documents = data.documents.filter(doc => 
+          doc.plot_number && doc.plot_number.toLowerCase().includes(plotNumberFilter)
+        );
+      }
+
+      // Clean up unnecessary fields
+      delete data.LandOwner;
+      delete data.administrativeUnit;
 
       return data;
     });
@@ -3137,6 +3199,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     const totalPages = Math.ceil(count / limit);
 
     return {
+      success: true,
       total: count,
       page: parseInt(page),
       pageSize: limit,
@@ -3151,6 +3214,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     throw new Error(`የመሬት መዝገቦችን ማግኘት አልተቻለም: ${error.message}`);
   }
 };
+
 const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
   const { transaction } = options;
 
