@@ -95,12 +95,12 @@ app.get('/health', (req, res) => {
     database: db.authenticated ? 'Connected' : 'Disconnected'
   });
 });
-//serve the dist folder for frontend on backend server
-// app.use(express.static(path.join(__dirname, 'dist')));
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-// });
-// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+// serve the dist folder for frontend on backend server
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 
 

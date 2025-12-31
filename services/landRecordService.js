@@ -3680,7 +3680,9 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
         "land_use",
         "ownership_type",
         "area",
+        "land_preparation",
         "record_status",
+        "rejection_reason",
         "ownership_category",
         "administrative_unit_id",
         "createdAt",
@@ -3697,7 +3699,9 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
       land_use: record.land_use,
       ownership_type: record.ownership_type,
       area: record.area,
+      land_preparation: record.land_preparation,
       record_status: record.record_status,
+      rejection_reason: record.rejection_reason,
       ownership_category: record.ownership_category,
       administrative_unit: record.administrativeUnit
         ? {
