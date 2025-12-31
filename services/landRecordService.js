@@ -3072,6 +3072,9 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     if (queryParams.land_preparation && queryParams.land_preparation.trim() !== "") {
       whereClause.land_preparation = queryParams.land_preparation;
     }
+    if (queryParams.ownership_category && queryParams.ownership_category.trim() !== "") {
+      whereClause.ownership_category = queryParams.ownership_category;
+    }
 
     // Range Filters (Area)
     if (queryParams.area_min || queryParams.area_max) {
