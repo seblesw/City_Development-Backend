@@ -57,128 +57,150 @@ const getAllDocumentsController = async (req, res) => {
 };
 const importPDFDocuments = async (req, res) => {
   const startTime = Date.now();
-  let processedFiles = [];
-
+  
   try {
-    const uploaderId = req.user?.id;
-    const files = req.files || [];
-
-    if (!files.length) {
-      return res.status(400).json({
+    // Quick validation - check user first (fastest check)
+    if (!req.user?.id) {
+      return res.status(401).json({
         status: "error",
-        message: "No files uploaded for processing"
+        message: "Authentication required"
       });
     }
 
-    console.log(`📁 Processing ${files.length} PDF files`);
+    // Early file validation
+    if (!req.files?.length) {
+      return res.status(400).json({
+        status: "error",
+        message: "No files uploaded"
+      });
+    }
 
-    // Use your original filename processing logic - this is critical for Amharic/English
-    processedFiles = files.map(file => {
-      let originalname = file.originalname;
-      let processingError = null;
-      
-      try {
-        // Your original decoding strategy - keep this exactly as it was
-        const filenameWithoutExt = originalname.replace(/\.pdf$/i, '');
-        
-        // Multiple decoding strategies with fallbacks (ORIGINAL LOGIC)
-        try {
-          originalname = decodeURIComponent(escape(filenameWithoutExt));
-        } catch (decodeError) {
-          try {
-            originalname = Buffer.from(filenameWithoutExt, 'binary').toString('utf8');
-          } catch (bufferError) {
-            originalname = filenameWithoutExt;
-          }
-        }
-        
-        // Enhanced normalization for better matching (ORIGINAL LOGIC)
-        const normalizedName = originalname
-          .normalize("NFC")
-          .trim()
-          .replace(/\s+/g, ' ')
-          .replace(/[^\p{L}\p{N}\s_-]/gu, '')
-          .trim();
+    const uploaderId = req.user.id;
+    const adminUnitId = req.user.administrative_unit_id;
+    const files = req.files;
+    const totalFiles = files.length;
 
-        return {
-          ...file,
-          originalname: originalname,
-          filenameForMatching: normalizedName,
-          cleanPlotNumber: normalizedName.replace(/[^\p{L}\p{N}]/gu, ''),
-          processingError: null
-        };
-      } catch (error) {
-        // Fallback processing with basic cleaning (ORIGINAL LOGIC)
-        const fallbackName = file.originalname.replace(/\.pdf$/i, '').trim();
-        return {
-          ...file,
-          originalname: fallbackName,
-          filenameForMatching: fallbackName,
-          cleanPlotNumber: fallbackName.replace(/[^\w]/g, ''),
-          processingError: error.message
-        };
-      }
-    });
-
-    console.log(`🔄 Starting PDF import for ${processedFiles.length} files`);
-    const result = await importPDFs({ 
-      files: processedFiles, 
-      uploaderId 
-    });
-
-    const processingTime = (Date.now() - startTime) / 1000;
     
+    console.log(`⚡ Processing ${totalFiles} files for user ${uploaderId}`);
+
+    // Optimized file processing - parallelize filename decoding
+    const processedFiles = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const filenameWithoutExt = file.originalname.replace(/\.pdf$/i, '');
+          let decodedName = filenameWithoutExt;
+          
+          // Parallel decoding attempts
+          const decodeAttempts = [
+            () => decodeURIComponent(escape(filenameWithoutExt)),
+            () => Buffer.from(filenameWithoutExt, 'binary').toString('utf8'),
+            () => filenameWithoutExt // fallback
+          ];
+          
+          for (const attempt of decodeAttempts) {
+            try {
+              decodedName = attempt();
+              break; // Use first successful decode
+            } catch {
+              continue;
+            }
+          }
+          
+          // Normalize in one pass
+          const normalizedName = decodedName
+            .normalize("NFC")
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+            .trim();
+
+          return {
+            ...file,
+            originalname: decodedName + '.pdf',
+            filenameForMatching: normalizedName,
+            cleanPlotNumber: normalizedName.replace(/[^\p{L}\p{N}]/gu, '')
+          };
+        } catch (error) {
+          // Fast fallback - minimal processing
+          const fallbackName = file.originalname.replace(/\.pdf$/i, '').trim();
+          return {
+            ...file,
+            originalname: file.originalname,
+            filenameForMatching: fallbackName,
+            cleanPlotNumber: fallbackName.replace(/[^\w]/g, '')
+          };
+        }
+      })
+    );
+
+    console.log(`📊 Files processed in ${Date.now() - startTime}ms`);
+    
+    // Call service with timing
+    const serviceStart = Date.now();
+    const result = await importPDFs({
+      adminUnitId,
+      files: processedFiles,
+      uploaderId
+    });
+    const serviceTime = Date.now() - serviceStart;
+    
+    console.log(`✅ Service completed in ${serviceTime}ms`);
+
+    // Pre-calculate values to avoid repeated calculations
+    const successfulCount = result.updatedDocuments?.length || 0;
+    const failedCount = result.unmatchedLogs?.length || 0;
+    const skippedCount = result.skippedFiles?.length || 0;
+    const successRate = totalFiles > 0 
+      ? ((successfulCount / totalFiles) * 100).toFixed(1) + '%'
+      : '0%';
+
+    const totalTime = Date.now() - startTime;
+    
+    // Response with performance metrics
     const response = {
       status: "success",
-      message: result.message,
-      processingTime: `${processingTime}s`,
-      performance: {
-        filesPerSecond: (files.length / processingTime).toFixed(2),
-        totalFiles: files.length
-      },
-      updatedCount: result.updatedDocuments.length,
-      updatedDocuments: result.updatedDocuments,
-      unmatchedLogs: result.unmatchedLogs,
-      errorFiles: result.errorFiles,
-      skippedFiles: result.skippedFiles,
-      processingErrors: result.processingErrors,
+      message: result.message || "Import completed",
+      processingTime: `${(totalTime / 1000).toFixed(2)}s`,
       summary: {
-        totalFiles: files.length,
-        successful: result.updatedDocuments.length,
-        failed: result.unmatchedLogs.length,
-        skipped: result.skippedFiles.length,
-        processingErrors: result.processingErrors?.length || 0,
-        successRate: ((result.updatedDocuments.length / files.length) * 100).toFixed(1) + '%',
-        matchStatistics: result.matchStatistics
+        total: totalFiles,
+        successful: successfulCount,
+        failed: failedCount,
+        skipped: skippedCount,
+        successRate: successRate,
+        performance: {
+          filesPerSecond: (totalFiles / (totalTime / 1000)).toFixed(2),
+          serviceTime: `${serviceTime}ms`,
+          fileProcessingTime: `${(totalTime - serviceTime)}ms`
+        }
       },
-      timestamp: new Date().toISOString()
+      details: {
+        updatedDocuments: result.updatedDocuments || [],
+        unmatchedLogs: result.unmatchedLogs || [],
+        skippedFiles: result.skippedFiles || [],
+        matchStatistics: result.matchStatistics || {}
+      }
     };
 
-    console.log(`✅ PDF import completed in ${processingTime}s: ${result.updatedDocuments.length}/${files.length} successful`);
-    
+    console.log(`🎯 Total processing: ${totalTime}ms (${successfulCount}/${totalFiles} successful)`);
+
     return res.status(200).json(response);
+
   } catch (error) {
-    const processingTime = (Date.now() - startTime) / 1000;
-    console.error(`❌ PDF import failed after ${processingTime}s:`, error.message);
+    const totalTime = Date.now() - startTime;
     
+    console.error(`❌ Import failed after ${totalTime}ms:`, error.message);
+    
+    // Return error with timing info
     return res.status(500).json({
       status: "error",
-      message: "PDF import failed",
-      processingTime: `${processingTime}s`,
+      message: "Import failed",
+      processingTime: `${(totalTime / 1000).toFixed(2)}s`,
       error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      timestamp: new Date().toISOString()
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
 
-// Helper function for cleanup
-async function cleanupFilesOnError(files) {
-  const cleanupPromises = files.map(file => 
-    safeFileDelete(file.path, file.originalname).catch(() => {})
-  );
-  await Promise.allSettled(cleanupPromises);
-}
 const addFilesToDocumentController = async (req, res) => {
   try {
     const { id } = req.params;

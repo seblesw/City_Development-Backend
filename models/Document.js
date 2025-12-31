@@ -190,6 +190,7 @@ module.exports = (db, DataTypes) => {
           fields: ["plot_number", "administrative_unit_id"],
           where: { deletedAt: null },
         },
+        { fields: ["administrative_unit_id"] },
         { fields: ["reference_number"] },
         { fields: ["land_record_id"] },
         { fields: ["document_type"] },

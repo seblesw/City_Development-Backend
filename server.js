@@ -89,18 +89,18 @@ app.use('/api/v1/geo-coordinates', coordinateRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
+    res.status(200).json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
     database: db.authenticated ? 'Connected' : 'Disconnected'
   });
 });
-// serve the dist folder for frontend on backend server
-app.use(express.static(path.join(__dirname, 'dist')));
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+//serve the dist folder for frontend on backend server
+// app.use(express.static(path.join(__dirname, 'dist')));
+// app.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// });
+// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 
 

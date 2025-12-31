@@ -247,7 +247,7 @@ const getAllUserService = async (options = {}) => {
         "is_active",
         "last_login",
       ],
-      where: { deletedAt: { [Op.eq]: null } },
+      where: { deletedAt: { [Op.eq]: null } , is_active: true},
       order: [["createdAt", "DESC"]],
       transaction,
     });
