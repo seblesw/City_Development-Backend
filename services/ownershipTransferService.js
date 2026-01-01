@@ -302,21 +302,25 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
     if (!searchTerm || String(searchTerm).trim() === "") return [];
 
     const q = String(searchTerm).trim();
+    const exactQ = q; // For exact matching
+    const partialQ = `%${q}%`; // For partial matching
 
     // Build base conditions for administrative unit
     const adminUnitCondition = adminUnitId 
       ? { administrative_unit_id: adminUnitId }
       : {};
 
-    // 1) Find matching documents (plot_number, reference_number, file_number)
+    // 1) Find matching documents - PLOT NUMBER MUST BE EXACT MATCH
     const matchingDocuments = await Document.findAll({
       where: {
         [Op.or]: [
-          { plot_number: { [Op.iLike]: `%${q}%` } },
-          { reference_number: { [Op.iLike]: `%${q}%` } },
-          { file_number: { [Op.iLike]: `%${q}%` } },
+          // Plot number must be exact match
+          { plot_number: { [Op.iLike]: exactQ } },
+          // Other fields can be partial matches
+          { reference_number: { [Op.iLike]: partialQ } },
+          { file_number: { [Op.iLike]: partialQ } },
         ],
-        ...adminUnitCondition, // Apply condition only if adminUnitId exists
+        ...adminUnitCondition,
       },
       attributes: [
         "id",
@@ -325,13 +329,17 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         "reference_number",
         "file_number",
       ],
+      raw: true,
     });
 
-    // 2) Find matching land records by parcel_number
+    // 2) Find matching land records by parcel_number (partial match allowed)
     const matchingLandRecords = await LandRecord.findAll({
       where: {
-        parcel_number: { [Op.iLike]: `%${q}%` },
-        ...adminUnitCondition, // Apply condition only if adminUnitId exists
+        [Op.or]: [
+          // Parcel number can be partial match
+          { parcel_number: { [Op.iLike]: partialQ } },
+        ],
+        ...adminUnitCondition,
       },
       attributes: [
         "id",
@@ -347,24 +355,48 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         "administrative_unit_id",
       ],
       limit,
+      raw: true,
     });
 
-    // Rest of your code remains the same...
     // 3) Collect unique land_record ids from both sources
-    const allLandRecordIds = Array.from(
-      new Set([
-        ...matchingDocuments.map((d) => d.land_record_id).filter(Boolean),
-        ...matchingLandRecords.map((r) => r.id).filter(Boolean),
-      ])
-    );
+    const documentRecords = matchingDocuments.map((d) => ({
+      land_record_id: d.land_record_id,
+      plot_number: d.plot_number,
+      reference_number: d.reference_number,
+      file_number: d.file_number,
+      // Check if it's an exact plot number match
+      isExactPlotMatch: d.plot_number && d.plot_number.toLowerCase() === q.toLowerCase(),
+    }));
+
+    const landRecordEntries = matchingLandRecords.map((r) => ({
+      id: r.id,
+      parcel_number: r.parcel_number,
+      isExactMatch: r.parcel_number && r.parcel_number.toLowerCase() === q.toLowerCase(),
+    }));
+
+    // Create arrays for exact plot matches and other matches
+    const exactPlotMatchIds = documentRecords
+      .filter(doc => doc.isExactPlotMatch && doc.land_record_id)
+      .map(doc => doc.land_record_id);
+
+    const otherMatchIds = [
+      ...documentRecords
+        .filter(doc => !doc.isExactPlotMatch && doc.land_record_id)
+        .map(doc => doc.land_record_id),
+      ...landRecordEntries
+        .map(lr => lr.id)
+    ];
+
+    // Combine IDs, but prioritize exact plot matches
+    const allLandRecordIds = [...new Set([...exactPlotMatchIds, ...otherMatchIds])];
 
     if (allLandRecordIds.length === 0) return [];
 
-    // 4) Fetch LandRecord rows with documents and owners (User via belongsToMany through LandOwner)
+    // 4) Fetch LandRecord rows with documents and owners
     const landRecords = await LandRecord.findAll({
       where: { 
         id: allLandRecordIds,
-        ...adminUnitCondition, // Apply condition only if adminUnitId exists
+        ...adminUnitCondition,
       },
       attributes: [
         "id",
@@ -412,23 +444,36 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
       ],
     });
 
-    // Rest of your normalization and sorting code...
     // 5) Normalize/format results for client
     const results = landRecords.map((record) => {
       const docs = Array.isArray(record.documents) ? record.documents : [];
       const owners = Array.isArray(record.owners) ? record.owners : [];
 
-      // prefer a document that matches the query (gives better relevance)
-      const lowq = q.toLowerCase();
-      let plotDocument =
-        docs.find((d) => {
+      // Check if this record has an exact plot number match
+      const hasExactPlotMatch = docs.some(doc => 
+        doc.plot_number && doc.plot_number.toLowerCase() === q.toLowerCase()
+      );
+
+      // Find the document that matches the search (exact plot match if exists)
+      let plotDocument = null;
+      if (hasExactPlotMatch) {
+        plotDocument = docs.find(doc => 
+          doc.plot_number && doc.plot_number.toLowerCase() === q.toLowerCase()
+        );
+      } else if (docs.length > 0) {
+        // If no exact plot match, find any document that matches partially
+        const lowq = q.toLowerCase();
+        plotDocument = docs.find((d) => {
           const pn = String(d.plot_number || "").toLowerCase();
           const rn = String(d.reference_number || "").toLowerCase();
           const fn = String(d.file_number || "").toLowerCase();
           return pn.includes(lowq) || rn.includes(lowq) || fn.includes(lowq);
-        }) ||
-        docs[0] ||
-        null;
+        }) || docs[0];
+      }
+
+      // Check if parcel number matches
+      const hasParcelMatch = record.parcel_number && 
+        record.parcel_number.toLowerCase().includes(q.toLowerCase());
 
       // primary owner (user) - first owner user if exists
       const primaryOwnerUser = owners.length > 0 ? owners[0] : null;
@@ -464,37 +509,35 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         has_plot_document: docs.length > 0,
         documents_count: docs.length,
 
-        // owner details (only existence matters)
+        // owner details
         has_owners: owners.length > 0,
         owners_count: owners.length,
         primary_owner: primaryOwner,
+
+        // Relevance flags for sorting
+        _hasExactPlotMatch: hasExactPlotMatch,
+        _hasParcelMatch: hasParcelMatch,
       };
     });
 
-    // 6) Sort results by relevance (exact parcel or plot matches first)
+    // 6) Sort results - EXACT PLOT MATCHES FIRST, then other matches
     results.sort((a, b) => {
-      const aScore =
-        (a.parcel_number &&
-        a.parcel_number.toLowerCase().includes(q.toLowerCase())
-          ? 2
-          : 0) +
-        (a.plot_number &&
-        String(a.plot_number).toLowerCase().includes(q.toLowerCase())
-          ? 1
-          : 0);
-      const bScore =
-        (b.parcel_number &&
-        b.parcel_number.toLowerCase().includes(q.toLowerCase())
-          ? 2
-          : 0) +
-        (b.plot_number &&
-        String(b.plot_number).toLowerCase().includes(q.toLowerCase())
-          ? 1
-          : 0);
-      return bScore - aScore;
+      // Exact plot matches come first
+      if (a._hasExactPlotMatch && !b._hasExactPlotMatch) return -1;
+      if (!a._hasExactPlotMatch && b._hasExactPlotMatch) return 1;
+      
+      // If both are exact plot matches or neither, check parcel matches
+      if (a._hasParcelMatch && !b._hasParcelMatch) return -1;
+      if (!a._hasParcelMatch && b._hasParcelMatch) return 1;
+      
+      // Otherwise sort by creation date (newest first)
+      return new Date(b.created_date) - new Date(a.created_date);
     });
 
-    return results.slice(0, limit);
+    // Remove internal fields before returning
+    const finalResults = results.map(({ _hasExactPlotMatch, _hasParcelMatch, ...rest }) => rest);
+    
+    return finalResults.slice(0, limit);
   } catch (error) {
     throw new Error("Failed to search land records");
   }
