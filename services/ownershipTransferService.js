@@ -328,6 +328,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         "plot_number",
         "reference_number",
         "file_number",
+        "files"
       ],
       raw: true,
     });
@@ -364,6 +365,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
       plot_number: d.plot_number,
       reference_number: d.reference_number,
       file_number: d.file_number,
+      files: d.files,
       // Check if it's an exact plot number match
       isExactPlotMatch: d.plot_number && d.plot_number.toLowerCase() === q.toLowerCase(),
     }));
