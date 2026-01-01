@@ -8,13 +8,13 @@ const { getActionLog } = require("../controllers/actionLogController");
 
 // Rate limiters
 const getLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: "በጣም ብዙ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
 
 const postLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: "በጣም ብዙ የማስፈጸሚያ ጥያቄዎች፣ እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
 });
@@ -26,15 +26,19 @@ router.post(
   upload.single("file"),
   landRecordController.importLandRecordsFromXLSX
 );
-router.get('/actions/recent', landRecordController.getRecentActions);
+router.get("/actions/recent", landRecordController.getRecentActions);
 router.get("/trash", authMiddleware.protect, landRecordController.getTrash);
 router.get(
   "/stats",
   authMiddleware.protect,
   landRecordController.getLandRecordStatsController
 ),
-router.get("/land-banks", authMiddleware.protect, landRecordController.getLandBankRecords)
-router.get('/:landRecordId/action-logs', authMiddleware.protect, getActionLog);
+  router.get(
+    "/land-banks",
+    authMiddleware.protect,
+    landRecordController.getLandBankRecords
+  );
+router.get("/:landRecordId/action-logs", authMiddleware.protect, getActionLog);
 
 // Main Land Record Routes
 router.post(
@@ -42,10 +46,11 @@ router.post(
   authMiddleware.protect,
   // postLimiter,
   upload.fields([
-    { name: 'documents', maxCount: 20 },
-    { name: 'profile_picture', maxCount: 10 },
-    { name: 'profile_picture_0', maxCount: 10 }
-  ]),  landRecordController.createLandRecord
+    { name: "documents", maxCount: 20 },
+    { name: "profile_picture", maxCount: 10 },
+    { name: "profile_picture_0", maxCount: 10 },
+  ]),
+  landRecordController.createLandRecord
 );
 router.post(
   "/:id/status",
@@ -66,13 +71,19 @@ router.get(
   // getLimiter,
   landRecordController.getAllLandRecords
 );
-router.get('/filter-options', authMiddleware.protect, landRecordController.getFilterOptions);
-
-router.get('/admin-stat',
+router.get(
+  "/filter-options",
   authMiddleware.protect,
-  landRecordController.getLandRecordsStats);
+  landRecordController.getFilterOptions
+);
 
-  router.get(
+router.get(
+  "/admin-stat",
+  authMiddleware.protect,
+  landRecordController.getLandRecordsStats
+);
+
+router.get(
   "/admin-unit-records",
   authMiddleware.protect,
   landRecordController.getLandRecordsByUserAdminUnit
@@ -88,6 +99,11 @@ router.get(
   "/my-records",
   authMiddleware.protect,
   landRecordController.getLandRecordsByCreator
+);
+router.put(
+  "/:id/toggle-activation",
+  authMiddleware.protect,
+  landRecordController.toggleRecordActivation
 );
 
 router.get(
@@ -112,7 +128,11 @@ router.put(
 
 //trash management
 // This route is used to move a land record to the trash
-router.post("/:id/trash", authMiddleware.protect, landRecordController.moveToTrash);
+router.post(
+  "/:id/trash",
+  authMiddleware.protect,
+  landRecordController.moveToTrash
+);
 
 router.post(
   "/:id/restore",

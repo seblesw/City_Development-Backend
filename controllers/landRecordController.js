@@ -23,6 +23,7 @@ const {
   getLandRecordsStatsService,
   getFilterOptionsService,
   getLandRecordsStatsByAdminUnit,
+  toggleRecordActivationService,
 } = require("../services/landRecordService");
 
 const createLandRecord = async (req, res) => {
@@ -158,6 +159,29 @@ const importLandRecordsFromXLSX = async (req, res) => {
       status: "error",
       message: error.message,
       ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
+    });
+  }
+};
+
+const toggleRecordActivation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const adminUnitId = req.user.administrative_unit_id; 
+    
+    const result = await toggleRecordActivationService(id, userId, adminUnitId);
+
+    return res.json({
+      success: true,
+      message: `Land record ${result.is_dead ? 'deactivated' : 'activated'} successfully`,
+      data: result
+    });
+
+  } catch (error) {
+    console.error('Toggle Activation Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -795,6 +819,7 @@ const getLandRecordStatsController = async (req, res, next) => {
 module.exports = {
   moveToTrash,
   getLandRecordStatsController,
+  toggleRecordActivation,
   restoreFromTrash,
   getLandBankRecords,
   permanentlyDelete,

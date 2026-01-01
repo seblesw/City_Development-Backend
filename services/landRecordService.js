@@ -1108,6 +1108,32 @@ function calculatePaymentStatus(row) {
   }
 }
 
+const toggleRecordActivationService = async (landRecordId, userId, adminUnitId) => {
+  const landRecord = await LandRecord.findOne({
+    where: {
+      id: landRecordId,
+      administrative_unit_id: adminUnitId 
+    }
+  });
+
+  if (!landRecord) {
+    throw new Error('Land record not found or not in your administrative unit');
+  }
+
+  // Toggle the is_dead status
+  const newStatus = !landRecord.is_dead;
+  
+  // Update the land record
+  await landRecord.update({
+    is_dead: newStatus
+  });
+
+  return {
+    id: landRecord.id,
+    is_dead: newStatus,
+    updatedAt: landRecord.updatedAt
+  };
+};
 const getAllLandRecordService = async (options = {}) => {
   const { page = 1, pageSize = 10, queryParams = {} } = options;
 
@@ -4382,6 +4408,7 @@ module.exports = {
   getTrashItemsService,
   createLandRecordService,
   importLandRecordsFromXLSXService,
+  toggleRecordActivationService,
   changeRecordStatusService,
   getAllLandRecordService,
   getLandRecordByIdService,
