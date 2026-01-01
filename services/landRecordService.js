@@ -3356,6 +3356,129 @@ const getRejectedLandRecordsService = async (adminUnitId, options = {}) => {
     throw new Error(`የመሬት መዝገቦችን ማግኘት ስህተት: ${error.message}`);
   }
 };
+
+const getDeadRecordsService = async (adminUnitId, page = 1, limit = 50, search = '') => {
+  const offset = (page - 1) * limit;
+
+  // Build search conditions
+  const searchConditions = {};
+  if (search) {
+    searchConditions[Op.or] = [
+      { parcel_number: { [Op.iLike]: `%${search}%` } },
+      { '$documents.plot_number$': { [Op.iLike]: `%${search}%` } }
+    ];
+  }
+
+  // Build where conditions
+  const whereConditions = {
+    administrative_unit_id: adminUnitId,
+    is_dead: true,
+    ...searchConditions
+  };
+
+  // Get total count for pagination
+  const totalCount = await LandRecord.count({
+    where: whereConditions,
+    include: [{
+      model: Document,
+      as: 'documents',
+      required: false,
+      attributes: []
+    }]
+  });
+
+  // Get records with pagination and relations
+  const records = await LandRecord.findAll({
+    where: whereConditions,
+    include: [
+      {
+        model: Document,
+        as: 'documents',
+        attributes: ['id', 'plot_number', 'reference_number', 'file_number', 'issue_date','files'],
+        required: false
+      },
+      {
+        model: User,
+        as: 'owners',
+        attributes: ['id', 'first_name', 'middle_name', 'last_name', 'national_id', 'phone_number'],
+        through: { attributes: [] },
+        required: false
+      }
+    ],
+    order: [['updatedAt', 'DESC']],
+    limit,
+    offset,
+    distinct: true 
+  });
+
+  // Format the response
+  const formattedRecords = records.map(record => ({
+    id: record.id,
+    parcel_number: record.parcel_number,
+    area: record.area,
+    land_use: record.land_use,
+    ownership_type: record.ownership_type,
+    has_debt: record.has_debt,
+    address_kebele: record.address_kebele,
+    address_ketena: record.address_ketena,
+    is_dead: record.is_dead,
+    updatedAt: record.updatedAt,
+    // Get first document info
+    plot_number: record.documents?.[0]?.plot_number || null,
+    reference_number: record.documents?.[0]?.reference_number || null,
+    files: record.documents?.[0]?.files || [],
+    file_number: record.documents?.[0]?.file_number || null,
+    issue_date: record.documents?.[0]?.issue_date || null,
+    // Get owners info
+    owners: record.owners.map(owner => ({
+      id: owner.id,
+      name: [owner.first_name, owner.middle_name, owner.last_name].filter(Boolean).join(' '),
+      national_id: owner.national_id,
+      phone_number: owner.phone_number
+    })),
+    owners_count: record.owners.length
+  }));
+
+  return {
+    records: formattedRecords,
+    pagination: {
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      hasNextPage: page < Math.ceil(totalCount / limit),
+      hasPrevPage: page > 1
+    }
+  };
+};
+
+const toggleActivation = async (landRecordId, userId, adminUnitId) => {
+  // Find the land record with admin unit filter
+  const landRecord = await LandRecord.findOne({
+    where: {
+      id: landRecordId,
+      administrative_unit_id: adminUnitId
+    }
+  });
+
+  if (!landRecord) {
+    throw new Error('Land record not found or not in your administrative unit');
+  }
+
+  // Toggle the is_dead status
+  const newStatus = !landRecord.is_dead;
+  
+  // Update the land record
+  await landRecord.update({
+    is_dead: newStatus
+  });
+
+  return {
+    id: landRecord.id,
+    is_dead: newStatus,
+    updatedAt: landRecord.updatedAt
+  };
+};
 const updateLandRecordService = async (
   recordId,
   data,
@@ -4402,6 +4525,7 @@ const getLandBankRecordsService = async (user, page = 1, pageSize = 10) => {
 module.exports = {
   moveToTrashService,
   restoreFromTrashService,
+  getDeadRecordsService,
   permanentlyDeleteService,
   getLandBankRecordsService,
   getRejectedLandRecordsService,

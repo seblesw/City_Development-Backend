@@ -93,6 +93,11 @@ router.get(
   authMiddleware.protect,
   landRecordController.getRejectedLandRecords
 );
+router.get(
+  "/dead-records",
+  authMiddleware.protect,
+  landRecordController.getDeadRecords
+);
 
 // This route is used to get land records created by the logged-in user only records he created
 router.get(

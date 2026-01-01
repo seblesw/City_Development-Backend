@@ -24,6 +24,7 @@ const {
   getFilterOptionsService,
   getLandRecordsStatsByAdminUnit,
   toggleRecordActivationService,
+  getDeadRecordsService,
 } = require("../services/landRecordService");
 
 const createLandRecord = async (req, res) => {
@@ -447,6 +448,31 @@ const getRejectedLandRecords = async (req, res) => {
   }
 };
 
+
+const getDeadRecords = async (req, res) => {
+  try {
+    const adminUnitId = req.user.administrative_unit_id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    
+    const result = await getDeadRecordsService(adminUnitId, page, limit, search);
+
+    return res.json({
+      success: true,
+      message: 'Dead records retrieved successfully',
+      data: result.records,
+      pagination: result.pagination
+    });
+
+  } catch (error) {
+    console.error('Get Dead Records Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 const updateLandRecord = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -824,6 +850,7 @@ module.exports = {
   getLandBankRecords,
   permanentlyDelete,
   getTrash,
+  getDeadRecords,
   createLandRecord,
   importLandRecordsFromXLSX,
   getAllLandRecords,
