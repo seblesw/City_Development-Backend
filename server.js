@@ -93,8 +93,8 @@ app.get('/health', (req, res) => {
       status: 'OK',
       timestamp: new Date().toISOString(),
     database: db.authenticated ? 'Connected' : 'Disconnected'
-    });
-    });
+  });
+});
 //serve the dist folder for frontend on backend server
 // app.use(express.static(path.join(__dirname, 'dist')));
 // app.get('/', (req, res) => {
