@@ -295,13 +295,18 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
 };
 
 // Service: Search Land Records by Document Plot Number and landrecord parcel number if exist -to find the landrecord for the ownershiptransfer
-const searchLandRecordsService = async (searchTerm, opts = {}) => {
+const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {}) => {
   const { limit = 50 } = opts;
 
   try {
     if (!searchTerm || String(searchTerm).trim() === "") return [];
 
     const q = String(searchTerm).trim();
+
+    // Build base conditions for administrative unit
+    const adminUnitCondition = adminUnitId 
+      ? { administrative_unit_id: adminUnitId }
+      : {};
 
     // 1) Find matching documents (plot_number, reference_number, file_number)
     const matchingDocuments = await Document.findAll({
@@ -311,6 +316,7 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
           { reference_number: { [Op.iLike]: `%${q}%` } },
           { file_number: { [Op.iLike]: `%${q}%` } },
         ],
+        ...adminUnitCondition, // Apply condition only if adminUnitId exists
       },
       attributes: [
         "id",
@@ -319,13 +325,13 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
         "reference_number",
         "file_number",
       ],
-      limit,
     });
 
     // 2) Find matching land records by parcel_number
     const matchingLandRecords = await LandRecord.findAll({
       where: {
         parcel_number: { [Op.iLike]: `%${q}%` },
+        ...adminUnitCondition, // Apply condition only if adminUnitId exists
       },
       attributes: [
         "id",
@@ -343,6 +349,7 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
       limit,
     });
 
+    // Rest of your code remains the same...
     // 3) Collect unique land_record ids from both sources
     const allLandRecordIds = Array.from(
       new Set([
@@ -355,7 +362,10 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
 
     // 4) Fetch LandRecord rows with documents and owners (User via belongsToMany through LandOwner)
     const landRecords = await LandRecord.findAll({
-      where: { id: allLandRecordIds },
+      where: { 
+        id: allLandRecordIds,
+        ...adminUnitCondition, // Apply condition only if adminUnitId exists
+      },
       attributes: [
         "id",
         "parcel_number",
@@ -402,6 +412,7 @@ const searchLandRecordsService = async (searchTerm, opts = {}) => {
       ],
     });
 
+    // Rest of your normalization and sorting code...
     // 5) Normalize/format results for client
     const results = landRecords.map((record) => {
       const docs = Array.isArray(record.documents) ? record.documents : [];

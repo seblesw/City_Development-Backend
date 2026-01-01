@@ -60,6 +60,7 @@ const createTransferOwnership = async (req, res) => {
 // Search Land Records Controller
 const searchLandRecordsController = async (req, res) => {
   try {
+  const user = req.user;
     const { q } = req.query; 
     if (!q || q.length < 0) {
       return res.json({
@@ -67,9 +68,10 @@ const searchLandRecordsController = async (req, res) => {
         data: []
       });
     }
-    
-    const landRecords = await searchLandRecordsService(q);
-    
+    const adminUnitId = user.administrative_unit_id;
+
+    const landRecords = await searchLandRecordsService(adminUnitId, q);
+
     return res.json({
       success: true,
       data: landRecords
