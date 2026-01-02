@@ -3025,6 +3025,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     // 1. Build Base Where Clause
     const whereClause = {
       administrative_unit_id: adminUnitId,
+      is_dead: false,
     };
 
     if (!includeDeleted) {
