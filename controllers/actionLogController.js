@@ -12,7 +12,7 @@ const getActionLog = async (req, res) => {
         {
           model: User,
           as: 'performedBy',
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ['id', 'first_name', 'middle_name']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -151,7 +151,7 @@ const getAllActionLogs = async (req, res) => {
         {
           model: User,
           as: 'performedBy',
-          attributes: ['id', 'first_name', 'last_name', 'email']
+          attributes: ['id', 'first_name', 'middle_name', 'email']
         },
         // Optional: Include LandRecord if needed
         {
@@ -167,7 +167,7 @@ const getAllActionLogs = async (req, res) => {
 
     // Get unique performers for filter dropdown - ONLY from same admin unit
     const performers = await User.findAll({
-      attributes: ['id', 'first_name', 'last_name'], // Fixed: removed middle_name if not needed
+      attributes: ['id', 'first_name', 'middle_name'], // Fixed: removed middle_name if not needed
       include: [
         {
           model: ActionLog,
@@ -179,7 +179,7 @@ const getAllActionLogs = async (req, res) => {
           }
         }
       ],
-      group: ['User.id', 'User.first_name', 'User.last_name'], // Fixed: use last_name instead of middle_name
+      group: ['User.id', 'User.first_name', 'User.middle_name'], // Fixed: use middle_name instead of last_name
       raw: true
     });
 
@@ -206,7 +206,7 @@ const getAllActionLogs = async (req, res) => {
       filters: {
         performers: performers.map(p => ({
           id: p.id,
-          name: `${p.first_name} ${p.last_name}`
+          name: `${p.first_name} ${p.middle_name}`
         })),
         action_types: actionTypes.map(a => a.action_type)
       },
