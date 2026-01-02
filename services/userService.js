@@ -22,9 +22,9 @@ const createLandOwner = async (
 
   try {
     // Find the default role - use the actual default name from your Role model
-    const defaultRole = await Role.findOne({ 
-      where: { name: 'ተጠቃሚ' }, // This matches your Role model's default
-      transaction: t 
+    const defaultRole = await Role.findOne({
+      where: { name: "ተጠቃሚ" }, // This matches your Role model's default
+      transaction: t,
     });
 
     if (!defaultRole) {
@@ -33,7 +33,6 @@ const createLandOwner = async (
 
     const createdOwners = await Promise.all(
       ownersData.map(async (ownerData) => {
-        
         const nationalId = ownerData.national_id
           ? String(ownerData.national_id)
           : null;
@@ -52,7 +51,6 @@ const createLandOwner = async (
           ? await bcrypt.hash(ownerData.password, 10)
           : await bcrypt.hash("12345678", 10);
 
-        
         const whereClause = {
           [Op.or]: [],
           deletedAt: { [Op.eq]: null },
@@ -78,7 +76,7 @@ const createLandOwner = async (
               administrative_unit_id: administrativeUnitId,
               updated_by: creatorId,
               profile_picture: profilePicture || existingUser.profile_picture,
-              role_id: ownerData.role_id || existingUser.role_id, 
+              role_id: ownerData.role_id || existingUser.role_id,
             },
             { transaction: t }
           );
@@ -95,7 +93,7 @@ const createLandOwner = async (
             administrative_unit_id: administrativeUnitId,
             password,
             profile_picture: profilePicture,
-            role_id: roleId, 
+            role_id: roleId,
             created_by: creatorId,
             is_active: true,
           },
@@ -109,9 +107,8 @@ const createLandOwner = async (
   } catch (error) {
     if (!transaction && t) await t.rollback();
 
-    
     const errorMessage = `Failed to create land owners: ${error.message}`;
-    
+
     throw new Error(errorMessage);
   }
 };
@@ -126,7 +123,6 @@ const updateLandOwnersService = async (
   const t = transaction || (await sequelize.transaction());
 
   try {
-    
     const landRecord = await LandRecord.findOne({
       where: { id: landRecordId },
       transaction: t,
@@ -138,7 +134,6 @@ const updateLandOwnersService = async (
 
     const updatedOwners = await Promise.all(
       newOwnersData.map(async (ownerData) => {
-        
         const existingOwner = existingOwners.find((o) => o.id === ownerData.id);
         if (!existingOwner) {
           throw new Error(
@@ -146,7 +141,6 @@ const updateLandOwnersService = async (
           );
         }
 
-        
         const changes = {};
         Object.keys(ownerData).forEach((key) => {
           if (
@@ -161,7 +155,6 @@ const updateLandOwnersService = async (
           }
         });
 
-        
         const updatePayload = {
           ...ownerData,
           updated_by: updater.id,
@@ -176,7 +169,6 @@ const updateLandOwnersService = async (
           transaction: t,
         });
 
-        
         if (Object.keys(changes).length > 0) {
           const currentLog = Array.isArray(landRecord.action_log)
             ? landRecord.action_log
@@ -247,7 +239,7 @@ const getAllUserService = async (options = {}) => {
         "is_active",
         "last_login",
       ],
-      where: { deletedAt: { [Op.eq]: null } , is_active: true},
+      where: { deletedAt: { [Op.eq]: null }, is_active: true },
       order: [["createdAt", "DESC"]],
       transaction,
     });
@@ -259,14 +251,24 @@ const getAllUserService = async (options = {}) => {
 const getAllUserByAdminUnitService = async (adminUnitId, options = {}) => {
   const { transaction } = options;
   try {
+    //users by admin unit except user with role ተጠቃሚ
     const users = await User.findAll({
       where: {
         administrative_unit_id: adminUnitId,
         deletedAt: { [Op.eq]: null },
         role_id: { [Op.ne]: null },
       },
+
       include: [
-        { model: Role, as: "role", attributes: ["id", "name"] },
+        {
+          model: Role,
+          as: "role",
+          attributes: ["id", "name"],
+          where: {
+            name: { [Op.ne]: "ተጠቃሚ" }, 
+          },
+          required: true,
+        },
         {
           model: AdministrativeUnit,
           as: "administrativeUnit",
@@ -352,15 +354,14 @@ const getUserById = async (id, options = {}) => {
   }
 };
 const getUsersByCreatorIdService = async (creatorId, options = {}) => {
-  const { transaction, page, limit} = options;
-  
+  const { transaction, page, limit } = options;
+
   try {
     const whereClause = {
       created_by: creatorId,
       deletedAt: { [Op.eq]: null },
     };
-    
-    
+
     const queryOptions = {
       where: whereClause,
       include: [
@@ -391,18 +392,18 @@ const getUsersByCreatorIdService = async (creatorId, options = {}) => {
         "is_active",
         "last_login",
         "createdAt",
-        "updatedAt"
+        "updatedAt",
       ],
       order: [["createdAt", "DESC"]],
       transaction,
     };
-    
+
     // Add pagination if provided
     if (page && limit) {
       queryOptions.offset = (page - 1) * limit;
       queryOptions.limit = limit;
     }
-    
+
     const users = await User.findAll(queryOptions);
     return users;
   } catch (error) {
@@ -416,16 +417,13 @@ const deleteUser = async (id, deleterId, options = {}) => {
   try {
     t = t || (await sequelize.transaction());
 
-    
     const user = await User.findByPk(id, { transaction: t });
     if (!user) {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
 
-    
     await user.update({ deleted_by: deleterId }, { transaction: t });
 
-    
     const userWithDeleter = await User.findByPk(id, {
       include: [
         {
@@ -443,7 +441,6 @@ const deleteUser = async (id, deleterId, options = {}) => {
       transaction: t,
     });
 
-    
     await user.destroy({ force: true, transaction: t });
 
     if (!transaction) await t.commit();
@@ -460,9 +457,8 @@ const deleteUser = async (id, deleterId, options = {}) => {
 const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
-  let shouldCommit = false; 
+  let shouldCommit = false;
 
-  
   const validateUniqueFields = async (userId, updateData) => {
     const uniqueFields = [
       { field: "email", error: "ይህ ኢሜይል ቀደም ሲል ተመዝግቧል።" },
@@ -485,7 +481,6 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     }
   };
 
-  
   const prepareUpdateData = (updateData, currentUserData) => {
     const updatableFields = [
       "first_name",
@@ -516,13 +511,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
   };
 
   try {
-    
     if (!t) {
       t = await sequelize.transaction();
       shouldCommit = true;
     }
 
-    
     const user = await User.findByPk(id, {
       transaction: t,
       include: [
@@ -535,10 +528,8 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ አልተገኘም።`);
     }
 
-    
     await validateUniqueFields(id, data);
 
-    
     if (data.role_id !== undefined && data.role_id !== user.role_id) {
       const roleExists = await Role.findByPk(data.role_id, { transaction: t });
       if (!roleExists) {
@@ -546,23 +537,19 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       }
     }
 
-    
     const updateData = prepareUpdateData(data, user);
 
     if (Object.keys(updateData).length > 0) {
       updateData.updated_at = new Date();
-      updateData.updated_by = updaterId; 
+      updateData.updated_by = updaterId;
 
       await user.update(updateData, { transaction: t });
     }
 
-    
     if (shouldCommit) {
       await t.commit();
     }
 
-    
-    
     return await User.findByPk(id, {
       include: [
         {
@@ -579,7 +566,6 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       attributes: { exclude: ["password"] },
     });
   } catch (error) {
-    
     if (shouldCommit && t) {
       await t.rollback();
     }
@@ -602,7 +588,6 @@ const deactivateUserService = async (id, deactivatorId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ ታግዷል!`);
     }
 
-    
     await user.update(
       {
         is_active: false,
@@ -611,7 +596,6 @@ const deactivateUserService = async (id, deactivatorId, options = {}) => {
       { transaction: t }
     );
 
-    
     const userWithDeactivator = await User.findByPk(id, {
       include: [
         {
@@ -655,7 +639,6 @@ const activateUserService = async (id, activatorId, options = {}) => {
       throw new Error(`መለያ ቁጥር ${id} ያለው ተጠቃሚ ቀድሞውኑ አክቲቭ  ነበር።`);
     }
 
-    
     await user.update(
       {
         is_active: true,
@@ -684,12 +667,12 @@ const addNewLandOwnerService = async ({
   const transaction = await LandOwner.sequelize.transaction();
 
   try {
-    
     const landRecord = await LandRecord.findByPk(land_record_id, {
       include: [
-        { model: User,
-          
-           as: "owners",
+        {
+          model: User,
+
+          as: "owners",
           attributes: [
             "id",
             "first_name",
@@ -704,7 +687,7 @@ const addNewLandOwnerService = async ({
             as: "landOwner",
             attributes: ["ownership_percentage"],
           },
-           },
+        },
         { model: User, as: "creator" },
       ],
       transaction,
@@ -721,14 +704,12 @@ const addNewLandOwnerService = async ({
       };
     }
 
-    
     const existingUser = await User.findOne({
       where: { national_id: userData.national_id },
       transaction,
     });
 
     if (existingUser) {
-      
       const isAlreadyOwner = landRecord.owners.some(
         (owner) => owner.user_id === existingUser.id
       );
@@ -738,12 +719,10 @@ const addNewLandOwnerService = async ({
       }
     }
 
-    
     let user;
     if (existingUser) {
       user = existingUser;
     } else {
-      
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
       user = await User.create(
@@ -758,7 +737,6 @@ const addNewLandOwnerService = async ({
       );
     }
 
-    
     let finalPercentage = ownership_percentage;
 
     if (!ownership_percentage) {
@@ -771,7 +749,6 @@ const addNewLandOwnerService = async ({
         (100 - existingPercentageSum) / (landRecord.owners.length + 1);
     }
 
-    
     const newOwner = await LandOwner.create(
       {
         user_id: user.id,
@@ -782,7 +759,6 @@ const addNewLandOwnerService = async ({
       { transaction }
     );
 
-    
     const actionLogEntry = {
       action: `አዲስ ባለቤት ተጨምሯል: ${user.first_name} ${user.last_name}`,
       details: {
@@ -831,7 +807,7 @@ const addNewLandOwnerService = async ({
     };
   } catch (error) {
     await transaction.rollback();
-    
+
     throw error;
   }
 };
@@ -846,7 +822,6 @@ const removeLandOwnerFromLandService = async (
   try {
     t = t || (await sequelize.transaction());
 
-    
     const landRecord = await LandRecord.findByPk(land_record_id, {
       include: [
         {
@@ -863,19 +838,16 @@ const removeLandOwnerFromLandService = async (
       throw new Error("የመሬት መዝገብ አልተገኘም");
     }
 
-    
     const owner = landRecord.owners.find((o) => o.id === parseInt(owner_id));
     if (!owner) {
       throw new Error("ይህ ባለቤት በዚህ  የመሬት መዝገብ አልተገኘም");
     }
 
-    
     await LandOwner.destroy({
       where: { user_id: owner.id, land_record_id },
       transaction: t,
     });
 
-    
     const actionLogEntry = {
       action: `ባለቤት ወጥቷል: ${owner.first_name} ${owner.last_name}`,
       details: { user_id: owner.id },
@@ -899,7 +871,7 @@ const removeLandOwnerFromLandService = async (
     };
   } catch (error) {
     if (!transaction && t) await t.rollback();
-    
+
     throw new Error(`ባለቤት ማስተካከያ ስህተት: ${error.message}`);
   }
 };
