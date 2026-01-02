@@ -1142,6 +1142,7 @@ const getAllLandRecordService = async (options = {}) => {
 
     const whereClause = {
       deletedAt: null,
+      is_dead: false,
     };
 
     if (queryParams.parcelNumber) {
@@ -3449,34 +3450,6 @@ const getDeadRecordsService = async (adminUnitId, page = 1, limit = 50, search =
       hasNextPage: page < Math.ceil(totalCount / limit),
       hasPrevPage: page > 1
     }
-  };
-};
-
-const toggleActivation = async (landRecordId, userId, adminUnitId) => {
-  // Find the land record with admin unit filter
-  const landRecord = await LandRecord.findOne({
-    where: {
-      id: landRecordId,
-      administrative_unit_id: adminUnitId
-    }
-  });
-
-  if (!landRecord) {
-    throw new Error('Land record not found or not in your administrative unit');
-  }
-
-  // Toggle the is_dead status
-  const newStatus = !landRecord.is_dead;
-  
-  // Update the land record
-  await landRecord.update({
-    is_dead: newStatus
-  });
-
-  return {
-    id: landRecord.id,
-    is_dead: newStatus,
-    updatedAt: landRecord.updatedAt
   };
 };
 const updateLandRecordService = async (
