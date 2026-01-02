@@ -24,6 +24,13 @@ router.get(
   getLimiter,
   documentController.getAllDocumentsController
 );
+
+// Get documents without files for dropdown (requires authentication, accessible to መዝጋቢ and አስተዳደር)
+router.get(
+  "/without-files",
+  authMiddleware.protect,
+  documentController.getDocumentsWithoutFiles
+);
 router.post(
   "/import-pdfs",
   authMiddleware.protect,

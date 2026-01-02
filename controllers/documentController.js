@@ -8,6 +8,7 @@ const {
   importPDFs,
   getAllDocumentService,
   toggleDocumentStatusService,
+  getDocumentsWithoutFilesService,
 } = require("../services/documentService");
 
 const createDocumentController = async (req, res) => {
@@ -55,6 +56,41 @@ const getAllDocumentsController = async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 };
+const getDocumentsWithoutFiles = async (req, res) => {
+  try {
+    const administrativeUnitId = req.user.administrative_unit_id;
+    
+    if (!administrativeUnitId) {
+      return res.status(400).json({
+        success: false,
+        message: "የአስተዳደር ክልል መለያ አልተገኘም",
+      });
+    }
+
+    const documents = await getDocumentsWithoutFilesService(administrativeUnitId);
+
+    const dropdownOptions = documents.map(doc => ({
+      value: doc.id,
+      label: doc.plot_number,
+    }));
+    
+    return res.status(200).json({
+      success: true,
+      data: dropdownOptions,
+      message: "ፋይሎች የሌሏቸው ሰነዶች በተሳካ ሁኔታ ተገኝተዋል",
+    });
+    
+  } catch (error) {
+    console.error("Error fetching documents without files:", error);
+    
+    return res.status(500).json({
+      success: false,
+      message: "የሰነዶች ዝርዝር ማግኘት አልተሳካም",
+      error: error.message,
+    });
+  }
+};
+
 const importPDFDocuments = async (req, res) => {
   const startTime = Date.now();
   
@@ -310,6 +346,7 @@ const toggleDocumentStatus = async (req, res) => {
 
 module.exports = {
   createDocumentController,
+  getDocumentsWithoutFiles,
   toggleDocumentStatus,
   importPDFDocuments,
   getAllDocumentsController,

@@ -251,6 +251,12 @@ const CreateTransferService = async (data, adminUnitId, userId) => {
     const ownershipTransfer = await OwnershipTransfer.create(transferData, {
       transaction: t,
     });
+    await LandRecord.update(
+      {
+        is_dead: true,
+      },
+      { where: { id: landRecord.id }, transaction: t }
+    );
 
     await t.commit();
 

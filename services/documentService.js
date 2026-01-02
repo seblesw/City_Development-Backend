@@ -194,6 +194,30 @@ const getAllDocumentService = async (options = {}) => {
   }
 };
 
+const getDocumentsWithoutFilesService = async (administrativeUnitId, options = {}) => {
+  const { transaction } = options;
+  
+  try {
+    const documents = await Document.findAll({
+      where: {
+        administrative_unit_id: administrativeUnitId,
+        deletedAt: null,
+        [Op.or]: [
+          { files: null },
+          { files: [] }
+        ]
+      },
+      attributes: ["id", "plot_number"],
+      order: [["plot_number", "ASC"]],
+      transaction,
+    });
+    
+    return documents;
+  } catch (error) {
+    throw new Error(`ፋይሎች የሌሏቸውን ሰነዶች ማግኘት ስህተት: ${error.message}`);
+  }
+};
+
 const addFilesToDocumentService = async (
   id,
   files,
@@ -988,4 +1012,5 @@ module.exports = {
   updateDocumentsService,
   deleteDocumentService,
   getDocumentsByLandRecordId,
+  getDocumentsWithoutFilesService,
 };
