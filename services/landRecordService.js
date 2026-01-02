@@ -1471,10 +1471,10 @@ const getFilterOptionsService = async (adminUnitId = null) => {
       LandRecord.findAll({
         attributes: [
           "land_use", "ownership_type", "lease_transfer_reason",
-          "land_preparation", "land_level", "record_status", "ownership_category"
+          "land_preparation", "land_level", "record_status", "ownership_category","is_dead"
         ],
         where: whereClause,
-        group: ["land_use", "ownership_type", "lease_transfer_reason", "land_preparation", "land_level", "record_status", "ownership_category"],
+        group: ["land_use", "ownership_type", "lease_transfer_reason", "land_preparation", "land_level", "record_status", "ownership_category","is_dead"],
         raw: true,
       }),
       LandRecord.findOne({
@@ -1528,6 +1528,7 @@ const getFilterOptionsService = async (adminUnitId = null) => {
       land_level: getSortedUniqueValues("land_level", "numerical"),
       record_status: getSortedUniqueValues("record_status"),
       ownership_category: getSortedUniqueValues("ownership_category"),
+      is_dead: getSortedUniqueValues("is_dead"),
       
       // ንጹህ የፕሎት ቁጥሮች
       plot_number: exactPlotNumbers,
@@ -3025,7 +3026,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     // 1. Build Base Where Clause
     const whereClause = {
       administrative_unit_id: adminUnitId,
-      is_dead: false,
+    
     };
 
     if (!includeDeleted) {
@@ -3102,6 +3103,9 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     }
     if (queryParams.ownership_category && queryParams.ownership_category.trim() !== "") {
       whereClause.ownership_category = queryParams.ownership_category;
+    }
+    if (queryParams.is_dead !== undefined && queryParams.is_dead !== "") {
+      whereClause.is_dead = queryParams.is_dead;
     }
 
     // Range Filters (Area)
@@ -3517,8 +3521,8 @@ const updateLandRecordService = async (
           Object.keys(data.land_record).forEach((key) => {
             if (
               existingRecord[key] !== data.land_record[key] &&
-              key !== "updated_at" &&
-              key !== "created_at"
+              key !== "updatedAt" &&
+              key !== "createdAt"
             ) {
               changes[key] = {
                 from: existingRecord[key],
