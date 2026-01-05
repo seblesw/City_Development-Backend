@@ -22,37 +22,30 @@ const generateLandRecordQRService = async (landRecord) => {
     
     // Prepare QR text content
     const qrText = `
-LAND RECORD CERTIFICATE
+የመሬት መረጃ
 ========================
-Record ID: LR-${landRecord.id}
-Plot(s): ${plotNumbersText}
+የይዞታ አይዲ: LR-${landRecord.id}
+የካርታ ቁጥር: ${plotNumbersText}
+የቦታው ስፋት: ${landRecord.area || 'N/A'} ካ.ሜ
 
-OWNER INFORMATION
+ባለይዞታ መረጃ
 -----------------
-Name(s): ${ownerNamesText}
-${owners[0]?.id ? `ID No: ${owners[0].id}` : ''}
-${owners[0]?.phone_number ? `Phone: ${owners[0].phone_number}` : ''}
+ባለይዞታ ስም: ${ownerNamesText}
+${owners[0]?.id ? `አይዲ: ${owners[0].id}` : ''}
+${owners[0]?.phone_number ? `ስልክ: ${owners[0].phone_number}` : ''}
 
-DOCUMENT STORAGE
+የሰነድ/ፋይል መገኛ
 ----------------
-Shelf: ${primaryDocument.shelf_number || 'N/A'}
-Box: ${primaryDocument.box_number || 'N/A'}
-File: ${primaryDocument.file_number || 'N/A'}
-Reference: ${primaryDocument.reference_number || 'N/A'}
-Issue Date: ${primaryDocument.issue_date || new Date().toLocaleDateString('en-GB')}
-
-LAND DETAILS
-------------
-Area: ${landRecord.area || 'N/A'} sq.m
-
-ADDITIONAL INFO
----------------
-Documents: ${documents.length} document(s)
-Document Types: ${documents.map(d => d.document_type).filter(Boolean).join(', ') || 'N/A'}
+ሸልፍ ቁ: ${primaryDocument.shelf_number || 'N/A'}
+ሳጥን ቁ: ${primaryDocument.box_number || 'N/A'}
+ኬንት/አቃፊ ቁ: ${primaryDocument.reference_number || 'N/A'}
+የፋይል ቁ: ${primaryDocument.file_number || 'N/A'}
+ካርታ የተሰጠበት ቀን: ${primaryDocument.issue_date || new Date().toLocaleDateString('en-GB')}
+የሰነድ አይነት: ${documents.map(d => d.document_type).filter(Boolean).join(', ') || 'N/A'}
 
 ========================
-Scan to verify authenticity
-Land Management System
+
+
 `.trim();
 
     // Generate QR code
@@ -61,7 +54,7 @@ Land Management System
       width: 350,
       margin: 2,
       color: {
-        dark: '#1a237e', // Professional blue
+        dark: '#1a237e', 
         light: '#FFFFFF'
       }
     });
