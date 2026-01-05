@@ -17,7 +17,7 @@ const generateLandRecordQRService = async (landRecord) => {
     
     // Get owner information (assuming landRecord has owners association)
     const owners = landRecord.owners || [];
-    const ownerNames = owners.map(owner => owner.full_name || `${owner.first_name} ${owner.last_name}`).filter(Boolean);
+    const ownerNames = owners.map(owner => `${owner.first_name} ${owner.middle_name}`).filter(Boolean);
     const ownerNamesText = ownerNames.length > 0 ? ownerNames.join(', ') : 'N/A';
     
     // Prepare QR text content
