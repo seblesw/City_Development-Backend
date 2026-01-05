@@ -1,30 +1,46 @@
-const db = require('../models');
-const { generateDocumentQR, generatePrintableQR, getQRTextData } = require('../services/qrCodeService');
-
+const { generateLandRecordQRService } = require('../services/qrCodeService');
+const { LandRecord, Document, User } = require('../models');
 /**
- * Generate QR code for document
+ * Generate QR code for land record
  */
-const generateQR = async (req, res) => {
+const generateLandRecordQR = async (req, res) => {
   try {
-    const { documentId } = req.params;
+    const { landRecordId } = req.params;
+
     
-    // Find document with all required attributes
-    const document = await db.Document.findByPk(documentId, {
-      attributes: [
-        'id', 'plot_number', 'shelf_number', 'box_number', 
-        'file_number', 'reference_number', 'document_type',
-        'administrative_unit_id'
+    // Find land record with its documents and owners
+    const landRecord = await LandRecord.findByPk(landRecordId, {
+        where: { deletedAt: null ,
+            administrative_unit_id: req.user.administrative_unit_id
+        },
+      include: [
+        {
+          model: Document,
+          as: 'documents',
+          attributes: [
+            'id', 'plot_number', 'shelf_number', 'box_number', 
+            'file_number', 'reference_number', 'document_type',
+            'verified_plan_number'
+          ]
+        },
+        {
+          model: User,
+          as: 'owners',
+          through: [{ attributes: [] }],
+          attributes: ['id', 'first_name', 'middle_name', 'phone_number']
+        }
       ]
     });
 
-    if (!document) {
+    if (!landRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Document not found'
+        message: 'Land record not found'
       });
     }
 
-    const result = await generateDocumentQR(document);
+    // Generate QR code
+    const result = await generateLandRecordQRService(landRecord);
     
     if (!result.success) {
       return res.status(500).json({
@@ -38,36 +54,47 @@ const generateQR = async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error('Controller error (generateQR):', error);
+    console.error('Controller error (generateLandRecordQR):', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while generating QR code'
+      message: 'Server error while generating land record QR code'
     });
   }
 };
 
 /**
- * Get printable QR code (SVG)
+ * Download land record QR code as PNG
  */
-const getPrintableQR = async (req, res) => {
+const downloadLandRecordQR = async (req, res) => {
   try {
-    const { documentId } = req.params;
+    const { landRecordId } = req.params;
     
-    const document = await db.Document.findByPk(documentId, {
-      attributes: [
-        'id', 'plot_number', 'shelf_number', 'box_number', 
-        'file_number', 'reference_number'
+    const landRecord = await LandRecord.findByPk(landRecordId, {
+      include: [
+        {
+          model: Document,
+          as: 'documents',
+          attributes: [
+            'id', 'plot_number', 'shelf_number', 'box_number', 
+            'file_number', 'reference_number', 'document_type'
+          ]
+        },
+        {
+          model: Owner,
+          as: 'owners',
+          attributes: ['id', 'full_name', 'first_name', 'last_name']
+        }
       ]
     });
 
-    if (!document) {
+    if (!landRecord) {
       return res.status(404).json({
         success: false,
-        message: 'Document not found'
+        message: 'Land record not found'
       });
     }
 
-    const result = await generatePrintableQR(document);
+    const result = await generateLandRecordQR(landRecord);
     
     if (!result.success) {
       return res.status(500).json({
@@ -76,116 +103,34 @@ const getPrintableQR = async (req, res) => {
       });
     }
 
-    // Set SVG content type
-    res.set('Content-Type', 'image/svg+xml');
-    res.send(result.svg);
-  } catch (error) {
-    console.error('Controller error (getPrintableQR):', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while generating printable QR'
-    });
-  }
-};
-
-/**
- * Get QR code as PNG file download
- */
-const downloadQR = async (req, res) => {
-  try {
-    const { documentId } = req.params;
-    
-    const document = await db.Document.findByPk(documentId, {
-      attributes: [
-        'id', 'plot_number', 'shelf_number', 'box_number', 
-        'file_number', 'reference_number', 'document_type',
-        'administrative_unit_id'
-      ]
-    });
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: 'Document not found'
-      });
-    }
-
-    const result = await generateDocumentQR(document);
-    
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        message: result.error
-      });
-    }
-
-    // Extract base64 data and convert to buffer
+    // Convert base64 to buffer for download
     const base64Data = result.qrCode.replace(/^data:image\/png;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');
+
+    // Generate filename
+    const ownerName = landRecord.owners[0]?.full_name || 
+                     landRecord.owners[0]?.first_name || 
+                     'unknown';
+    const filename = `land-record-${landRecordId}-${ownerName.replace(/\s+/g, '-')}.png`;
 
     // Set download headers
     res.set({
       'Content-Type': 'image/png',
-      'Content-Disposition': `attachment; filename="document-${document.id}-qr.png"`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': buffer.length
     });
 
     res.send(buffer);
   } catch (error) {
-    console.error('Controller error (downloadQR):', error);
+    console.error('Controller error (downloadLandRecordQR):', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while downloading QR code'
-    });
-  }
-};
-
-/**
- * Get QR code text data only
- */
-const getQRText = async (req, res) => {
-  try {
-    const { documentId } = req.params;
-    
-    const document = await db.Document.findByPk(documentId, {
-      attributes: [
-        'id', 'plot_number', 'shelf_number', 'box_number', 
-        'file_number', 'reference_number'
-      ]
-    });
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: 'Document not found'
-      });
-    }
-
-    const result = await getQRTextData(document);
-    
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        message: result.error
-      });
-    }
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error) {
-    console.error('Controller error (getQRText):', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while getting QR text'
+      message: 'Server error while downloading land record QR code'
     });
   }
 };
 
 module.exports = {
-  generateQR,
-  getPrintableQR,
-  downloadQR,
-  getQRText
+  generateLandRecordQR,
+  downloadLandRecordQR
 };

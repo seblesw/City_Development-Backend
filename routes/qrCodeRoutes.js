@@ -1,16 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const {
-  generateQR,
-  getPrintableQR,
-  downloadQR,
-  getQRText
+  generateLandRecordQR,
+  downloadLandRecordQR
 } = require('../controllers/qrCodeController');
+const authMiddleware = require('../middlewares/authMiddleware');
 
-// QR Code routes
-router.get('/:documentId/qr', generateQR);              // Get QR code as JSON with base64 image
-router.get('/:documentId/qr/print', getPrintableQR);    // Get SVG for printing
-router.get('/:documentId/qr/download', downloadQR);     // Download PNG
-router.get('/:documentId/qr/text', getQRText);          // Get text data only
+// Land Record QR code routes
+router.get('/:landRecordId/qr',authMiddleware.protect, generateLandRecordQR);           // Get QR code as JSON
+router.get('/:landRecordId/qr/download', downloadLandRecordQR);  // Download QR as PNG
 
 module.exports = router;

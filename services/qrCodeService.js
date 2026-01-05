@@ -1,119 +1,99 @@
-const QRCode = require("qrcode");
+const QRCode = require('qrcode');
 
 /**
- * Generate QR code for document
+ * Generate QR code for land record with its documents
  */
-const generateDocumentQR = async (document) => {
+const generateLandRecordQRService = async (landRecord) => {
   try {
-    // Create simple text format for QR code
+    // Get documents from landRecord
+    const documents = landRecord.documents || [];
+    
+    // Get plot numbers from documents (there could be multiple documents with different plot numbers)
+    const plotNumbers = [...new Set(documents.map(doc => doc.plot_number).filter(Boolean))];
+    const plotNumbersText = plotNumbers.length > 0 ? plotNumbers.join(', ') : 'N/A';
+    
+    // Get document storage information (take from first document if exists)
+    const primaryDocument = documents[0] || {};
+    
+    // Get owner information (assuming landRecord has owners association)
+    const owners = landRecord.owners || [];
+    const ownerNames = owners.map(owner => owner.full_name || `${owner.first_name} ${owner.last_name}`).filter(Boolean);
+    const ownerNamesText = ownerNames.length > 0 ? ownerNames.join(', ') : 'N/A';
+    
+    // Prepare QR text content
     const qrText = `
-DOCUMENT TRACKING
-Plot: ${document.plot_number}
-Shelf: ${document.shelf_number || "N/A"}
-Box: ${document.box_number || "N/A"}
-File: ${document.file_number || "N/A"}
-Ref: ${document.reference_number || "N/A"}
-ID: ${document.id}
-Type: ${document.document_type || "N/A"}
-Unit: ${document.administrative_unit_id || ""}
+LAND RECORD CERTIFICATE
+========================
+Record ID: LR-${landRecord.id}
+Plot(s): ${plotNumbersText}
+
+OWNER INFORMATION
+-----------------
+Name(s): ${ownerNamesText}
+${owners[0]?.id ? `ID No: ${owners[0].id}` : ''}
+${owners[0]?.phone_number ? `Phone: ${owners[0].phone_number}` : ''}
+
+DOCUMENT STORAGE
+----------------
+Shelf: ${primaryDocument.shelf_number || 'N/A'}
+Box: ${primaryDocument.box_number || 'N/A'}
+File: ${primaryDocument.file_number || 'N/A'}
+Reference: ${primaryDocument.reference_number || 'N/A'}
+Issue Date: ${primaryDocument.issue_date || new Date().toLocaleDateString('en-GB')}
+
+LAND DETAILS
+------------
+Area: ${landRecord.area || 'N/A'} sq.m
+
+ADDITIONAL INFO
+---------------
+Documents: ${documents.length} document(s)
+Document Types: ${documents.map(d => d.document_type).filter(Boolean).join(', ') || 'N/A'}
+
+========================
+Scan to verify authenticity
+Land Management System
 `.trim();
 
-    // Generate QR code as base64 data URL
+    // Generate QR code
     const qrCodeBase64 = await QRCode.toDataURL(qrText, {
-      errorCorrectionLevel: "H",
-      width: 300,
-      margin: 1,
+      errorCorrectionLevel: 'H',
+      width: 350,
+      margin: 2,
+      color: {
+        dark: '#1a237e', // Professional blue
+        light: '#FFFFFF'
+      }
     });
 
     return {
       success: true,
       qrCode: qrCodeBase64,
       qrText: qrText,
-      document: {
-        id: document.id,
-        plotNumber: document.plot_number,
-        shelfNumber: document.shelf_number,
-        boxNumber: document.box_number,
-        fileNumber: document.file_number,
-        referenceNumber: document.reference_number,
-        documentType: document.document_type,
-        unitId: document.administrative_unit_id,
-      },
+      landRecord: {
+        id: landRecord.id,
+        plotNumbers: plotNumbers,
+        area: landRecord.area,
+        issueDate: primaryDocument.issue_date,
+        ownerCount: owners.length,
+        documentCount: documents.length,
+        storageInfo: {
+          shelfNumber: primaryDocument.shelf_number,
+          boxNumber: primaryDocument.box_number,
+          fileNumber: primaryDocument.file_number,
+          referenceNumber: primaryDocument.reference_number
+        }
+      }
     };
   } catch (error) {
-    console.error("QR generation error:", error);
+    console.error('Land Record QR generation error:', error);
     return {
       success: false,
-      error: "Failed to generate QR code",
-    };
-  }
-};
-
-/**
- * Generate printable QR code (SVG format)
- */
-const generatePrintableQR = async (document) => {
-  try {
-    const qrText = `DOC:${document.id}|PLOT:${document.plot_number}|SHELF:${
-      document.shelf_number || ""
-    }|BOX:${document.box_number || ""}|FILE:${document.file_number || ""}|REF:${
-      document.reference_number || ""
-    }`;
-
-    const svgString = await QRCode.toString(qrText, {
-      type: "svg",
-      errorCorrectionLevel: "H",
-      width: 200,
-      margin: 1,
-    });
-
-    return {
-      success: true,
-      svg: svgString,
-    };
-  } catch (error) {
-    console.error("Printable QR error:", error);
-    return {
-      success: false,
-      error: "Failed to generate printable QR",
-    };
-  }
-};
-
-/**
- * Get QR text data only (for API display)
- */
-const getQRTextData = async (document) => {
-  try {
-    const qrText = `PLOT:${document.plot_number}|SHELF:${
-      document.shelf_number || ""
-    }|BOX:${document.box_number || ""}|FILE:${document.file_number || ""}|REF:${
-      document.reference_number || ""
-    }|ID:${document.id}`;
-
-    return {
-      success: true,
-      qrText: qrText,
-      documentInfo: {
-        plotNumber: document.plot_number,
-        shelfNumber: document.shelf_number,
-        boxNumber: document.box_number,
-        fileNumber: document.file_number,
-        referenceNumber: document.reference_number,
-        documentId: document.id,
-      },
-    };
-  } catch (error) {
-    console.error("QR text error:", error);
-    return {
-      success: false,
-      error: "Failed to generate QR text",
+      error: 'Failed to generate land record QR code'
     };
   }
 };
 
 module.exports = {
-  generateDocumentQR,
-  generatePrintableQR,
-  getQRTextData,
+  generateLandRecordQRService
 };
