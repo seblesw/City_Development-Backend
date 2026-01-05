@@ -26,6 +26,7 @@ const leaseAgreementRoutes = require('./routes/leaseAgreementRoutes');
 const ownershipTransferRoutes = require('./routes/ownershipTransferRoutes');
 const actionLogsRoutes = require('./routes/actionLogsRoutes');
 const coordinateRoutes = require('./routes/geoCoordinatesRoutes');
+const qrCodeRoutes = require('./routes/qrCodeRoutes');
 // Import services
 const { checkOverdueSchedules } = require('./services/paymentScheduleService');
 const { createReminderNotifications, createOverdueNotifications, sendPendingNotifications, createGlobalNoticeNotifications } = require('./services/notificationService');
@@ -43,7 +44,7 @@ const port = process.env.PORT || 3000;
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
@@ -51,7 +52,7 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: process.env.CLIENT_URL || '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
 }));
 app.use(bodyParser.json());
@@ -86,6 +87,7 @@ app.use('/api/v1/lease-agreements', leaseAgreementRoutes);
 app.use('/api/v1/ownership-transfers', ownershipTransferRoutes);
 app.use('/api/v1/action-logs', actionLogsRoutes);
 app.use('/api/v1/geo-coordinates', coordinateRoutes);
+app.use('/api/v1/qrcodes', qrCodeRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
