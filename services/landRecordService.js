@@ -1687,6 +1687,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       LandRecord.findOne({
         where: {
           administrative_unit_id: adminUnitId,
+          is_dead: false,
           createdAt: { [Op.between]: [yearStart, todayEnd] },
         },
         attributes: [
@@ -1746,7 +1747,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 4. Ownership Type Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "ownership_type",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1760,7 +1761,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 5. Zoning Type Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "zoning_type",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1774,7 +1775,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 6. Land Level Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "land_level",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1788,7 +1789,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 7. Infrastructure Status Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "infrastructure_status",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1801,7 +1802,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 8. Land Preparation Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "land_preparation",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1814,7 +1815,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 9. Land History Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "land_history",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1829,6 +1830,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
+          is_dead: false,
           createdAt: { [Op.gte]: last12MonthsStart },
         },
         attributes: [
@@ -1855,6 +1857,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
+          is_dead: false,
           createdAt: { [Op.gte]: last12WeeksStart },
         },
         attributes: [
@@ -1879,6 +1882,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
+          is_dead: false,
           createdAt: { [Op.gte]: last3YearsStart },
         },
         attributes: [
@@ -1917,7 +1921,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 14. Record Status Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "record_status",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1930,7 +1934,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 15. Recent Activity (last 10 records)
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         include: [
           {
             model: User,
@@ -1948,6 +1952,8 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           "land_preparation",
           "area",
           "record_status",
+          "ownership_category",
+          "is_dead",
           "zoning_type",
           "land_level",
           "infrastructure_status",
@@ -3026,6 +3032,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
     // 1. Build Base Where Clause
     const whereClause = {
       administrative_unit_id: adminUnitId,
+      is_dead: false,
     
     };
 
