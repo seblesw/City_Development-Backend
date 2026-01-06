@@ -44,7 +44,7 @@ const port = process.env.PORT || 3000;
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
@@ -52,7 +52,7 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
+  origin: process.env.FRONTEND_URL || '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
 }));
 app.use(bodyParser.json());

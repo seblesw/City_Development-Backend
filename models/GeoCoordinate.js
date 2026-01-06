@@ -2,8 +2,20 @@
 const proj4 = require('proj4');
 
 // Define projections (Adindan UTM Zone 37N → WGS84)
-proj4.defs('EPSG:20137', '+proj=utm +zone=37 +ellps=clrk66 +towgs84=-166,-15,204,0,0,0,0 +units=m +no_defs');
-proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+// More accurate definition for Adindan / UTM zone 37N
+proj4.defs('EPSG:20137', 
+  '+proj=utm +zone=37 +ellps=clrk66 +towgs84=-166,-15,204,0,0,0,0 +units=m +no_defs +type=crs'
+);
+
+// Alternative: Try EPSG:4206 for Adindan geographic if UTM is problematic
+proj4.defs('EPSG:4206', 
+  '+proj=longlat +ellps=clrk66 +towgs84=-166,-15,204,0,0,0,0 +no_defs +type=crs'
+);
+
+// Standard WGS84
+proj4.defs('EPSG:4326', 
+  '+proj=longlat +datum=WGS84 +no_defs +type=crs'
+);
 
 module.exports = (db, DataTypes) => {
   const GeoCoordinate = db.define(
@@ -15,7 +27,6 @@ module.exports = (db, DataTypes) => {
         primaryKey: true,
       },
 
-      // Now linked to land_record, not document
       land_record_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -25,7 +36,6 @@ module.exports = (db, DataTypes) => {
         },
       },
 
-      // Official X/Y from title deed (never change these!)
       easting: {
         type: DataTypes.DOUBLE,
         allowNull: false,
