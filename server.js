@@ -120,7 +120,7 @@ const syncDatabase = async () => {
     // await db.sync({ force: });
     
     // Option 3: Alter sync (modifies tables to match model definitions)
-    // await db.sync({ alter: true });
+    await db.sync({ alter: true });
     
     console.log('Database synchronized successfully at', new Date().toISOString());
     return true;
