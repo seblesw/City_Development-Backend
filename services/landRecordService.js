@@ -1665,7 +1665,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
     ] = await Promise.all([
       // 1. Total Statistics
       LandRecord.findOne({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           [Sequelize.fn("COUNT", Sequelize.col("id")), "total_records"],
           [Sequelize.fn("SUM", Sequelize.col("area")), "total_area"],
@@ -1733,7 +1733,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
 
       // 3. Land Use Distribution
       LandRecord.findAll({
-        where: { administrative_unit_id: adminUnitId },
+        where: { administrative_unit_id: adminUnitId, is_dead: false },
         attributes: [
           "land_use",
           [Sequelize.fn("COUNT", Sequelize.col("id")), "count"],
@@ -1907,6 +1907,7 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
       LandRecord.findAll({
         where: {
           administrative_unit_id: adminUnitId,
+          is_dead: false,
         },
         attributes: [
           "lease_transfer_reason",
@@ -1952,8 +1953,6 @@ const getLandRecordsStatsByAdminUnit = async (adminUnitId) => {
           "land_preparation",
           "area",
           "record_status",
-          "ownership_category",
-          "is_dead",
           "zoning_type",
           "land_level",
           "infrastructure_status",
@@ -3180,7 +3179,7 @@ const getLandRecordsByUserAdminUnitService = async (adminUnitId, options = {}) =
       attributes: [
         "id", "parcel_number", "land_use", "land_preparation", "ownership_type",
         "lease_transfer_reason", "area", "land_level", "record_status",
-        "ownership_category", "has_debt", "administrative_unit_id", "createdAt", "updatedAt"
+        "ownership_category", "has_debt", "administrative_unit_id", "createdAt", "is_dead","updatedAt"
       ],
       limit: limit,
       offset: offset,
