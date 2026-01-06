@@ -3424,6 +3424,8 @@ const getDeadRecordsService = async (adminUnitId, page = 1, limit = 50, search =
     area: record.area,
     land_use: record.land_use,
     ownership_type: record.ownership_type,
+    ownership_category: record.ownership_category,
+    land_preparation: record.land_preparation,
     has_debt: record.has_debt,
     address_kebele: record.address_kebele,
     address_ketena: record.address_ketena,
