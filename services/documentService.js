@@ -198,21 +198,30 @@ const getDocumentsWithoutFilesService = async (administrativeUnitId, options = {
   const { transaction } = options;
   
   try {
-    const documents = await Document.findAll({
+    // First, get all documents
+    const allDocuments = await Document.findAll({
       where: {
         administrative_unit_id: administrativeUnitId,
-        deletedAt: null,
-        [Op.or]: [
-          { files: null },
-          { files: [] }
-        ]
+        deletedAt: null
       },
-      attributes: ["id", "plot_number"],
-      order: [["plot_number", "ASC"]],
+      attributes: ["id", "plot_number", "files"], // Include files field
       transaction,
     });
     
-    return documents;
+    // Then filter in JavaScript to check files.length === 0
+    const documentsWithoutFiles = allDocuments.filter(doc => {
+      // Handle null, undefined, or non-array values
+      if (!doc.files || !Array.isArray(doc.files)) {
+        return true; // Consider documents with null/undefined/non-array files as "without files"
+      }
+      return doc.files.length === 0;
+    });
+    
+    // Return only the required attributes
+    return documentsWithoutFiles.map(doc => ({
+      id: doc.id,
+      plot_number: doc.plot_number
+    }));
   } catch (error) {
     throw new Error(`ፋይሎች የሌሏቸውን ሰነዶች ማግኘት ስህተት: ${error.message}`);
   }

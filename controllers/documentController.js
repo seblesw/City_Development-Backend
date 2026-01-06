@@ -70,8 +70,8 @@ const getDocumentsWithoutFiles = async (req, res) => {
     const documents = await getDocumentsWithoutFilesService(administrativeUnitId);
 
     const dropdownOptions = documents.map(doc => ({
-      value: doc.id,
-      label: doc.plot_number,
+      id: doc.id,
+      plot_number: doc.plot_number,
     }));
     
     return res.status(200).json({
