@@ -347,6 +347,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
           { parcel_number: { [Op.iLike]: partialQ } },
         ],
         ...adminUnitCondition,
+        is_dead: false,
       },
       attributes: [
         "id",
@@ -358,6 +359,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         "address_ketena",
         "area",
         "land_use",
+        "is_dead",
         "ownership_type",
         "administrative_unit_id",
       ],
@@ -405,6 +407,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
       where: { 
         id: allLandRecordIds,
         ...adminUnitCondition,
+        is_dead: false,
       },
       attributes: [
         "id",
@@ -416,6 +419,7 @@ const searchLandRecordsService = async (adminUnitId = null, searchTerm, opts = {
         "address_ketena",
         "area",
         "land_use",
+        "is_dead",
         "ownership_type",
         "administrative_unit_id",
       ],
