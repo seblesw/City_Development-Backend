@@ -458,6 +458,7 @@ const updateUser = async (id, data, updaterId, options = {}) => {
   const { transaction } = options;
   let t = transaction;
   let shouldCommit = false;
+  let oldProfilePicturePath = null;
 
   const validateUniqueFields = async (userId, updateData) => {
     const uniqueFields = [
@@ -492,8 +493,10 @@ const updateUser = async (id, data, updaterId, options = {}) => {
       "national_id",
       "address",
       "gender",
+      "address",
       "relationship_type",
       "marital_status",
+      "profile_picture",
     ];
 
     const filteredUpdate = {};
@@ -508,6 +511,37 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     }
 
     return filteredUpdate;
+  };
+
+  const deleteOldProfilePicture = async (userId, newProfilePicturePath) => {
+    try {
+      // Get current user to access old profile picture
+      const currentUser = await User.findByPk(userId, { 
+        transaction: t,
+        attributes: ['profile_picture']
+      });
+      
+      if (currentUser && currentUser.profile_picture && currentUser.profile_picture !== newProfilePicturePath) {
+        const oldPicturePath = currentUser.profile_picture;
+        
+        // Remove the leading slash if present to get relative path
+        const relativePath = oldPicturePath.startsWith('/') 
+          ? oldPicturePath.substring(1) 
+          : oldPicturePath;
+        
+        // Check if it's a default picture or a custom upload
+        const isDefaultPicture = oldPicturePath.includes('default') || 
+                                oldPicturePath.includes('placeholder');
+        
+        // Only delete if it's not a default picture and file exists
+        if (!isDefaultPicture && fs.existsSync(relativePath)) {
+          fs.unlinkSync(relativePath);
+        }
+      }
+    } catch (error) {
+      // Log error but don't fail the whole update
+      console.error('Error deleting old profile picture:', error.message);
+    }
   };
 
   try {
@@ -542,6 +576,11 @@ const updateUser = async (id, data, updaterId, options = {}) => {
     if (Object.keys(updateData).length > 0) {
       updateData.updated_at = new Date();
       updateData.updated_by = updaterId;
+
+      // Delete old profile picture if a new one is being uploaded
+      if (updateData.profile_picture) {
+        await deleteOldProfilePicture(id, updateData.profile_picture);
+      }
 
       await user.update(updateData, { transaction: t });
     }

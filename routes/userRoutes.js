@@ -13,7 +13,7 @@ router.get("/admin-unit", authMiddleware.protect, userController.getAllUserByAdm
 router.post("/deactivate/:id", authMiddleware.protect, userController.deactivateUserController);
 router.post("/activate/:id", authMiddleware.protect, userController.activateUserController);
 router.get("/:id", userController.getUserByIdController);
-router.put("/:id", authMiddleware.protect,userController.updateUserController);
+router.put("/:id",authMiddleware.protect, upload.single("profile_picture"),userController.updateUserController);
 router.delete("/:id", authMiddleware.protect, userController.deleteUserController);
 router.delete("/:landRecordId/owners/:ownerId", authMiddleware.protect, userController.removeOwnerController);
 

@@ -11,7 +11,7 @@ const {
   getUsersByCreatorIdService,
 } = require("../services/userService");
 const fs = require("fs");
-
+const path = require("path");
 const addNewLandOwnerController = async (req, res) => {
   try {
     const { land_record_id } = req.params;
@@ -148,6 +148,8 @@ const getAllUserByAdminUnitController = async (req, res) => {
 };
 
 const updateUserController = async (req, res) => {
+  let uploadedFilePath = null;
+  
   try {
     const { id } = req.params;
     const { body, user: authUser } = req;
@@ -156,18 +158,33 @@ const updateUserController = async (req, res) => {
       return res.status(401).json({ error: "ተጠቃሚ ማረጋገጫ ያስፈልጋል።" });
     }
 
-    const updatedUser = await updateUser(id, body, authUser.id);
+    // Handle profile picture upload
+    const profile_picture = req.file
+      ? `/uploads/pictures/${req.file.filename}`
+      : null;
+
+    // If there's a new profile picture, add it to the update data
+    const updateData = {
+      ...body,
+      ...(profile_picture && { profile_picture })
+    };
+
+    const updatedUser = await updateUser(id, updateData, authUser.id);
 
     return res.status(200).json({
       message: `መለያ ቁጥር ${id} ያለው ተጠቃሚ በተሳካ ሁኔታ ተቀይሯል።`,
       data: updatedUser,
     });
   } catch (error) {
+    // If there's an error and a file was uploaded, delete it
+    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+      fs.unlinkSync(uploadedFilePath);
+    }
+    
     const statusCode = error.message.includes("አልተገኘም") ? 404 : 400;
     return res.status(statusCode).json({ error: error.message });
   }
 };
-
 const deleteUserController = async (req, res) => {
   try {
     const { id } = req.params;
