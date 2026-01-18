@@ -44,7 +44,7 @@ const port = process.env.PORT || 3000;
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
@@ -97,12 +97,12 @@ app.get('/health', (req, res) => {
     database: db.authenticated ? 'Connected' : 'Disconnected'
   });
 });
-//serve the dist folder for frontend on backend server
-// app.use(express.static(path.join(__dirname, 'dist')));
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-// });
-// app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
+// serve the dist folder for frontend on backend server
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+app.use('/assets', express.static(path.join(__dirname, 'dist/assets')));
 
 
 
